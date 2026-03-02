@@ -24,14 +24,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **POOL-03**: Pre-warmed pool maintains N available IVS Chat rooms ready for instant chat
 - [x] **POOL-04**: Scheduled Lambda replenishes pool when available resources drop below threshold
 - [x] **POOL-05**: Resources are atomically claimed from pool via DynamoDB conditional writes (no race conditions)
-- [ ] **POOL-06**: Resources are released back to pool and recycled when sessions end
+- [x] **POOL-06**: Resources are released back to pool and recycled when sessions end
 
 ### Broadcasting
 
 - [x] **BCAST-01**: User can go live with a single action (broadcast mode, one-to-many)
 - [x] **BCAST-02**: User sees self-view preview before and during broadcast
 - [x] **BCAST-03**: Viewers can watch a live broadcast with IVS Player (low-latency HLS)
-- [ ] **BCAST-04**: Live viewer count is visible to broadcaster and viewers
+- [x] **BCAST-04**: Live viewer count is visible to broadcaster and viewers
 - [x] **BCAST-05**: Stream quality auto-adapts to network conditions (IVS ABR)
 - [x] **BCAST-06**: Live indicator shows which sessions are currently broadcasting
 
@@ -74,7 +74,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SESS-01**: Sessions have a lifecycle state machine (creating -> live -> ending -> ended)
 - [ ] **SESS-02**: User selects session type (broadcast or hangout) before going live
-- [ ] **SESS-03**: Sessions clean up gracefully (stop recording, release pool resources, finalize chat)
+- [x] **SESS-03**: Sessions clean up gracefully (stop recording, release pool resources, finalize chat)
 - [x] **SESS-04**: No AWS concepts (channels, stages, rooms, ARNs) are exposed in the user-facing UX
 
 ### Developer Tools
@@ -84,7 +84,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DEV-03**: CLI command to mint IVS participant/join tokens
 - [ ] **DEV-04**: CLI command to seed chat messages and reaction events
 - [ ] **DEV-05**: CLI command to simulate presence
-- [ ] **DEV-06**: CLI command (or documented approach) to stream MP4/MOV into a broadcast via RTMPS/FFmpeg
+- [x] **DEV-06**: CLI command (or documented approach) to stream MP4/MOV into a broadcast via RTMPS/FFmpeg
 - [ ] **DEV-07**: Frontend detects "stack not deployed" and shows developer setup guidance
 
 ### Admin Dashboard
@@ -167,12 +167,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BCAST-01 | Phase 3: Broadcasting | Complete |
 | BCAST-02 | Phase 3: Broadcasting | Complete |
 | BCAST-03 | Phase 3: Broadcasting | Complete |
-| BCAST-04 | Phase 3: Broadcasting | Pending |
+| BCAST-04 | Phase 3: Broadcasting | Complete |
 | BCAST-05 | Phase 3: Broadcasting | Complete |
 | BCAST-06 | Phase 3: Broadcasting | Complete |
-| POOL-06 | Phase 3: Broadcasting | Pending |
-| SESS-03 | Phase 3: Broadcasting | Pending |
-| DEV-06 | Phase 3: Broadcasting | Pending |
+| POOL-06 | Phase 3: Broadcasting | Complete |
+| SESS-03 | Phase 3: Broadcasting | Complete |
+| DEV-06 | Phase 3: Broadcasting | Complete |
 | CHAT-01 | Phase 4: Chat | Pending |
 | CHAT-02 | Phase 4: Chat | Pending |
 | CHAT-03 | Phase 4: Chat | Pending |

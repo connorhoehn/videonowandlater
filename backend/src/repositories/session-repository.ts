@@ -5,6 +5,7 @@
 import { PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Session } from '../domain/session';
+import { SessionStatus } from '../domain/session';
 
 /**
  * Create a new session in DynamoDB

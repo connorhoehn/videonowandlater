@@ -72,7 +72,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Session Management
 
-- [ ] **SESS-01**: Sessions have a lifecycle state machine (creating → live → ending → ended)
+- [ ] **SESS-01**: Sessions have a lifecycle state machine (creating -> live -> ending -> ended)
 - [ ] **SESS-02**: User selects session type (broadcast or hangout) before going live
 - [ ] **SESS-03**: Sessions clean up gracefully (stop recording, release pool resources, finalize chat)
 - [ ] **SESS-04**: No AWS concepts (channels, stages, rooms, ARNs) are exposed in the user-facing UX
@@ -145,13 +145,71 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (Populated by roadmapper) | | |
+| INFRA-01 | Phase 1: Foundation & Auth | Pending |
+| INFRA-02 | Phase 1: Foundation & Auth | Pending |
+| INFRA-03 | Phase 1: Foundation & Auth | Pending |
+| AUTH-01 | Phase 1: Foundation & Auth | Pending |
+| AUTH-02 | Phase 1: Foundation & Auth | Pending |
+| AUTH-03 | Phase 1: Foundation & Auth | Pending |
+| AUTH-04 | Phase 1: Foundation & Auth | Pending |
+| DEPLOY-01 | Phase 1: Foundation & Auth | Pending |
+| DEPLOY-02 | Phase 1: Foundation & Auth | Pending |
+| DEV-01 | Phase 1: Foundation & Auth | Pending |
+| DEV-02 | Phase 1: Foundation & Auth | Pending |
+| DEV-07 | Phase 1: Foundation & Auth | Pending |
+| SESS-01 | Phase 2: Session Model & Resource Pool | Pending |
+| SESS-04 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-01 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-02 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-03 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-04 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-05 | Phase 2: Session Model & Resource Pool | Pending |
+| BCAST-01 | Phase 3: Broadcasting | Pending |
+| BCAST-02 | Phase 3: Broadcasting | Pending |
+| BCAST-03 | Phase 3: Broadcasting | Pending |
+| BCAST-04 | Phase 3: Broadcasting | Pending |
+| BCAST-05 | Phase 3: Broadcasting | Pending |
+| BCAST-06 | Phase 3: Broadcasting | Pending |
+| POOL-06 | Phase 3: Broadcasting | Pending |
+| SESS-03 | Phase 3: Broadcasting | Pending |
+| DEV-06 | Phase 3: Broadcasting | Pending |
+| CHAT-01 | Phase 4: Chat | Pending |
+| CHAT-02 | Phase 4: Chat | Pending |
+| CHAT-03 | Phase 4: Chat | Pending |
+| CHAT-04 | Phase 4: Chat | Pending |
+| CHAT-05 | Phase 4: Chat | Pending |
+| REPLAY-01 | Phase 5: Recording & Replay | Pending |
+| REPLAY-02 | Phase 5: Recording & Replay | Pending |
+| REPLAY-03 | Phase 5: Recording & Replay | Pending |
+| REPLAY-04 | Phase 5: Recording & Replay | Pending |
+| REPLAY-05 | Phase 5: Recording & Replay | Pending |
+| REPLAY-06 | Phase 5: Recording & Replay | Pending |
+| REPLAY-07 | Phase 5: Recording & Replay | Pending |
+| HANG-01 | Phase 6: Hangouts | Pending |
+| HANG-02 | Phase 6: Hangouts | Pending |
+| HANG-03 | Phase 6: Hangouts | Pending |
+| HANG-04 | Phase 6: Hangouts | Pending |
+| HANG-05 | Phase 6: Hangouts | Pending |
+| HANG-06 | Phase 6: Hangouts | Pending |
+| SESS-02 | Phase 6: Hangouts | Pending |
+| DEV-03 | Phase 6: Hangouts | Pending |
+| REACT-01 | Phase 7: Reactions & Presence | Pending |
+| REACT-02 | Phase 7: Reactions & Presence | Pending |
+| REACT-03 | Phase 7: Reactions & Presence | Pending |
+| PRES-01 | Phase 7: Reactions & Presence | Pending |
+| PRES-02 | Phase 7: Reactions & Presence | Pending |
+| DEV-04 | Phase 7: Reactions & Presence | Pending |
+| DEV-05 | Phase 7: Reactions & Presence | Pending |
+| ADMIN-01 | Phase 8: Admin Dashboard | Pending |
+| ADMIN-02 | Phase 8: Admin Dashboard | Pending |
+| ADMIN-03 | Phase 8: Admin Dashboard | Pending |
+| ADMIN-04 | Phase 8: Admin Dashboard | Pending |
 
 **Coverage:**
-- v1 requirements: 48 total
-- Mapped to phases: 0
-- Unmapped: 48
+- v1 requirements: 59 total
+- Mapped to phases: 59
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-01*
-*Last updated: 2026-03-01 after initial definition*
+*Last updated: 2026-03-01 after roadmap creation*

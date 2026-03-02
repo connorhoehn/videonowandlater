@@ -12,26 +12,27 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Pre-warmed pool of provisioned IVS resources — Phase 2
+- ✓ CDK-defined backend infrastructure, cleanly destroyable — Phase 1-2
+- ✓ Lambda + API Gateway APIs for sessions (creation/retrieval) — Phase 2
+- ✓ DynamoDB models for sessions (lifecycle, resource pool) — Phase 2
+- ✓ Cognito username/password auth (no email confirmation) — Phase 1
+- ✓ Frontend "stack not deployed" detection with developer guidance — Phase 1
+- ✓ Deployment outputs wired into web app via generated config files — Phase 1
 
 ### Active
 
 - [ ] Near real-time broadcasting (one-to-many via IVS)
 - [ ] Small-group IVS RealTime hangouts (up to 5 participants)
 - [ ] Long-running chat attached to live sessions, persisting for replay
-- [ ] Cognito username/password auth (no email confirmation)
 - [ ] UX fully abstracted from AWS concepts (no channels/empty rooms — only "live" or "ready" experiences)
-- [ ] Pre-warmed pool of provisioned IVS resources
-- [ ] CDK-defined backend infrastructure, cleanly destroyable
-- [ ] Lambda + API Gateway APIs for sessions, presence, reactions, replay metadata
-- [ ] DynamoDB models for sessions, presence, reactions, replay metadata
+- [ ] Lambda + API Gateway APIs for presence, reactions, replay metadata
+- [ ] DynamoDB models for presence, reactions, replay metadata
 - [ ] Stream recording/routing for later viewing
 - [ ] Instagram-style "recently streamed videos" replay viewer with reaction summaries
 - [ ] IVS join tokens and chat token/authorization behind REST endpoints
 - [ ] Developer CLI tool suite (create/list/delete users, generate tokens, seed data, simulate presence, stream test media)
 - [ ] Admin/dashboard view (active sessions, participants, messages/reactions, recent replays)
-- [ ] Frontend "stack not deployed" detection with developer guidance
-- [ ] Deployment outputs wired into web app via env vars or generated config files
 
 ### Out of Scope
 
@@ -64,13 +65,16 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| IVS for broadcast + IVS RealTime for hangouts | Two distinct use cases require both IVS products | — Pending |
-| Cognito username/password only | Simplicity for v1, no email infrastructure needed | — Pending |
-| Pre-warmed resource pool | Instant "go live" UX requires resources ready ahead of time | — Pending |
-| CDK for infrastructure | Infrastructure as code, cleanly destroyable | — Pending |
-| DynamoDB for data | Serverless, scales with usage, fits session/event data model | — Pending |
-| REST APIs (not GraphQL) | Simpler for token exchange and session management | — Pending |
-| Web-first, mobile later | Faster to ship, mobile as future subrepo | — Pending |
+| IVS for broadcast + IVS RealTime for hangouts | Two distinct use cases require both IVS products | — Pending (Phase 3+) |
+| Cognito username/password only | Simplicity for v1, no email infrastructure needed | ✓ Phase 1 |
+| Pre-warmed resource pool | Instant "go live" UX requires resources ready ahead of time | ✓ Phase 2 |
+| CDK for infrastructure | Infrastructure as code, cleanly destroyable | ✓ Phase 1-2 |
+| DynamoDB for data | Serverless, scales with usage, fits session/event data model | ✓ Phase 2 |
+| REST APIs (not GraphQL) | Simpler for token exchange and session management | ✓ Phase 1-2 |
+| Web-first, mobile later | Faster to ship, mobile as future subrepo | ✓ Phase 1 |
+| Single-table DynamoDB design with GSI | Efficient querying, cost-effective, enables atomic pool claims | ✓ Phase 2 |
+| Conditional writes for atomic operations | Prevents race conditions in concurrent resource claims | ✓ Phase 2 |
+| EventBridge Scheduler for pool replenishment | Serverless, reliable, 5-minute intervals maintain pool readiness | ✓ Phase 2 |
 
 ---
-*Last updated: 2026-03-01 after initialization*
+*Last updated: 2026-03-02 after Phase 2*

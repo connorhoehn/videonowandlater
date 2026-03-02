@@ -19,6 +19,8 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - ✓ Cognito username/password auth (no email confirmation) — Phase 1
 - ✓ Frontend "stack not deployed" detection with developer guidance — Phase 1
 - ✓ Deployment outputs wired into web app via generated config files — Phase 1
+- ✓ Logout functionality accessible from any protected route — Phase 1
+- ✓ Developer CLI tools for user/token management — Phase 1
 
 ### Active
 
@@ -75,6 +77,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Single-table DynamoDB design with GSI | Efficient querying, cost-effective, enables atomic pool claims | ✓ Phase 2 |
 | Conditional writes for atomic operations | Prevents race conditions in concurrent resource claims | ✓ Phase 2 |
 | EventBridge Scheduler for pool replenishment | Serverless, reliable, 5-minute intervals maintain pool readiness | ✓ Phase 2 |
+| Retroactive Phase 01 verification | 9 requirements verified automated, 3 auth flows require manual testing | ✓ Phase 4.1 |
 
 ---
-*Last updated: 2026-03-02 after Phase 2*
+*Last updated: 2026-03-02 after Phase 4.1*

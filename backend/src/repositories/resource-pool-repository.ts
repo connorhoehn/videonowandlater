@@ -95,3 +95,54 @@ export async function claimNextAvailableResource(
     throw error;
   }
 }
+
+/**
+ * Release a pool resource back to AVAILABLE status
+ * Clears claimedBy and claimedAt fields
+ *
+ * @param tableName DynamoDB table name
+ * @param resourceArn ARN of resource to release
+ */
+export async function releasePoolResource(
+  tableName: string,
+  resourceArn: string
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  // Extract resourceId and resourceType from ARN
+  // ARN format: arn:aws:ivs:region:account:channel/resourceId
+  // or: arn:aws:ivschat:region:account:room/resourceId
+  const parts = resourceArn.split('/');
+  const resourceId = parts[parts.length - 1];
+
+  let resourceType: ResourceType;
+  if (resourceArn.includes(':channel/')) {
+    resourceType = ResourceType.CHANNEL;
+  } else if (resourceArn.includes(':stage/')) {
+    resourceType = ResourceType.STAGE;
+  } else {
+    resourceType = ResourceType.ROOM;
+  }
+
+  // Update pool item: CLAIMED -> AVAILABLE, clear claimedBy/claimedAt
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `POOL#${resourceType}#${resourceId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #status = :available, GSI1PK = :gsi, #claimedBy = :null, #claimedAt = :null, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#status': 'status',
+      '#claimedBy': 'claimedBy',
+      '#claimedAt': 'claimedAt',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':available': Status.AVAILABLE,
+      ':gsi': 'STATUS#AVAILABLE',
+      ':null': null,
+      ':inc': 1,
+    },
+  }));
+}

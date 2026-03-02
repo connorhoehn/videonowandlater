@@ -131,5 +131,33 @@ export class SessionStack extends Stack {
       targets: [new targets.LambdaFunction(streamStartedFn)],
       description: 'Transition session to LIVE when IVS stream starts',
     });
+
+    // Lambda function for recording-ended events
+    const recordingEndedFn = new nodejs.NodejsFunction(this, 'RecordingEnded', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/recording-ended.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(recordingEndedFn);
+
+    // EventBridge rule for IVS Recording End events
+    new events.Rule(this, 'RecordingEndRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Recording State Change'],
+        detail: {
+          recording_status: ['Recording End'],
+        },
+      },
+      targets: [new targets.LambdaFunction(recordingEndedFn)],
+      description: 'Transition session to ENDED and release pool resources when recording ends',
+    });
   }
 }

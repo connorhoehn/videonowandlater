@@ -19,10 +19,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Resource Pool
 
-- [ ] **POOL-01**: Pre-warmed pool maintains N available IVS channels ready for instant broadcast
-- [ ] **POOL-02**: Pre-warmed pool maintains N available IVS RealTime stages ready for instant hangout
-- [ ] **POOL-03**: Pre-warmed pool maintains N available IVS Chat rooms ready for instant chat
-- [ ] **POOL-04**: Scheduled Lambda replenishes pool when available resources drop below threshold
+- [x] **POOL-01**: Pre-warmed pool maintains N available IVS channels ready for instant broadcast
+- [x] **POOL-02**: Pre-warmed pool maintains N available IVS RealTime stages ready for instant hangout
+- [x] **POOL-03**: Pre-warmed pool maintains N available IVS Chat rooms ready for instant chat
+- [x] **POOL-04**: Scheduled Lambda replenishes pool when available resources drop below threshold
 - [ ] **POOL-05**: Resources are atomically claimed from pool via DynamoDB conditional writes (no race conditions)
 - [ ] **POOL-06**: Resources are released back to pool and recycled when sessions end
 
@@ -159,10 +159,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-07 | Phase 1: Foundation & Auth | Pending |
 | SESS-01 | Phase 2: Session Model & Resource Pool | Complete |
 | SESS-04 | Phase 2: Session Model & Resource Pool | Complete |
-| POOL-01 | Phase 2: Session Model & Resource Pool | Pending |
-| POOL-02 | Phase 2: Session Model & Resource Pool | Pending |
-| POOL-03 | Phase 2: Session Model & Resource Pool | Pending |
-| POOL-04 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-01 | Phase 2: Session Model & Resource Pool | Complete |
+| POOL-02 | Phase 2: Session Model & Resource Pool | Complete |
+| POOL-03 | Phase 2: Session Model & Resource Pool | Complete |
+| POOL-04 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-05 | Phase 2: Session Model & Resource Pool | Pending |
 | BCAST-01 | Phase 3: Broadcasting | Pending |
 | BCAST-02 | Phase 3: Broadcasting | Pending |

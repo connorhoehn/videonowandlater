@@ -1,6 +1,6 @@
 import { Amplify } from 'aws-amplify';
 import { signUp, signIn, signOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
-import { AwsConfig } from '../config/aws-config';
+import type { AwsConfig } from '../config/aws-config';
 
 export function configureAuth(config: AwsConfig): void {
   Amplify.configure({

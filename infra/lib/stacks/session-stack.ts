@@ -103,5 +103,33 @@ export class SessionStack extends Stack {
       targets: [new targets.LambdaFunction(replenishPoolFn)],
       description: 'Replenish IVS resource pool every 5 minutes',
     });
+
+    // Lambda function for stream-started events
+    const streamStartedFn = new nodejs.NodejsFunction(this, 'StreamStarted', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/stream-started.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(streamStartedFn);
+
+    // EventBridge rule for IVS Stream Start events
+    new events.Rule(this, 'StreamStartRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Stream State Change'],
+        detail: {
+          event_name: ['Stream Start'],
+        },
+      },
+      targets: [new targets.LambdaFunction(streamStartedFn)],
+      description: 'Transition session to LIVE when IVS stream starts',
+    });
   }
 }

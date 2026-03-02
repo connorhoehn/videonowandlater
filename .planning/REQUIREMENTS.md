@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure & Auth
 
-- [ ] **INFRA-01**: CDK multi-stack infrastructure deploys cleanly with `cdk deploy --all`
-- [ ] **INFRA-02**: CDK infrastructure tears down cleanly with `cdk destroy --all`
-- [ ] **INFRA-03**: CloudWatch billing alarms fire at $10, $50, $100 thresholds
+- [x] **INFRA-01**: CDK multi-stack infrastructure deploys cleanly with `cdk deploy --all`
+- [x] **INFRA-02**: CDK infrastructure tears down cleanly with `cdk destroy --all`
+- [x] **INFRA-03**: CloudWatch billing alarms fire at $10, $50, $100 thresholds
 - [ ] **AUTH-01**: User can sign up with username and password (no email verification)
 - [ ] **AUTH-02**: User can log in and receive JWT tokens for API authorization
 - [ ] **AUTH-03**: User session persists across browser refresh
@@ -145,9 +145,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1: Foundation & Auth | Pending |
-| INFRA-02 | Phase 1: Foundation & Auth | Pending |
-| INFRA-03 | Phase 1: Foundation & Auth | Pending |
+| INFRA-01 | Phase 1: Foundation & Auth | Complete |
+| INFRA-02 | Phase 1: Foundation & Auth | Complete |
+| INFRA-03 | Phase 1: Foundation & Auth | Complete |
 | AUTH-01 | Phase 1: Foundation & Auth | Pending |
 | AUTH-02 | Phase 1: Foundation & Auth | Pending |
 | AUTH-03 | Phase 1: Foundation & Auth | Pending |

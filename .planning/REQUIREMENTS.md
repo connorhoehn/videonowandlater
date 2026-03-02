@@ -1,0 +1,157 @@
+# Requirements: VideoNowAndLater
+
+**Defined:** 2026-03-01
+**Core Value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
+
+## v1 Requirements
+
+Requirements for initial release. Each maps to roadmap phases.
+
+### Infrastructure & Auth
+
+- [ ] **INFRA-01**: CDK multi-stack infrastructure deploys cleanly with `cdk deploy --all`
+- [ ] **INFRA-02**: CDK infrastructure tears down cleanly with `cdk destroy --all`
+- [ ] **INFRA-03**: CloudWatch billing alarms fire at $10, $50, $100 thresholds
+- [ ] **AUTH-01**: User can sign up with username and password (no email verification)
+- [ ] **AUTH-02**: User can log in and receive JWT tokens for API authorization
+- [ ] **AUTH-03**: User session persists across browser refresh
+- [ ] **AUTH-04**: User can log out from any page
+
+### Resource Pool
+
+- [ ] **POOL-01**: Pre-warmed pool maintains N available IVS channels ready for instant broadcast
+- [ ] **POOL-02**: Pre-warmed pool maintains N available IVS RealTime stages ready for instant hangout
+- [ ] **POOL-03**: Pre-warmed pool maintains N available IVS Chat rooms ready for instant chat
+- [ ] **POOL-04**: Scheduled Lambda replenishes pool when available resources drop below threshold
+- [ ] **POOL-05**: Resources are atomically claimed from pool via DynamoDB conditional writes (no race conditions)
+- [ ] **POOL-06**: Resources are released back to pool and recycled when sessions end
+
+### Broadcasting
+
+- [ ] **BCAST-01**: User can go live with a single action (broadcast mode, one-to-many)
+- [ ] **BCAST-02**: User sees self-view preview before and during broadcast
+- [ ] **BCAST-03**: Viewers can watch a live broadcast with IVS Player (low-latency HLS)
+- [ ] **BCAST-04**: Live viewer count is visible to broadcaster and viewers
+- [ ] **BCAST-05**: Stream quality auto-adapts to network conditions (IVS ABR)
+- [ ] **BCAST-06**: Live indicator shows which sessions are currently broadcasting
+
+### Hangouts (RealTime)
+
+- [ ] **HANG-01**: User can start a hangout (RealTime mode, up to 5 participants)
+- [ ] **HANG-02**: Users can join an active hangout seamlessly
+- [ ] **HANG-03**: Participants see self-view and grid of other participants
+- [ ] **HANG-04**: Participants can mute/unmute audio
+- [ ] **HANG-05**: Participants can toggle camera on/off
+- [ ] **HANG-06**: Participant list and count are visible during hangout
+
+### Chat
+
+- [ ] **CHAT-01**: Real-time text chat is available alongside both broadcast and hangout sessions
+- [ ] **CHAT-02**: Chat messages display sender username
+- [ ] **CHAT-03**: Users joining mid-session can see recent chat history
+- [ ] **CHAT-04**: Chat messages are persisted to DynamoDB with session-relative timestamps
+- [ ] **CHAT-05**: Chat tokens are generated server-side; clients only call REST endpoints
+
+### Recording & Replay
+
+- [ ] **REPLAY-01**: Broadcast streams are automatically recorded to S3
+- [ ] **REPLAY-02**: Recording processor Lambda fires on EventBridge Recording State Change events
+- [ ] **REPLAY-03**: Replay catalog stores metadata (duration, thumbnail URL, HLS playback URL)
+- [ ] **REPLAY-04**: User can browse recently streamed videos in an Instagram-style feed with thumbnails
+- [ ] **REPLAY-05**: User can watch a replay with IVS Player (HLS via CloudFront)
+- [ ] **REPLAY-06**: Chat messages scroll in sync with replay playback position
+- [ ] **REPLAY-07**: Reaction summaries are displayed alongside replays
+
+### Reactions & Presence
+
+- [ ] **REACT-01**: Users can send emoji reactions during live sessions
+- [ ] **REACT-02**: Reactions appear as animated overlays during live sessions
+- [ ] **REACT-03**: Reactions are stored with timestamps for replay summaries
+- [ ] **PRES-01**: Presence system shows who is watching/participating via heartbeat API
+- [ ] **PRES-02**: Presence auto-expires via DynamoDB TTL when users disconnect
+
+### Session Management
+
+- [ ] **SESS-01**: Sessions have a lifecycle state machine (creating → live → ending → ended)
+- [ ] **SESS-02**: User selects session type (broadcast or hangout) before going live
+- [ ] **SESS-03**: Sessions clean up gracefully (stop recording, release pool resources, finalize chat)
+- [ ] **SESS-04**: No AWS concepts (channels, stages, rooms, ARNs) are exposed in the user-facing UX
+
+### Developer Tools
+
+- [ ] **DEV-01**: CLI command to create/list/delete Cognito users
+- [ ] **DEV-02**: CLI command to generate auth tokens for testing
+- [ ] **DEV-03**: CLI command to mint IVS participant/join tokens
+- [ ] **DEV-04**: CLI command to seed chat messages and reaction events
+- [ ] **DEV-05**: CLI command to simulate presence
+- [ ] **DEV-06**: CLI command (or documented approach) to stream MP4/MOV into a broadcast via RTMPS/FFmpeg
+- [ ] **DEV-07**: Frontend detects "stack not deployed" and shows developer setup guidance
+
+### Admin Dashboard
+
+- [ ] **ADMIN-01**: Admin view shows count of active sessions
+- [ ] **ADMIN-02**: Admin view shows active participants count
+- [ ] **ADMIN-03**: Admin view shows messages and reactions counts
+- [ ] **ADMIN-04**: Admin view shows recent replays list
+
+### Config & Deployment
+
+- [ ] **DEPLOY-01**: CDK deployment outputs are wired into web app via env vars or generated config files
+- [ ] **DEPLOY-02**: Deploy/destroy scripts update frontend configuration automatically
+
+## v2 Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Content Moderation
+
+- **MOD-01**: AI-based content filtering for chat messages
+- **MOD-02**: User can report inappropriate content
+- **MOD-03**: Admin can review and remove flagged content
+
+### Hangout Recording
+
+- **HREC-01**: RealTime hangout sessions are recorded via server-side composition
+- **HREC-02**: Composed hangout recordings appear in replay feed
+
+### Mobile
+
+- **MOB-01**: React Native mobile app as subrepo
+- **MOB-02**: Push notifications for "user is live"
+
+### Social
+
+- **SOC-01**: OAuth/social login (Google, Apple)
+- **SOC-02**: User profiles with avatar and bio
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Email verification on signup | Explicitly excluded for development speed |
+| OAuth/social login | Username/password sufficient for v1 |
+| Mobile native app | Web-first; mobile planned as future subrepo |
+| Monetization/subscriptions | Ship free, validate product first |
+| Multi-region deployment | Single region sufficient for v1; massive complexity |
+| Custom video player | IVS Player SDK is purpose-built and mature |
+| End-to-end encryption | IVS manages encryption in transit; custom E2EE breaks composition |
+| Screen sharing in hangouts | Focus on camera video for v1; SDK supports it for later |
+| Video clipping/highlights | Full replays only for v1 |
+| Real-time chat GIF/image support | Text + emoji reactions sufficient |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| (Populated by roadmapper) | | |
+
+**Coverage:**
+- v1 requirements: 48 total
+- Mapped to phases: 0
+- Unmapped: 48
+
+---
+*Requirements defined: 2026-03-01*
+*Last updated: 2026-03-01 after initial definition*

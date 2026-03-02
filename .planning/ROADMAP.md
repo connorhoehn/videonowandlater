@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Broadcasting** - One-to-many live broadcasting with IVS Player viewing, pool resource lifecycle, and test streaming
 - [ ] **Phase 4: Chat** - Real-time text chat alongside live sessions with server-side persistence for replay
 - [x] **Phase 4.1: Verify Phase 01 (INSERTED)** - Run verification on Foundation & Auth phase to validate already-built functionality (completed 2026-03-02)
-- [ ] **Phase 4.2: Frontend Integration Fixes (INSERTED)** - Wire BroadcastPage/ViewerPage routing, add session creation UI, fix API configuration
+- [x] **Phase 4.2: Frontend Integration Fixes (INSERTED)** - Wire BroadcastPage/ViewerPage routing, add session creation UI, fix API configuration (completed 2026-03-02)
 - [ ] **Phase 5: Recording & Replay** - Automatic stream recording, EventBridge-driven processing, and Instagram-style replay viewer with chat sync
 - [ ] **Phase 6: Hangouts** - Multi-participant RealTime video sessions with WebRTC grid, controls, and session type selection
 - [ ] **Phase 7: Reactions & Presence** - Live emoji reactions with animated overlays, presence heartbeats, and replay reaction summaries

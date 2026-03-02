@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+cdk.out/
+
+# CDK outputs
+cdk-outputs.json
+
+# Generated frontend config
+web/public/aws-config.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# TypeScript
+*.js
+*.d.ts
+*.js.map
+!cdk.json
+!package.json
+!tsconfig.base.json
+!infra/package.json
+!infra/tsconfig.json
+!backend/package.json
+!backend/tsconfig.json

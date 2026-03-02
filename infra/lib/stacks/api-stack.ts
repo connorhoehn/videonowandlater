@@ -145,6 +145,32 @@ export class ApiStack extends Stack {
     // No authorizer - public endpoint for viewers
     sessionPlaybackResource.addMethod('GET', new apigateway.LambdaIntegration(getPlaybackHandler));
 
+    // GET /sessions/{sessionId}/viewers (get viewer count) - public endpoint
+    const sessionViewersResource = sessionIdResource.addResource('viewers');
+
+    const getViewerCountHandler = new NodejsFunction(this, 'GetViewerCountHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-viewer-count.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getViewerCountHandler);
+
+    // Grant IVS GetStream permission
+    getViewerCountHandler.addToRolePolicy(
+      new apigateway.aws_iam.PolicyStatement({
+        actions: ['ivs:GetStream'],
+        resources: ['*'],
+      })
+    );
+
+    // No authorizer - public endpoint
+    sessionViewersResource.addMethod('GET', new apigateway.LambdaIntegration(getViewerCountHandler));
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

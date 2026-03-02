@@ -7,7 +7,15 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.700.0"
+    "@aws-lambda-powertools/logger": "^2.31.0",
+    "@aws-lambda-powertools/tracer": "^2.31.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.700.0",
+    "@aws-sdk/client-dynamodb": "^3.1000.0",
+    "@aws-sdk/client-ivs": "^3.1000.0",
+    "@aws-sdk/client-ivs-realtime": "^3.1000.0",
+    "@aws-sdk/client-ivschat": "^3.1000.0",
+    "@aws-sdk/lib-dynamodb": "^3.1000.0",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.0",

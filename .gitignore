@@ -32,3 +32,4 @@ Thumbs.db
 !infra/tsconfig.json
 !backend/package.json
 !backend/tsconfig.json
+!backend/jest.config.js

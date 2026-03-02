@@ -4,11 +4,10 @@
 
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getConfig } from '../../config/aws-config';
 import { usePlayer } from './usePlayer';
 import { VideoPlayer } from './VideoPlayer';
 import { ChatPanel } from '../chat/ChatPanel';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -20,9 +19,12 @@ export function ViewerPage() {
 
   // Fetch session data to get sessionOwnerId
   React.useEffect(() => {
+    const config = getConfig();
+    const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api'; // Fallback for local dev
+
     const fetchSession = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
           headers: { Authorization: `Bearer ${authToken}` },
         });
         const data = await response.json();
@@ -47,9 +49,12 @@ export function ViewerPage() {
     return <div className="p-8 text-red-600">Session ID required</div>;
   }
 
+  const config = getConfig();
+  const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api'; // Fallback for local dev
+
   const { videoRef, isPlaying, sessionStatus, error } = usePlayer({
     sessionId,
-    apiBaseUrl: API_BASE_URL,
+    apiBaseUrl,
   });
 
   return (

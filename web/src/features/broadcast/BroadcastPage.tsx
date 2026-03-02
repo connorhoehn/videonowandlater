@@ -5,11 +5,10 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { getConfig } from '../../config/aws-config';
 import { useBroadcast } from './useBroadcast';
 import { CameraPreview } from './CameraPreview';
 import { ChatPanel } from '../chat/ChatPanel';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export function BroadcastPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -46,9 +45,12 @@ export function BroadcastPage() {
     return <div className="p-8 text-red-600">Session ID required</div>;
   }
 
+  const config = getConfig();
+  const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api'; // Fallback for local dev
+
   const { previewRef, startBroadcast, stopBroadcast, isLive, isLoading, error } = useBroadcast({
     sessionId,
-    apiBaseUrl: API_BASE_URL,
+    apiBaseUrl,
     authToken,
   });
 

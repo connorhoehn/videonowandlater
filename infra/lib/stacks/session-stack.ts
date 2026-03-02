@@ -1,5 +1,11 @@
-import { Stack, StackProps, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy, CfnOutput, Duration } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as path from 'path';
 import { Construct } from 'constructs';
 
 /**
@@ -48,6 +54,54 @@ export class SessionStack extends Stack {
 
     new CfnOutput(this, 'SessionTableName', {
       value: this.table.tableName,
+    });
+
+    // Lambda function for pool replenishment
+    const replenishPoolFn = new nodejs.NodejsFunction(this, 'ReplenishPool', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/replenish-pool.ts'),
+      timeout: Duration.minutes(5), // Time to create multiple IVS resources
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        MIN_CHANNELS: '3',
+        MIN_STAGES: '2',
+        MIN_ROOMS: '5',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(replenishPoolFn);
+
+    // Grant IVS permissions
+    // Note: IVS doesn't support resource-level permissions for Create* actions
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:CreateChannel', 'ivs:TagResource'],
+        resources: ['*'],
+      })
+    );
+
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:CreateStage'],
+        resources: ['*'],
+      })
+    );
+
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:CreateRoom', 'ivschat:TagResource'],
+        resources: ['*'],
+      })
+    );
+
+    // EventBridge schedule to trigger Lambda every 5 minutes
+    new events.Rule(this, 'ReplenishPoolSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(5)),
+      targets: [new targets.LambdaFunction(replenishPoolFn)],
+      description: 'Replenish IVS resource pool every 5 minutes',
     });
   }
 }

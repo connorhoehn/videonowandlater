@@ -49,8 +49,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CHAT-01**: Real-time text chat is available alongside both broadcast and hangout sessions
 - [ ] **CHAT-02**: Chat messages display sender username
 - [ ] **CHAT-03**: Users joining mid-session can see recent chat history
-- [ ] **CHAT-04**: Chat messages are persisted to DynamoDB with session-relative timestamps
-- [ ] **CHAT-05**: Chat tokens are generated server-side; clients only call REST endpoints
+- [x] **CHAT-04**: Chat messages are persisted to DynamoDB with session-relative timestamps
+- [x] **CHAT-05**: Chat tokens are generated server-side; clients only call REST endpoints
 
 ### Recording & Replay
 
@@ -176,8 +176,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHAT-01 | Phase 4: Chat | Pending |
 | CHAT-02 | Phase 4: Chat | Pending |
 | CHAT-03 | Phase 4: Chat | Pending |
-| CHAT-04 | Phase 4: Chat | Pending |
-| CHAT-05 | Phase 4: Chat | Pending |
+| CHAT-04 | Phase 4: Chat | Complete |
+| CHAT-05 | Phase 4: Chat | Complete |
 | REPLAY-01 | Phase 5: Recording & Replay | Pending |
 | REPLAY-02 | Phase 5: Recording & Replay | Pending |
 | REPLAY-03 | Phase 5: Recording & Replay | Pending |

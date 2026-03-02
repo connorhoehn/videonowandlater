@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-02T15:36:57.949Z"
+last_updated: "2026-03-02T16:12:29.542Z"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 11
+  completed_plans: 10
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Users can go live instantly -- either broadcasting to viewers or hanging out in small groups -- and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** Phase 3: Broadcasting
+**Current focus:** Phase 4: Chat
 
 ## Current Position
 
-Phase: 2 of 8 (Session Model and Resource Pool)
-Plan: 3 of 3 in current phase - COMPLETE ✓
-Status: Phase Complete
-Last activity: 2026-03-02 -- Completed 02-03-PLAN.md (Atomic Pool Claims and Session API)
+Phase: 4 of 8 (Chat)
+Plan: 1 of 2 in current phase - COMPLETE ✓
+Status: In Progress
+Last activity: 2026-03-02 -- Completed 04-01-PLAN.md (Chat Backend API and Message Persistence)
 
-Progress: [████░░░░░░] 25%
+Progress: [████░░░░░░] 36%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 10
 - Average duration: 5min
-- Total execution time: 0.81 hours
+- Total execution time: 0.89 hours
 
 **By Phase:**
 
@@ -42,10 +42,12 @@ Progress: [████░░░░░░] 25%
 |-------|-------|-------|----------|
 | 01-foundation-and-auth | 3/3 ✓ | 19min | 6min |
 | 02-session-model-and-resource-pool | 3/3 ✓ | 15min | 5min |
+| 03-broadcasting | 3/3 ✓ | 14min | 5min |
+| 04-chat | 1/2 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (15min), 02-01 (4min), 02-02 (7min), 02-03 (4min)
-- Trend: Stable around 4-7min per plan (excluding 01-03 outlier)
+- Last 5 plans: 02-02 (7min), 02-03 (4min), 03-01 (5min), 03-02 (5min), 04-01 (5min)
+- Trend: Consistent 5min per plan (optimal velocity achieved)
 
 *Updated after each plan completion*
 
@@ -77,6 +79,10 @@ Recent decisions affecting current work:
 - [Phase 02-03]: Atomic DynamoDB conditional writes with version check for race-free pool claims
 - [Phase 02-03]: MAX_RETRIES=3 immediate retries (no exponential backoff) for v1 simplicity
 - [Phase 02-03]: 503 with Retry-After header on pool exhaustion (HTTP standard for unavailability)
+- [Phase 04-01]: Server-side token generation only (CHAT-05) with CreateChatTokenCommand and 60-minute sessions
+- [Phase 04-01]: Session-relative timestamps (CHAT-04) enable Phase 5 replay synchronization
+- [Phase 04-01]: Composite sort key pattern {sentAt}#{messageId} for chronological ordering with uniqueness
+- [Phase 04-01]: Broadcaster vs viewer role determined by session ownership (userId === session.userId)
 
 ### Pending Todos
 
@@ -90,5 +96,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Phase 2 complete, ready to plan Phase 3 (Broadcasting)
+Stopped at: Completed 04-01-PLAN.md (Chat Backend API and Message Persistence)
 Resume file: None

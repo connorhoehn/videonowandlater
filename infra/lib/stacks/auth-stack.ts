@@ -1,6 +1,9 @@
 import { Stack, StackProps, RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
+import * as path from 'path';
 
 export class AuthStack extends Stack {
   public readonly userPool: cognito.UserPool;
@@ -8,6 +11,14 @@ export class AuthStack extends Stack {
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+
+    // Auto-confirm Lambda: confirms users on signup (no email verification required)
+    const autoConfirmFn = new nodejs.NodejsFunction(this, 'AutoConfirmUser', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../lambdas/auto-confirm-user.ts'),
+      timeout: Duration.seconds(10),
+    });
 
     this.userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'vnl-user-pool',
@@ -20,6 +31,9 @@ export class AuthStack extends Stack {
         requireUppercase: true,
         requireDigits: true,
         requireSymbols: false,
+      },
+      lambdaTriggers: {
+        preSignUp: autoConfirmFn,
       },
       removalPolicy: RemovalPolicy.DESTROY,
     });

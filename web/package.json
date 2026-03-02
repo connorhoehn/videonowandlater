@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "amazon-ivs-player": "^1.49.0",
+    "amazon-ivs-web-broadcast": "^1.32.0",
     "aws-amplify": "^6.12.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

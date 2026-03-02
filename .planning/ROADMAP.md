@@ -67,12 +67,12 @@ Plans:
   3. Live viewer count is visible to both broadcaster and viewers, and a live indicator shows which sessions are currently broadcasting
   4. When a broadcast ends, recording stops, pool resources are released back to available state, and session transitions to ended
   5. Developer can stream an MP4/MOV file into a broadcast session via FFmpeg for testing without a camera
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md — Broadcast startup API and EventBridge stream state integration
+- [ ] 03-02-PLAN.md — Frontend broadcasting and viewer playback with IVS SDKs
+- [ ] 03-03-PLAN.md — Session cleanup, viewer count API, and FFmpeg test script
 
 ### Phase 4: Chat
 **Goal**: Users can send and receive real-time text messages alongside any live session, with messages persisted for later replay

@@ -1,4 +1,5 @@
 import React from 'react';
+import { SendMessageRequest } from 'amazon-ivs-chat-messaging';
 import { useChatRoom } from './useChatRoom';
 import { ChatRoomProvider } from './ChatRoomProvider';
 import { ChatMessagesProvider, useChatMessagesContext } from './ChatMessagesProvider';
@@ -92,7 +93,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const handleSendMessage = async (content: string) => {
     try {
-      await room.sendMessage({ content });
+      await room.sendMessage(new SendMessageRequest(content));
     } catch (error) {
       console.error('Failed to send message:', error);
       // Show error toast (optional for v1)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChatMessage } from 'amazon-ivs-chat-messaging';
+import type { ChatMessage } from 'amazon-ivs-chat-messaging';
 import { useChatRoomContext } from './ChatRoomProvider';
 
 const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';

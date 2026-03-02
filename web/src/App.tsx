@@ -9,6 +9,8 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { HomePage } from './pages/HomePage';
+import { BroadcastPage } from './features/broadcast/BroadcastPage';
+import { ViewerPage } from './features/viewer/ViewerPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -78,6 +80,22 @@ function App() {
               }
             />
           </Route>
+          <Route
+            path="/broadcast/:sessionId"
+            element={
+              <ProtectedRoute>
+                <BroadcastPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/viewer/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ViewerPage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

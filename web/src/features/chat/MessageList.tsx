@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChatMessage } from 'amazon-ivs-chat-messaging';
+import type { ChatMessage } from 'amazon-ivs-chat-messaging';
 import { MessageRow } from './MessageRow';
 
 interface MessageListProps {

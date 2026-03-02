@@ -9,10 +9,11 @@ const app = new App();
 const env = { region: 'us-east-1' };
 
 const authStack = new AuthStack(app, 'VNL-Auth', { env });
+const sessionStack = new SessionStack(app, 'VNL-Session', { env });
 new ApiStack(app, 'VNL-Api', {
   env,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
+  sessionsTable: sessionStack.table,
 });
 new MonitoringStack(app, 'VNL-Monitoring', { env });
-new SessionStack(app, 'VNL-Session', { env });

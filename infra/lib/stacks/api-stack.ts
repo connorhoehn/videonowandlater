@@ -1,6 +1,7 @@
 import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -9,6 +10,7 @@ import * as path from 'path';
 export interface ApiStackProps extends StackProps {
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
+  sessionsTable: dynamodb.ITable;
 }
 
 export class ApiStack extends Stack {
@@ -60,6 +62,47 @@ export class ApiStack extends Stack {
     });
 
     me.addMethod('GET', new apigateway.LambdaIntegration(meHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // Sessions resource
+    const sessions = api.root.addResource('sessions');
+
+    // POST /sessions (create session)
+    const createSessionHandler = new NodejsFunction(this, 'CreateSessionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(createSessionHandler);
+
+    sessions.addMethod('POST', new apigateway.LambdaIntegration(createSessionHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}
+    const sessionIdResource = sessions.addResource('{sessionId}');
+
+    const getSessionHandler = new NodejsFunction(this, 'GetSessionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getSessionHandler);
+
+    sessionIdResource.addMethod('GET', new apigateway.LambdaIntegration(getSessionHandler), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });

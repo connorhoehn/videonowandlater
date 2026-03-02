@@ -15,7 +15,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **AUTH-01**: User can sign up with username and password (no email verification)
 - [ ] **AUTH-02**: User can log in and receive JWT tokens for API authorization
 - [ ] **AUTH-03**: User session persists across browser refresh
-- [ ] **AUTH-04**: User can log out from any page
+- [x] **AUTH-04**: User can log out from any page
 
 ### Resource Pool
 
@@ -79,13 +79,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Developer Tools
 
-- [ ] **DEV-01**: CLI command to create/list/delete Cognito users
-- [ ] **DEV-02**: CLI command to generate auth tokens for testing
+- [x] **DEV-01**: CLI command to create/list/delete Cognito users
+- [x] **DEV-02**: CLI command to generate auth tokens for testing
 - [ ] **DEV-03**: CLI command to mint IVS participant/join tokens
 - [ ] **DEV-04**: CLI command to seed chat messages and reaction events
 - [ ] **DEV-05**: CLI command to simulate presence
 - [x] **DEV-06**: CLI command (or documented approach) to stream MP4/MOV into a broadcast via RTMPS/FFmpeg
-- [ ] **DEV-07**: Frontend detects "stack not deployed" and shows developer setup guidance
+- [x] **DEV-07**: Frontend detects "stack not deployed" and shows developer setup guidance
 
 ### Admin Dashboard
 
@@ -96,8 +96,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Config & Deployment
 
-- [ ] **DEPLOY-01**: CDK deployment outputs are wired into web app via env vars or generated config files
-- [ ] **DEPLOY-02**: Deploy/destroy scripts update frontend configuration automatically
+- [x] **DEPLOY-01**: CDK deployment outputs are wired into web app via env vars or generated config files
+- [x] **DEPLOY-02**: Deploy/destroy scripts update frontend configuration automatically
 
 ## v2 Requirements
 
@@ -152,15 +152,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-01 | Phase 1: Foundation & Auth | Complete |
 | INFRA-02 | Phase 1: Foundation & Auth | Complete |
 | INFRA-03 | Phase 1: Foundation & Auth | Complete |
-| AUTH-01 | Phase 1: Foundation & Auth | Pending |
-| AUTH-02 | Phase 1: Foundation & Auth | Pending |
-| AUTH-03 | Phase 1: Foundation & Auth | Pending |
-| AUTH-04 | Phase 1: Foundation & Auth | Pending |
-| DEPLOY-01 | Phase 1: Foundation & Auth | Pending (verification needed) |
-| DEPLOY-02 | Phase 1: Foundation & Auth | Pending (verification needed) |
-| DEV-01 | Phase 1: Foundation & Auth | Pending (verification needed) |
-| DEV-02 | Phase 1: Foundation & Auth | Pending (verification needed) |
-| DEV-07 | Phase 1: Foundation & Auth | Pending |
+| AUTH-01 | Phase 1: Foundation & Auth | Pending (human testing needed) |
+| AUTH-02 | Phase 1: Foundation & Auth | Pending (human testing needed) |
+| AUTH-03 | Phase 1: Foundation & Auth | Pending (human testing needed) |
+| AUTH-04 | Phase 1: Foundation & Auth | Complete |
+| DEPLOY-01 | Phase 1: Foundation & Auth | Complete |
+| DEPLOY-02 | Phase 1: Foundation & Auth | Complete |
+| DEV-01 | Phase 1: Foundation & Auth | Complete |
+| DEV-02 | Phase 1: Foundation & Auth | Complete |
+| DEV-07 | Phase 1: Foundation & Auth | Complete |
 | SESS-01 | Phase 2: Session Model & Resource Pool | Complete |
 | SESS-04 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-01 | Phase 2: Session Model & Resource Pool | Complete |

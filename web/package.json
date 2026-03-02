@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "amazon-ivs-chat-messaging": "^1.1.1",
     "amazon-ivs-player": "^1.49.0",
     "amazon-ivs-web-broadcast": "^1.32.0",
     "aws-amplify": "^6.12.2",

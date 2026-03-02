@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A live video platform powered by AWS IVS that supports two modes: near real-time broadcasting (one-to-many) and small-group RealTime hangouts (up to 5 participants). Each session has a long-running chat that persists for replay context. Streams are recorded for later viewing in an Instagram-style replay viewer with reaction summaries. React web frontend with mobile planned as a future subrepo.
+A live video platform powered by AWS IVS with one-to-many broadcasting and real-time chat. Users can create broadcast sessions instantly (backed by pre-warmed IVS Channel pool), go live with their camera, and chat with viewers in real-time. Built with CDK-managed infrastructure (Cognito auth, API Gateway, DynamoDB, IVS), React frontend, and developer CLI tools for local testing. Recording, replay viewer, hangouts, and reactions are planned for future milestones.
 
 ## Core Value
 
@@ -21,12 +21,15 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - ✓ Deployment outputs wired into web app via generated config files — Phase 1
 - ✓ Logout functionality accessible from any protected route — Phase 1
 - ✓ Developer CLI tools for user/token management — Phase 1
+- ✓ Near real-time broadcasting (one-to-many via IVS Channel) — Phase 3
+- ✓ Long-running chat attached to live sessions, persisting for replay — Phase 4
+- ✓ Frontend routing for broadcast and viewer pages — Phase 4.2
+- ✓ Session creation UI with loading/error states — Phase 4.2
+- ✓ Centralized API configuration across frontend — Phase 4.2
 
 ### Active
 
-- [ ] Near real-time broadcasting (one-to-many via IVS)
 - [ ] Small-group IVS RealTime hangouts (up to 5 participants)
-- [ ] Long-running chat attached to live sessions, persisting for replay
 - [ ] UX fully abstracted from AWS concepts (no channels/empty rooms — only "live" or "ready" experiences)
 - [ ] Lambda + API Gateway APIs for presence, reactions, replay metadata
 - [ ] DynamoDB models for presence, reactions, replay metadata
@@ -67,7 +70,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| IVS for broadcast + IVS RealTime for hangouts | Two distinct use cases require both IVS products | — Pending (Phase 3+) |
+| IVS for broadcast + IVS RealTime for hangouts | Two distinct use cases require both IVS products | ✓ Broadcast shipped v1.0, hangouts pending |
 | Cognito username/password only | Simplicity for v1, no email infrastructure needed | ✓ Phase 1 |
 | Pre-warmed resource pool | Instant "go live" UX requires resources ready ahead of time | ✓ Phase 2 |
 | CDK for infrastructure | Infrastructure as code, cleanly destroyable | ✓ Phase 1-2 |
@@ -79,5 +82,11 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | EventBridge Scheduler for pool replenishment | Serverless, reliable, 5-minute intervals maintain pool readiness | ✓ Phase 2 |
 | Retroactive Phase 01 verification | 9 requirements verified automated, 3 auth flows require manual testing | ✓ Phase 4.1 |
 
+## Current State
+
+**Shipped:** v1.0 Gap Closure (2026-03-02)
+**Codebase:** ~5,300 LOC TypeScript (frontend + backend + CDK)
+**Status:** Broadcast and chat functional end-to-end. Ready for hangouts, recording, and polish.
+
 ---
-*Last updated: 2026-03-02 after Phase 4.1*
+*Last updated: 2026-03-02 after v1.0 milestone*

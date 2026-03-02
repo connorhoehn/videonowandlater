@@ -2,6 +2,7 @@ import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -170,6 +171,75 @@ export class ApiStack extends Stack {
 
     // No authorizer - public endpoint
     sessionViewersResource.addMethod('GET', new apigateway.LambdaIntegration(getViewerCountHandler));
+
+    // Chat endpoints
+    const sessionChatResource = sessionIdResource.addResource('chat');
+
+    // POST /sessions/{sessionId}/chat/token (generate chat token)
+    const chatTokenResource = sessionChatResource.addResource('token');
+
+    const createChatTokenHandler = new NodejsFunction(this, 'CreateChatTokenHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-chat-token.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(createChatTokenHandler);
+
+    // Grant IVS Chat CreateChatToken permission
+    createChatTokenHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:CreateChatToken'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
+      })
+    );
+
+    chatTokenResource.addMethod('POST', new apigateway.LambdaIntegration(createChatTokenHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/chat/messages (send message)
+    const chatMessagesResource = sessionChatResource.addResource('messages');
+
+    const sendMessageHandler = new NodejsFunction(this, 'SendMessageHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/send-message.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(sendMessageHandler);
+
+    chatMessagesResource.addMethod('POST', new apigateway.LambdaIntegration(sendMessageHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/chat/messages (get chat history)
+    const getChatHistoryHandler = new NodejsFunction(this, 'GetChatHistoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-chat-history.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getChatHistoryHandler);
+
+    chatMessagesResource.addMethod('GET', new apigateway.LambdaIntegration(getChatHistoryHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

@@ -23,7 +23,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **POOL-02**: Pre-warmed pool maintains N available IVS RealTime stages ready for instant hangout
 - [x] **POOL-03**: Pre-warmed pool maintains N available IVS Chat rooms ready for instant chat
 - [x] **POOL-04**: Scheduled Lambda replenishes pool when available resources drop below threshold
-- [ ] **POOL-05**: Resources are atomically claimed from pool via DynamoDB conditional writes (no race conditions)
+- [x] **POOL-05**: Resources are atomically claimed from pool via DynamoDB conditional writes (no race conditions)
 - [ ] **POOL-06**: Resources are released back to pool and recycled when sessions end
 
 ### Broadcasting
@@ -163,7 +163,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | POOL-02 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-03 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-04 | Phase 2: Session Model & Resource Pool | Complete |
-| POOL-05 | Phase 2: Session Model & Resource Pool | Pending |
+| POOL-05 | Phase 2: Session Model & Resource Pool | Complete |
 | BCAST-01 | Phase 3: Broadcasting | Pending |
 | BCAST-02 | Phase 3: Broadcasting | Pending |
 | BCAST-03 | Phase 3: Broadcasting | Pending |

@@ -13,7 +13,7 @@ VideoNowAndLater delivers a live video platform in 8 phases, progressing from de
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation & Auth** - CDK infrastructure, Cognito auth, deployment wiring, and developer bootstrapping tools
-- [ ] **Phase 2: Session Model & Resource Pool** - Session domain model, IVS resource pre-warming, and atomic pool claims
+- [x] **Phase 2: Session Model & Resource Pool** - Session domain model, IVS resource pre-warming, and atomic pool claims (completed 2026-03-02)
 - [ ] **Phase 3: Broadcasting** - One-to-many live broadcasting with IVS Player viewing, pool resource lifecycle, and test streaming
 - [ ] **Phase 4: Chat** - Real-time text chat alongside live sessions with server-side persistence for replay
 - [ ] **Phase 5: Recording & Replay** - Automatic stream recording, EventBridge-driven processing, and Instagram-style replay viewer with chat sync
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Auth | 2/3 | In Progress|  |
-| 2. Session Model & Resource Pool | 2/3 | In Progress|  |
+| 2. Session Model & Resource Pool | 3/3 | Complete   | 2026-03-02 |
 | 3. Broadcasting | 0/3 | Not started | - |
 | 4. Chat | 0/2 | Not started | - |
 | 5. Recording & Replay | 0/3 | Not started | - |

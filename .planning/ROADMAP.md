@@ -33,12 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Frontend detects when CDK stack is not deployed and displays developer setup guidance instead of crashing
   4. Developer can create/list/delete Cognito test users and generate auth tokens via CLI commands
   5. CloudWatch billing alarms are configured and fire at $10, $50, and $100 thresholds
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Monorepo scaffold + CDK Auth & Monitoring stacks
+- [ ] 01-02-PLAN.md — API Gateway stack + deploy/destroy scripts + developer CLI tools
+- [ ] 01-03-PLAN.md — React frontend with Amplify auth, signup/login/logout, stack-not-deployed detection
 
 ### Phase 2: Session Model & Resource Pool
 **Goal**: The system maintains a pool of ready-to-use IVS resources so users can go live instantly without cold-start delays

@@ -79,8 +79,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Developer Tools
 
-- [ ] **DEV-01**: CLI command to create/list/delete Cognito users
-- [ ] **DEV-02**: CLI command to generate auth tokens for testing
+- [x] **DEV-01**: CLI command to create/list/delete Cognito users
+- [x] **DEV-02**: CLI command to generate auth tokens for testing
 - [ ] **DEV-03**: CLI command to mint IVS participant/join tokens
 - [ ] **DEV-04**: CLI command to seed chat messages and reaction events
 - [ ] **DEV-05**: CLI command to simulate presence
@@ -96,8 +96,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Config & Deployment
 
-- [ ] **DEPLOY-01**: CDK deployment outputs are wired into web app via env vars or generated config files
-- [ ] **DEPLOY-02**: Deploy/destroy scripts update frontend configuration automatically
+- [x] **DEPLOY-01**: CDK deployment outputs are wired into web app via env vars or generated config files
+- [x] **DEPLOY-02**: Deploy/destroy scripts update frontend configuration automatically
 
 ## v2 Requirements
 
@@ -152,10 +152,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-02 | Phase 1: Foundation & Auth | Pending |
 | AUTH-03 | Phase 1: Foundation & Auth | Pending |
 | AUTH-04 | Phase 1: Foundation & Auth | Pending |
-| DEPLOY-01 | Phase 1: Foundation & Auth | Pending |
-| DEPLOY-02 | Phase 1: Foundation & Auth | Pending |
-| DEV-01 | Phase 1: Foundation & Auth | Pending |
-| DEV-02 | Phase 1: Foundation & Auth | Pending |
+| DEPLOY-01 | Phase 1: Foundation & Auth | Complete |
+| DEPLOY-02 | Phase 1: Foundation & Auth | Complete |
+| DEV-01 | Phase 1: Foundation & Auth | Complete |
+| DEV-02 | Phase 1: Foundation & Auth | Complete |
 | DEV-07 | Phase 1: Foundation & Auth | Pending |
 | SESS-01 | Phase 2: Session Model & Resource Pool | Pending |
 | SESS-04 | Phase 2: Session Model & Resource Pool | Pending |

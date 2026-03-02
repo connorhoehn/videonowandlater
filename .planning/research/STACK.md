@@ -1,266 +1,580 @@
 # Technology Stack
 
-**Project:** VideoNowAndLater
-**Researched:** 2026-03-01
-**Overall Confidence:** HIGH (all versions verified via npm registry)
+**Project:** VideoNowAndLater v1.1 (Recording, Reactions, RealTime Hangouts)
+**Researched:** 2026-03-02
+**Overall Confidence:** HIGH (verified via official AWS docs + npm registry)
 
-## Recommended Stack
+---
 
-### Language and Runtime
+## Context: Stack Additions Only
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| TypeScript | ^5.9 | All code (frontend, CDK, Lambda, CLI) | Single language across entire stack; type safety catches IVS SDK integration errors at compile time; AWS SDK v3 has first-class TS support | HIGH (npm: 5.9.3) |
-| Node.js | 20.x LTS | Lambda runtime + local dev | Node 20 is the current stable Lambda runtime; Node 22 Lambda runtime is available but 20 is battle-tested; matches local dev env (20.19.2 locally) | HIGH |
+This research focuses on **stack additions/changes needed for v1.1 features**:
+- S3 recording (IVS Channels + RealTime Stages)
+- Replay playback (HLS video from S3)
+- Reaction storage/synchronization (live + replay)
+- IVS RealTime Stage management (multi-participant hangouts)
 
-### Frontend
+**Existing validated stack (NOT re-researched):**
+- IVS broadcasting, IVS Chat, Cognito auth, DynamoDB single-table, CDK infrastructure, React frontend, developer CLI
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| React | ^19.2 | UI framework | Latest stable; no peer dependency conflicts with IVS SDKs (they have zero React peer deps); concurrent features useful for video + chat UX | HIGH (npm: 19.2.4) |
-| React DOM | ^19.2 | DOM rendering | Paired with React 19 | HIGH (npm: 19.2.4) |
-| Vite | ^7.3 | Build tool + dev server | Fastest DX for React; native ESM; handles WASM loading that IVS Player SDK needs; HMR that doesn't kill WebRTC connections (unlike Webpack full-page reloads) | HIGH (npm: 7.3.1) |
-| React Router | ^7.13 | Client-side routing | Mature, well-documented; v7 is stable with React 19; simple loader/action model for route-level data | HIGH (npm: 7.13.1) |
-| Zustand | ^5.0 | Client state management | Minimal boilerplate for complex video/chat state; works outside React tree (needed for IVS SDK callbacks); no context provider wrapping | HIGH (npm: 5.0.11) |
-| TanStack Query | ^5.90 | Server state / API caching | Handles session lists, replay metadata, presence polling with automatic caching, deduplication, and background refresh | HIGH (npm: 5.90.21) |
-| Tailwind CSS | ^4.2 | Styling | Utility-first; v4 is stable with new CSS-first config, Vite plugin; fast iteration for video/chat layouts | HIGH (npm: 4.2.1) |
+---
 
-### AWS IVS SDKs (Frontend -- Browser)
+## Stack Additions Required
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| amazon-ivs-web-broadcast | ^1.32 | Broadcasting + RealTime stages | Unified SDK for BOTH low-latency broadcasting (RTMPS ingest) AND RealTime/WebRTC stages; handles camera/mic capture, compositing, publish/subscribe | HIGH (npm: 1.32.0) |
-| amazon-ivs-player | ^1.49 | Playback of low-latency streams and recordings | Web player for IVS low-latency channels; also plays back recorded S3 content via HLS; required for viewer experience and replay | HIGH (npm: 1.49.0) |
-| amazon-ivs-chat-messaging | ^1.1 | Chat room WebSocket client | Official client-side Chat SDK; handles connect, send, receive, disconnect events, message threading; lightweight (only dep: uuid) | HIGH (npm: 1.1.1) |
+### Frontend: New Package
 
-**Critical note on IVS Web Broadcast SDK:** This single SDK covers BOTH use cases. For one-to-many broadcasting it provides RTMPS ingest. For RealTime hangouts it provides the WebRTC Stage API. Do NOT look for a separate "IVS RealTime Web SDK" -- it is bundled in `amazon-ivs-web-broadcast`.
+| Package | Version | Purpose | Why Recommended | Confidence |
+|---------|---------|---------|-----------------|------------|
+| `react-player` | ^2.16.0 | HLS replay video playback | Maintained by Mux (2025), native HLS support via hls.js, lightweight React API, no DOM manipulation needed | HIGH |
 
-**Critical note on IVS Player SDK:** Has peer dependencies on `bowser` (^2.13.1) and `lodash` (^4.17.21). These must be installed alongside it.
-
-### AWS SDK v3 (Backend -- Lambda)
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| @aws-sdk/client-ivs | ^3.x | IVS Channel management | Create/delete channels, get stream keys, manage recording configs; used for pre-warmed pool management | HIGH (npm: 3.1000.0) |
-| @aws-sdk/client-ivs-realtime | ^3.x | IVS RealTime Stage management | Create/delete stages, generate participant tokens; used for hangout session setup | HIGH (npm: 3.1000.0) |
-| @aws-sdk/client-ivschat | ^3.x | IVS Chat Room management | Create/delete chat rooms, generate chat tokens, manage message review handlers | HIGH (npm: 3.1000.0) |
-| @aws-sdk/client-dynamodb | ^3.x | Low-level DynamoDB operations | Direct table operations when needed | HIGH (npm: 3.1000.0) |
-| @aws-sdk/lib-dynamodb | ^3.x | DynamoDB Document Client | High-level document operations with automatic marshalling; use this 95% of the time over raw client | HIGH (npm: 3.1000.0) |
-| @aws-sdk/client-cognito-identity-provider | ^3.x | Cognito user pool operations | Admin user operations for CLI tools (create/delete users, generate tokens) | HIGH (npm: 3.1000.0) |
-| @aws-sdk/client-s3 | ^3.x | S3 operations | Generate presigned URLs for replay video access; manage recording bucket lifecycle | HIGH (npm: 3.1000.0) |
-
-**Version note:** AWS SDK v3 uses synchronized versioning. Pin to `^3` and let the lockfile handle specific resolution. All clients are at 3.1000.0 as of 2026-02-27.
-
-### Backend / Lambda
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| @aws-lambda-powertools/logger | ^2.31 | Structured logging | JSON structured logs with correlation IDs; Lambda-aware (cold start detection, request context); standard in AWS Lambda TS ecosystem | HIGH (npm: 2.31.0) |
-| @aws-lambda-powertools/tracer | ^2.31 | X-Ray tracing | Automatic X-Ray tracing for AWS SDK calls; essential for debugging IVS API latency issues | HIGH (npm: 2.31.0) |
-| @aws-lambda-powertools/metrics | ^2.31 | CloudWatch custom metrics | EMF-format metrics for session counts, token generation latency, pool utilization | HIGH (npm: 2.31.0) |
-| @middy/core | ^7.1 | Lambda middleware | Clean middleware pattern for common concerns (error handling, validation, CORS); avoids boilerplate in every handler | HIGH (npm: 7.1.2) |
-| aws-jwt-verify | ^5.1 | Cognito JWT validation | Verify Cognito tokens in Lambda authorizers; caches JWKS, handles token expiry; official AWS library | HIGH (npm: 5.1.1) |
-| zod | ^4.3 | Input validation + type inference | Validate API request bodies; infer TypeScript types from schemas; share validation between frontend and backend | HIGH (npm: 4.3.6) |
-| uuid | ^13.0 | ID generation | Generate session IDs, correlation IDs; used internally by IVS Chat SDK too | HIGH (npm: 13.0.0) |
-
-### Infrastructure (CDK)
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| aws-cdk-lib | ^2.240 | CDK v2 core library | All L1/L2 constructs; includes `aws-ivs`, `aws-ivschat` modules for IVS channels and chat rooms; includes `aws-lambda-nodejs` for esbuild bundling | HIGH (npm: 2.240.0) |
-| aws-cdk (CLI) | ^2.1108 | CDK CLI tool | Deploy, destroy, synthesize, diff; version can float independently of lib | HIGH (npm: 2.1108.0) |
-| @aws-cdk/aws-ivs-alpha | ^2.240.0-alpha.0 | IVS L2 constructs (experimental) | Higher-level IVS constructs with recording configuration support; alpha but tracks stable CDK releases closely | MEDIUM (alpha status, but actively maintained and version-locked to cdk-lib) |
-| constructs | ^10.5 | CDK construct base | Required peer dependency of aws-cdk-lib | HIGH (npm: 10.5.1) |
-| cdk-nag | ^2.37 | CDK security/best practice checks | Catches security issues before deploy (public S3 buckets, missing encryption); run during synth | HIGH (npm: 2.37.55) |
-
-**CDK IVS module detail:** `aws-cdk-lib` ships with stable L1 constructs at `aws-cdk-lib/aws-ivs` (channels, stream keys, recording configs) and `aws-cdk-lib/aws-ivschat` (chat rooms). The `@aws-cdk/aws-ivs-alpha` package adds higher-level L2 constructs. For IVS RealTime (stages), you will likely need L1 `CfnStage` constructs from `aws-cdk-lib/aws-ivs` since L2 support may be limited.
-
-### Developer CLI Tool
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| commander | ^14.0 | CLI argument parsing | De facto standard for Node.js CLI tools; type-safe; subcommand support for users/tokens/sessions/stream operations | HIGH (npm: 14.0.3) |
-| fluent-ffmpeg | ^2.1 | Video file streaming to RTMPS | Wraps FFmpeg for streaming MP4/MOV test files into IVS channels via RTMPS; required for testing without OBS/browser | HIGH (npm: 2.1.3) |
-
-**FFmpeg system dependency:** `fluent-ffmpeg` requires FFmpeg installed on the system (`brew install ffmpeg` on macOS). This is a system dependency, not an npm package.
-
-### Testing
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Vitest | ^4.0 | Unit + integration tests | Native ESM, Vite-compatible, fast; works with TypeScript out of the box; same config as app build | HIGH (npm: 4.0.18) |
-| @types/aws-lambda | ^8.10 | Lambda handler type definitions | Type-safe Lambda event/context/response objects | HIGH (npm: 8.10.161) |
-
-### Dev Dependencies (Shared)
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| esbuild | ^0.27 | Lambda bundling (via CDK NodejsFunction) | CDK's `aws-lambda-nodejs.NodejsFunction` uses esbuild under the hood for tree-shaking Lambda code; install as dev dep so CDK doesn't download it on every synth | HIGH (npm: 0.27.3) |
-
-## Architecture Decision: Monorepo Structure
-
-Use a **flat monorepo with npm workspaces** organized as:
-
-```
-/
-  packages/
-    cdk/          -- CDK app (infrastructure)
-    api/          -- Lambda handlers (shared across functions)
-    web/          -- React frontend (Vite)
-    cli/          -- Developer CLI tool
-    shared/       -- Shared types, validation schemas (zod), constants
-```
-
-**Why npm workspaces over Turborepo/Nx:** This project has 4-5 packages max. npm workspaces (built into npm 7+) handle this without additional tooling complexity. Add Turborepo later only if build orchestration becomes a bottleneck.
-
-## What NOT to Use
-
-| Category | Avoid | Use Instead | Why |
-|----------|-------|-------------|-----|
-| State management | Redux / Redux Toolkit | Zustand | Redux is overkill for this app; video/chat state is best managed outside React tree where Zustand excels |
-| State management | React Context for global state | Zustand | Context causes full subtree re-renders; video frames + chat messages would destroy performance |
-| API layer | GraphQL / AppSync | REST (API Gateway + Lambda) | Project spec says REST; session/token APIs are simple request-response; GraphQL adds complexity with no benefit here |
-| Auth SDK | AWS Amplify (`aws-amplify`) | Direct `@aws-sdk/client-cognito-identity-provider` + `aws-jwt-verify` | Amplify pulls in massive bundle (~500KB+); we only need username/password auth; direct SDK is lighter and gives full control over the auth flow |
-| CSS | CSS-in-JS (styled-components, emotion) | Tailwind CSS | Zero runtime cost; better for video-heavy UIs where JS thread must stay free for WebRTC/media |
-| IVS | Separate "IVS RealTime SDK" | `amazon-ivs-web-broadcast` | There is no separate RealTime web SDK; the broadcast SDK includes the Stage (RealTime) API |
-| Build tool | Webpack / Create React App | Vite | CRA is deprecated; Webpack is slower; Vite handles WASM (IVS Player) and WebRTC better |
-| CDK IVS | Only L1 CfnChannel constructs | `@aws-cdk/aws-ivs-alpha` for channels | Alpha L2 constructs provide simpler API for recording configs; fall back to L1 for RealTime stages |
-| Lambda bundling | Webpack for Lambda | CDK NodejsFunction (esbuild) | Built into CDK; automatic tree-shaking; no config files |
-| Monorepo | Lerna | npm workspaces | Lerna is effectively deprecated for new projects; npm workspaces are built-in and sufficient |
-| Testing | Jest | Vitest | Vitest is faster, native ESM, same config as Vite; Jest needs extra config for ESM/TypeScript |
-| CLI framework | yargs / oclif | commander | commander is lighter for our needs; oclif is for plugin-heavy CLIs we don't need |
-| React version | React 18 | React 19 | No IVS SDK conflicts (no React peer deps); React 19 concurrent features help with video + chat UI; use modern APIs |
-
-## React 19 Compatibility Assessment
-
-**Verdict: Safe to use React 19.**
-
-The three IVS browser SDKs have the following React dependencies:
-- `amazon-ivs-web-broadcast`: Zero React peer/regular dependencies (deps: jsdom, bowser, lodash, eventemitter3, sdp-transform, webrtc-adapter, reflect-metadata)
-- `amazon-ivs-player`: Zero React dependencies (peer deps: bowser, lodash)
-- `amazon-ivs-chat-messaging`: Zero React dependencies (dep: uuid)
-
-None of the IVS SDKs are React components -- they are vanilla JavaScript libraries that we wrap in our own React hooks and components. React version is irrelevant to them.
-
-## Version Pinning Strategy
-
-| Layer | Strategy | Rationale |
-|-------|----------|-----------|
-| IVS SDKs (browser) | Pin minor: `~1.32.0`, `~1.49.0`, `~1.1.1` | IVS SDKs can have breaking behavior in minor bumps despite semver; pin tight and upgrade deliberately |
-| AWS SDK v3 (Lambda) | Pin major: `^3` | AWS SDK v3 is stable; minor/patch updates are safe; tree-shaking keeps bundle small |
-| React + React DOM | Pin major: `^19` | Stable within major; minor updates are safe |
-| CDK | Pin minor: `~2.240.0` | CDK releases frequently; minor bumps can change synth output; control upgrade timing |
-| CDK alpha | Match CDK: `~2.240.0-alpha.0` | Must stay in sync with `aws-cdk-lib` version |
-| Everything else | Pin major: `^` | Standard semver trust for mature libraries |
-
-## Installation
-
+**Installation:**
 ```bash
-# ---- Root (monorepo setup) ----
-npm init -w packages/cdk -w packages/api -w packages/web -w packages/cli -w packages/shared
-
-# ---- packages/web (Frontend) ----
-npm install -w packages/web \
-  react@^19 react-dom@^19 react-router@^7 react-router-dom@^7 \
-  zustand@^5 @tanstack/react-query@^5 \
-  amazon-ivs-web-broadcast@~1.32.0 \
-  amazon-ivs-player@~1.49.0 bowser@^2.13.1 lodash@^4.17.21 \
-  amazon-ivs-chat-messaging@~1.1.1
-
-npm install -w packages/web -D \
-  vite@^7 @vitejs/plugin-react@latest \
-  tailwindcss@^4 @tailwindcss/vite@^4 \
-  typescript@^5.9 @types/react@^19 @types/react-dom@^19 \
-  vitest@^4
-
-# ---- packages/api (Lambda handlers) ----
-npm install -w packages/api \
-  @aws-sdk/client-ivs@^3 \
-  @aws-sdk/client-ivs-realtime@^3 \
-  @aws-sdk/client-ivschat@^3 \
-  @aws-sdk/client-dynamodb@^3 \
-  @aws-sdk/lib-dynamodb@^3 \
-  @aws-sdk/client-cognito-identity-provider@^3 \
-  @aws-sdk/client-s3@^3 \
-  @aws-lambda-powertools/logger@^2 \
-  @aws-lambda-powertools/tracer@^2 \
-  @aws-lambda-powertools/metrics@^2 \
-  @middy/core@^7 \
-  aws-jwt-verify@^5 \
-  zod@^4 uuid@^13
-
-npm install -w packages/api -D \
-  typescript@^5.9 @types/aws-lambda@^8.10 \
-  esbuild@^0.27 vitest@^4
-
-# ---- packages/cdk (Infrastructure) ----
-npm install -w packages/cdk \
-  aws-cdk-lib@~2.240.0 constructs@^10 \
-  @aws-cdk/aws-ivs-alpha@~2.240.0-alpha.0 \
-  cdk-nag@^2
-
-npm install -w packages/cdk -D \
-  aws-cdk@^2 typescript@^5.9
-
-# ---- packages/cli (Developer CLI) ----
-npm install -w packages/cli \
-  commander@^14 fluent-ffmpeg@^2 \
-  @aws-sdk/client-ivs@^3 \
-  @aws-sdk/client-ivs-realtime@^3 \
-  @aws-sdk/client-ivschat@^3 \
-  @aws-sdk/client-cognito-identity-provider@^3
-
-npm install -w packages/cli -D \
-  typescript@^5.9 @types/fluent-ffmpeg@^2
-
-# ---- packages/shared (Shared types/schemas) ----
-npm install -w packages/shared \
-  zod@^4
-
-npm install -w packages/shared -D \
-  typescript@^5.9
-
-# ---- System dependency (macOS) ----
-brew install ffmpeg
+cd web
+npm install react-player@^2.16.0
 ```
 
-## Lambda Runtime Configuration
+**Why react-player over alternatives:**
+- **vs video.js (8.23.7):** Simpler React integration (component-based), lighter bundle, sufficient for replay use case. video.js is overkill (designed for live DVR, ads, DRM).
+- **vs react-hls-player (3.0.7):** Less maintained, smaller community. react-player is backed by Mux and actively updated.
+- **vs custom hls.js wrapper:** react-player already bundles hls.js and handles browser compatibility/fallbacks.
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| Runtime | `nodejs20.x` | Current LTS; battle-tested in Lambda; Node 22 runtime exists but 20 is safer for production |
-| Architecture | `arm64` | Graviton2 is 20% cheaper and generally faster for Lambda; all our dependencies are pure JS/TS (no native modules) |
-| Bundling | `NodejsFunction` (esbuild) | Built into CDK; automatic tree-shaking; produces smallest bundles for AWS SDK v3 |
-| Memory | 256 MB (start) | IVS token generation is lightweight; DynamoDB operations are fast; tune up only if needed |
-| Timeout | 10 seconds (API), 30 seconds (pool warmup) | API calls should be fast; pool warmup may need to create IVS resources which can take a few seconds |
+**Integration with existing stack:**
+- Compatible with React 19.2.0 (already installed)
+- Works alongside `amazon-ivs-player` (use IVS Player for live, react-player for replay)
+- No peer dependency conflicts
+
+---
+
+### Backend: No New Packages Needed
+
+**Existing packages cover all v1.1 requirements:**
+
+| Package | Current Version | New Use in v1.1 | Status |
+|---------|----------------|-----------------|--------|
+| `@aws-sdk/client-ivs` | ^3.1000.0 | Create/manage RecordingConfiguration for Channels | ✓ Already installed |
+| `@aws-sdk/client-ivs-realtime` | ^3.1000.0 | Create Stages with StorageConfiguration, generate participant tokens | ✓ Already installed |
+| `@aws-sdk/client-s3` | Not currently installed | Generate presigned URLs for replay access, manage recording bucket | **ADD THIS** |
+| `@aws-sdk/lib-dynamodb` | ^3.1000.0 | Store reactions with timestamps, store replay metadata | ✓ Already installed |
+
+**Add to backend/package.json:**
+```bash
+cd backend
+npm install @aws-sdk/client-s3@^3
+```
+
+**Why no other changes needed:**
+- Participant token generation → Use existing `@aws-sdk/client-ivs-realtime` (`CreateParticipantToken` API)
+- Reaction storage → Use existing DynamoDB client with new access patterns
+- Recording metadata → Use existing DynamoDB client with EventBridge triggers
+
+---
+
+### Infrastructure (CDK): Use Existing Library
+
+**All required constructs available in `aws-cdk-lib@^2.170.0` (already installed):**
+
+| Construct | Import Path | Purpose | Type |
+|-----------|-------------|---------|------|
+| `CfnRecordingConfiguration` | `aws-cdk-lib/aws-ivs` | Configure S3 recording for IVS Channels | L1 (stable) |
+| `CfnStorageConfiguration` | `aws-cdk-lib/aws-ivsrealtime` | Configure S3 storage for RealTime Stages | L1 (stable) |
+| `Bucket` | `aws-cdk-lib/aws-s3` | Create S3 bucket for recordings | L2 (stable) |
+| `Rule` | `aws-cdk-lib/aws-events` | EventBridge rules for recording state changes | L2 (stable) |
+| `LambdaFunction` (target) | `aws-cdk-lib/aws-events-targets` | Trigger Lambda on recording completion | L2 (stable) |
+| `CfnStage` | `aws-cdk-lib/aws-ivs` | Create RealTime Stage with recording | L1 (stable) |
+
+**Do NOT install `@aws-cdk/aws-ivs-alpha`:**
+- Reason: Alpha stability (not subject to semver), can introduce breaking changes
+- Status: Not needed — L1 constructs are sufficient and stable
+- When to use L2 constructs: Only if you need higher-level abstractions (not required for v1.1)
+
+**No changes needed to infra/package.json.**
+
+---
+
+## What NOT to Add
+
+| Package | Why Avoid | Use Instead |
+|---------|-----------|-------------|
+| `@aws-cdk/aws-ivs-alpha` | Alpha status, breaking changes risk | L1 constructs from `aws-cdk-lib` |
+| `video.js` | Overkill for replay, requires DOM integration, heavier bundle | `react-player` |
+| `hls.js` | Automatically bundled by react-player | Implicit via `react-player` |
+| `react-hls-player` | Less maintained, smaller community | `react-player` |
+| Separate WebRTC/RealTime SDK | No separate SDK exists for Web | `amazon-ivs-web-broadcast` (already installed) |
+| WebSocket library for reactions | Adds complexity, not needed | DynamoDB + polling or EventBridge + Lambda |
+| GraphQL subscriptions | Not in project spec, adds complexity | REST + DynamoDB Streams + Lambda |
+
+---
+
+## Integration Patterns
+
+### 1. Recording Configuration (IVS Channels)
+
+**CDK Setup:**
+```typescript
+import * as ivs from 'aws-cdk-lib/aws-ivs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import { RemovalPolicy } from 'aws-cdk-lib';
+
+// S3 bucket for recordings
+const recordingBucket = new s3.Bucket(this, 'RecordingBucket', {
+  bucketName: 'vnl-recordings',
+  removalPolicy: RemovalPolicy.DESTROY,
+  autoDeleteObjects: true, // Dev only
+  versioned: false,
+  publicReadAccess: false, // Private by default
+});
+
+// Recording configuration
+const recordingConfig = new ivs.CfnRecordingConfiguration(this, 'RecordingConfig', {
+  destinationConfiguration: {
+    s3: {
+      bucketName: recordingBucket.bucketName,
+    },
+  },
+  recordingReconnectWindowSeconds: 60, // Merge fragmented streams
+  thumbnailConfiguration: {
+    recordingMode: 'INTERVAL',
+    targetIntervalSeconds: 10, // Thumbnail every 10 seconds
+    resolution: 'HD', // or 'SD', 'FULL_HD'
+  },
+});
+
+// Attach to Channel (during pool creation)
+const channel = new ivs.CfnChannel(this, 'Channel', {
+  recordingConfigurationArn: recordingConfig.attrArn,
+  // ... other props
+});
+```
+
+**S3 Prefix Structure (IVS creates automatically):**
+```
+s3://vnl-recordings/ivs/v1/<account-id>/<channel-id>/<year>/<month>/<day>/<hour>/<minute>/<recording-id>/
+  ├── events/
+  │   ├── recording-started.json
+  │   ├── recording-ended.json
+  │   └── recording-failed.json (if applicable)
+  └── media/
+      ├── hls/
+      │   ├── master.m3u8
+      │   ├── playlist.m3u8
+      │   └── *.ts (segments)
+      └── thumbnails/ (if enabled)
+          └── *.jpg
+```
+
+---
+
+### 2. RealTime Stage Recording
+
+**CDK Setup:**
+```typescript
+import * as ivsrealtime from 'aws-cdk-lib/aws-ivsrealtime';
+
+// Storage configuration for RealTime Stages
+const storageConfig = new ivsrealtime.CfnStorageConfiguration(this, 'StageStorage', {
+  name: 'vnl-stage-storage',
+  s3: {
+    bucketName: recordingBucket.bucketName,
+  },
+});
+
+// Stage with auto-participant recording
+const stage = new ivs.CfnStage(this, 'Stage', {
+  name: 'vnl-stage',
+  autoParticipantRecordingConfiguration: {
+    storageConfigurationArn: storageConfig.attrArn,
+    mediaTypes: ['AUDIO_VIDEO'], // or ['AUDIO_ONLY']
+  },
+});
+```
+
+**Recording Options:**
+- **Individual participant recording:** Each publisher's media saved as separate files
+- **Composite recording:** All publishers combined into single view (requires additional config)
+
+**For v1.1, use individual participant recording** (simpler, flexible for future editing).
+
+---
+
+### 3. EventBridge for Recording State Changes
+
+**CDK Setup:**
+```typescript
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
+
+// Lambda to process completed recordings
+const processRecordingFn = new lambda.NodejsFunction(this, 'ProcessRecording', {
+  entry: path.join(__dirname, '../../../backend/src/handlers/process-recording.ts'),
+  handler: 'handler',
+  environment: {
+    TABLE_NAME: sessionTable.tableName,
+    RECORDING_BUCKET: recordingBucket.bucketName,
+  },
+});
+
+// Grant S3 read access
+recordingBucket.grantRead(processRecordingFn);
+
+// EventBridge rule for recording completion
+new events.Rule(this, 'RecordingCompleteRule', {
+  eventPattern: {
+    source: ['aws.ivs'],
+    detailType: ['IVS Recording State Change'],
+    detail: {
+      recording_status: ['RECORDING_STOPPED'], // Also: RECORDING_STARTED, RECORDING_FAILED
+    },
+  },
+  targets: [new targets.LambdaFunction(processRecordingFn)],
+});
+```
+
+**EventBridge Event Structure:**
+```json
+{
+  "version": "0",
+  "id": "event-id",
+  "detail-type": "IVS Recording State Change",
+  "source": "aws.ivs",
+  "account": "123456789012",
+  "time": "2026-03-02T12:00:00Z",
+  "region": "us-west-2",
+  "resources": ["arn:aws:ivs:us-west-2:123456789012:channel/abcd1234"],
+  "detail": {
+    "channel_arn": "arn:aws:ivs:us-west-2:123456789012:channel/abcd1234",
+    "recording_status": "RECORDING_STOPPED",
+    "recording_s3_bucket_name": "vnl-recordings",
+    "recording_s3_key_prefix": "ivs/v1/123456789012/abcd1234/2026/03/02/12/00/recording-xyz/",
+    "recording_duration_ms": 120000,
+    "recording_status_reason": "" // Empty on success, error message on RECORDING_FAILED
+  }
+}
+```
+
+**Lambda handler stores replay metadata in DynamoDB:**
+```typescript
+// backend/src/handlers/process-recording.ts
+export const handler = async (event: EventBridgeEvent<'IVS Recording State Change', IVSRecordingDetail>) => {
+  const { detail } = event;
+
+  // Store in DynamoDB
+  await ddbClient.send(new PutCommand({
+    TableName: process.env.TABLE_NAME,
+    Item: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'REPLAY',
+      s3Bucket: detail.recording_s3_bucket_name,
+      s3Prefix: detail.recording_s3_key_prefix,
+      durationMs: detail.recording_duration_ms,
+      status: 'AVAILABLE',
+      createdAt: new Date().toISOString(),
+
+      // For GSI1 (query all replays)
+      GSI1PK: 'REPLAY',
+      GSI1SK: detail.time, // Sort by recording time
+    },
+  }));
+};
+```
+
+---
+
+### 4. Replay Playback (React)
+
+**Frontend Component:**
+```tsx
+import ReactPlayer from 'react-player';
+
+interface ReplayViewerProps {
+  s3Prefix: string; // e.g., "ivs/v1/.../recording-xyz/"
+}
+
+function ReplayViewer({ s3Prefix }: ReplayViewerProps) {
+  // Construct HLS manifest URL (via CloudFront or presigned URL)
+  const manifestUrl = `https://cdn.example.com/${s3Prefix}media/hls/master.m3u8`;
+
+  return (
+    <ReactPlayer
+      url={manifestUrl}
+      controls
+      playing={false} // User-initiated playback
+      width="100%"
+      height="100%"
+      config={{
+        file: {
+          forceHLS: true, // Use hls.js for HLS streams
+          hlsOptions: {
+            // Optional: custom hls.js config
+            maxBufferLength: 30,
+          },
+        },
+      }}
+      onProgress={(state) => {
+        // state.playedSeconds — use for syncing chat/reactions
+        console.log('Current time:', state.playedSeconds);
+      }}
+    />
+  );
+}
+```
+
+**CloudFront Setup (CDK):**
+```typescript
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+
+// CloudFront distribution for serving recordings
+const distribution = new cloudfront.Distribution(this, 'RecordingCDN', {
+  defaultBehavior: {
+    origin: new origins.S3Origin(recordingBucket),
+    viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED, // Cache HLS segments
+  },
+});
+
+new CfnOutput(this, 'RecordingCDNUrl', {
+  value: distribution.distributionDomainName,
+});
+```
+
+**Alternative: Presigned URLs (no CloudFront):**
+```typescript
+// backend/src/handlers/get-replay.ts
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+const s3Client = new S3Client({});
+
+export const handler = async (event: APIGatewayProxyEvent) => {
+  const { sessionId } = event.pathParameters;
+
+  // Get replay metadata from DynamoDB
+  const replay = await getReplayMetadata(sessionId);
+
+  // Generate presigned URL for master.m3u8
+  const command = new GetObjectCommand({
+    Bucket: replay.s3Bucket,
+    Key: `${replay.s3Prefix}media/hls/master.m3u8`,
+  });
+
+  const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ manifestUrl: url }),
+  };
+};
+```
+
+---
+
+### 5. Reaction Storage (DynamoDB)
+
+**Access Pattern (use existing table):**
+
+```typescript
+// Reaction item
+{
+  PK: 'SESSION#<sessionId>',
+  SK: 'REACTION#<timestamp>#<userId>#<reactionId>',
+  type: 'heart', // heart, fire, clap, laugh, etc.
+  timestamp: 12500, // Milliseconds into video (for replay sync)
+  userId: 'user123',
+  username: 'alice',
+  createdAt: '2026-03-02T12:00:25.500Z',
+
+  // GSI1 for querying reactions by session
+  GSI1PK: 'SESSION#<sessionId>#REACTIONS',
+  GSI1SK: 'TIMESTAMP#<timestamp>',
+}
+```
+
+**Query Patterns:**
+1. **Get all reactions for a session:** Query `PK = SESSION#<sessionId>` and `SK begins_with REACTION#`
+2. **Get reactions after a timestamp:** Query `GSI1PK = SESSION#<sessionId>#REACTIONS` and `GSI1SK > TIMESTAMP#<timestamp>`
+
+**API Endpoint (POST /sessions/{sessionId}/reactions):**
+```typescript
+// backend/src/handlers/create-reaction.ts
+export const handler = async (event: APIGatewayProxyEvent) => {
+  const { sessionId } = event.pathParameters;
+  const { type, timestamp } = JSON.parse(event.body);
+  const userId = event.requestContext.authorizer.claims.sub;
+
+  const reactionId = uuid();
+
+  await ddbClient.send(new PutCommand({
+    TableName: process.env.TABLE_NAME,
+    Item: {
+      PK: `SESSION#${sessionId}`,
+      SK: `REACTION#${timestamp.toString().padStart(10, '0')}#${userId}#${reactionId}`,
+      type,
+      timestamp,
+      userId,
+      createdAt: new Date().toISOString(),
+      GSI1PK: `SESSION#${sessionId}#REACTIONS`,
+      GSI1SK: `TIMESTAMP#${timestamp.toString().padStart(10, '0')}`,
+    },
+  }));
+
+  return { statusCode: 201, body: JSON.stringify({ reactionId }) };
+};
+```
+
+**Frontend Sync (Replay):**
+```tsx
+function ReplayWithReactions({ sessionId }: { sessionId: string }) {
+  const [currentTime, setCurrentTime] = useState(0);
+  const [reactions, setReactions] = useState([]);
+
+  // Fetch all reactions for session
+  useEffect(() => {
+    fetch(`/api/sessions/${sessionId}/reactions`)
+      .then(res => res.json())
+      .then(data => setReactions(data.reactions));
+  }, [sessionId]);
+
+  // Filter reactions to show based on current playback time
+  const visibleReactions = reactions.filter(r =>
+    r.timestamp <= currentTime * 1000 && // Convert seconds to ms
+    r.timestamp > (currentTime - 3) * 1000 // Show for 3 seconds
+  );
+
+  return (
+    <div>
+      <ReactPlayer
+        url={manifestUrl}
+        onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
+      />
+      <ReactionOverlay reactions={visibleReactions} />
+    </div>
+  );
+}
+```
+
+---
+
+### 6. Participant Token Generation (RealTime Stages)
+
+**Lambda Handler:**
+```typescript
+// backend/src/handlers/create-stage-token.ts
+import { IVSRealTimeClient, CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
+
+const ivsRealTimeClient = new IVSRealTimeClient({});
+
+export const handler = async (event: APIGatewayProxyEvent) => {
+  const { sessionId } = event.pathParameters;
+  const userId = event.requestContext.authorizer.claims.sub;
+
+  // Get Stage ARN from DynamoDB (session record)
+  const session = await getSession(sessionId);
+
+  // Generate participant token
+  const command = new CreateParticipantTokenCommand({
+    stageArn: session.stageArn,
+    userId, // Unique identifier for participant
+    capabilities: ['PUBLISH', 'SUBSCRIBE'], // Or just ['SUBSCRIBE'] for viewers
+    duration: 720, // Token duration in minutes (default 720 = 12 hours)
+  });
+
+  const response = await ivsRealTimeClient.send(command);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      token: response.participantToken.token,
+      expiresAt: response.participantToken.expirationTime,
+    }),
+  };
+};
+```
+
+**Frontend Usage (already have amazon-ivs-web-broadcast):**
+```tsx
+import { Stage, StrategyConfiguration, StageEvents } from 'amazon-ivs-web-broadcast';
+
+async function joinStage(token: string) {
+  const stage = new Stage(token, {
+    strategy: StrategyConfiguration.default(),
+  });
+
+  // Get local media
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+  stage.on(StageEvents.STAGE_CONNECTION_STATE_CHANGED, (state) => {
+    console.log('Stage connection state:', state);
+  });
+
+  stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, (participant) => {
+    console.log('Participant joined:', participant);
+  });
+
+  await stage.join();
+}
+```
+
+---
+
+## Version Compatibility
+
+| Package | Current Version | New/Changed | Compatible With | Notes |
+|---------|----------------|-------------|-----------------|-------|
+| `react-player` | — → ^2.16.0 | NEW | React 19.2.0 | ✓ No conflicts |
+| `@aws-sdk/client-s3` | — → ^3.1000.0 | NEW | Node.js 20.x | ✓ Matches other AWS SDK v3 packages |
+| `amazon-ivs-web-broadcast` | ^1.32.0 | NO CHANGE | — | ✓ Already supports RealTime Stages |
+| `aws-cdk-lib` | ^2.170.0 | NO CHANGE | — | ✓ Includes all needed IVS constructs |
+
+**No version conflicts identified.**
+
+---
+
+## Summary for Roadmap
+
+**Required additions:**
+1. **Frontend:** `react-player@^2.16.0` for HLS replay playback
+2. **Backend:** `@aws-sdk/client-s3@^3` for presigned URLs (if not using CloudFront)
+3. **Infrastructure:** No new packages — use L1 constructs from existing `aws-cdk-lib`
+
+**Key integration points:**
+1. **Recording → S3:** `CfnRecordingConfiguration` (Channels), `CfnStorageConfiguration` (Stages)
+2. **Recording metadata:** EventBridge `IVS Recording State Change` → Lambda → DynamoDB
+3. **Replay playback:** `react-player` consuming HLS manifests from S3/CloudFront
+4. **Reactions:** Store in existing DynamoDB table with timestamp-based SK for replay sync
+5. **Participant tokens:** Generate via `CreateParticipantTokenCommand` in Lambda
+6. **Stage joining:** Use existing `amazon-ivs-web-broadcast` SDK (no new package)
+
+**No breaking changes. All additions integrate cleanly with v1.0 validated stack.**
+
+---
 
 ## Sources
 
-All versions verified via `npm view [package] version` against the npm registry on 2026-03-01:
+### Official AWS Documentation (HIGH confidence)
 
-- amazon-ivs-web-broadcast: 1.32.0 (published, rc: 1.33.0-rc.2)
-- amazon-ivs-player: 1.49.0 (published, rc: 1.49.0-rc.4)
-- amazon-ivs-chat-messaging: 1.1.1
-- @aws-sdk/client-ivs, client-ivs-realtime, client-ivschat, client-dynamodb, lib-dynamodb, client-cognito-identity-provider, client-s3: all 3.1000.0 (published 2026-02-27)
-- aws-cdk-lib: 2.240.0
-- @aws-cdk/aws-ivs-alpha: 2.240.0-alpha.0
-- aws-cdk (CLI): 2.1108.0 (published 2026-02-26)
-- constructs: 10.5.1
-- cdk-nag: 2.37.55
-- react, react-dom: 19.2.4
-- vite: 7.3.1
-- typescript: 5.9.3
-- react-router, react-router-dom: 7.13.1
-- zustand: 5.0.11
-- @tanstack/react-query: 5.90.21
-- tailwindcss, @tailwindcss/vite: 4.2.1
-- @aws-lambda-powertools/logger, tracer, metrics: 2.31.0
-- @middy/core: 7.1.2
-- aws-jwt-verify: 5.1.1
-- zod: 4.3.6
-- uuid: 13.0.0
-- commander: 14.0.3
-- fluent-ffmpeg: 2.1.3
-- vitest: 4.0.18
-- esbuild: 0.27.3
-- @types/aws-lambda: 8.10.161
+- [IVS Auto-Record to Amazon S3](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html) — Recording configuration, S3 structure
+- [IVS RealTime Stage Recording](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-create-stage.html) — Stage recording setup, storage config
+- [IVS EventBridge Integration](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/eventbridge.html) — Recording state change events
+- [AWS CDK CfnRecordingConfiguration](https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ivs/CfnRecordingConfiguration.html) — CDK construct API
+- [IVS Participant Tokens](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-distribute-tokens.html) — Token generation API
+- [DynamoDB Streams Lambda Triggers](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.html) — Reaction sync pattern
+- [IVS Web Broadcast SDK Reference](https://aws.github.io/amazon-ivs-web-broadcast/docs/sdk-reference) — Version 1.32.0 API docs
+
+### npm Registry (MEDIUM confidence, verified 2026-03-02)
+
+- [react-player](https://www.npmjs.com/package/react-player) — Latest: 3.4.0 (recommend 2.16.0 for stability)
+- [amazon-ivs-web-broadcast](https://www.npmjs.com/package/amazon-ivs-web-broadcast) — Latest: 1.27.0-1.32.0
+- [@aws-cdk/aws-ivs-alpha](https://www.npmjs.com/package/@aws-cdk/aws-ivs-alpha) — Latest: 2.214.0-alpha.0 (NOT recommended)
+- [@aws-sdk/client-s3](https://www.npmjs.com/package/@aws-sdk/client-s3) — Latest: 3.1000.0+
+
+### Community Research (MEDIUM confidence)
+
+- [Understanding AWS IVS Real-Time Stage](https://medium.com/@singhkshitij221/understanding-aws-ivs-real-time-stage-how-it-actually-works-e56a7a0c5464) — RealTime architecture overview
+- [The best React video player libraries of 2026](https://blog.croct.com/post/best-react-video-libraries) — react-player vs alternatives
+- [DynamoDB Streams Trigger Lambda](https://oneuptime.com/blog/post/2026-02-12-trigger-lambda-dynamodb-streams/view) — Real-time sync patterns
+
+---
+
+*Stack research complete for v1.1. All recommendations verified against official AWS documentation and npm registry (March 2, 2026).*

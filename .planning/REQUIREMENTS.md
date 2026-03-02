@@ -72,10 +72,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Session Management
 
-- [ ] **SESS-01**: Sessions have a lifecycle state machine (creating -> live -> ending -> ended)
+- [x] **SESS-01**: Sessions have a lifecycle state machine (creating -> live -> ending -> ended)
 - [ ] **SESS-02**: User selects session type (broadcast or hangout) before going live
 - [ ] **SESS-03**: Sessions clean up gracefully (stop recording, release pool resources, finalize chat)
-- [ ] **SESS-04**: No AWS concepts (channels, stages, rooms, ARNs) are exposed in the user-facing UX
+- [x] **SESS-04**: No AWS concepts (channels, stages, rooms, ARNs) are exposed in the user-facing UX
 
 ### Developer Tools
 
@@ -157,8 +157,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-01 | Phase 1: Foundation & Auth | Complete |
 | DEV-02 | Phase 1: Foundation & Auth | Complete |
 | DEV-07 | Phase 1: Foundation & Auth | Pending |
-| SESS-01 | Phase 2: Session Model & Resource Pool | Pending |
-| SESS-04 | Phase 2: Session Model & Resource Pool | Pending |
+| SESS-01 | Phase 2: Session Model & Resource Pool | Complete |
+| SESS-04 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-01 | Phase 2: Session Model & Resource Pool | Pending |
 | POOL-02 | Phase 2: Session Model & Resource Pool | Pending |
 | POOL-03 | Phase 2: Session Model & Resource Pool | Pending |

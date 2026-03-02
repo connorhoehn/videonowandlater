@@ -12,7 +12,7 @@ describe('IVS Client Singletons', () => {
   it('getIVSClient() returns an IVSClient instance', () => {
     const client = getIVSClient();
     expect(client).toBeDefined();
-    expect(client.constructor.name).toBe('IVSClient');
+    expect(client.constructor.name).toBe('IvsClient');
   });
 
   it('getIVSRealTimeClient() returns an IVSRealTimeClient instance', () => {
@@ -24,7 +24,7 @@ describe('IVS Client Singletons', () => {
   it('getIVSChatClient() returns an IVSChatClient instance', () => {
     const client = getIVSChatClient();
     expect(client).toBeDefined();
-    expect(client.constructor.name).toBe('IVSChatClient');
+    expect(client.constructor.name).toBe('IvschatClient');
   });
 });
 
@@ -65,7 +65,7 @@ describe('replenish-pool handler', () => {
   it('returns summary with channelsCreated, stagesCreated, roomsCreated', async () => {
     // Test that handler returns correct structure
     // Will require mocking AWS SDK calls in GREEN phase
-    const result = await handler({}, {} as any);
+    const result = await handler({}, {} as any, () => {});
     expect(result).toHaveProperty('channelsCreated');
     expect(result).toHaveProperty('stagesCreated');
     expect(result).toHaveProperty('roomsCreated');

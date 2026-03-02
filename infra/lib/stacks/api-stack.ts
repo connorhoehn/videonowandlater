@@ -107,6 +107,44 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // POST /sessions/{sessionId}/start (start broadcast)
+    const sessionStartResource = sessionIdResource.addResource('start');
+
+    const startBroadcastHandler = new NodejsFunction(this, 'StartBroadcastHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/start-broadcast.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(startBroadcastHandler);
+
+    sessionStartResource.addMethod('POST', new apigateway.LambdaIntegration(startBroadcastHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/playback (get playback URL) - public endpoint
+    const sessionPlaybackResource = sessionIdResource.addResource('playback');
+
+    const getPlaybackHandler = new NodejsFunction(this, 'GetPlaybackHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-playback.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getPlaybackHandler);
+
+    // No authorizer - public endpoint for viewers
+    sessionPlaybackResource.addMethod('GET', new apigateway.LambdaIntegration(getPlaybackHandler));
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

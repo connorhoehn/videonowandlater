@@ -29,10 +29,10 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Broadcasting
 
 - [x] **BCAST-01**: User can go live with a single action (broadcast mode, one-to-many)
-- [ ] **BCAST-02**: User sees self-view preview before and during broadcast
+- [x] **BCAST-02**: User sees self-view preview before and during broadcast
 - [x] **BCAST-03**: Viewers can watch a live broadcast with IVS Player (low-latency HLS)
 - [ ] **BCAST-04**: Live viewer count is visible to broadcaster and viewers
-- [ ] **BCAST-05**: Stream quality auto-adapts to network conditions (IVS ABR)
+- [x] **BCAST-05**: Stream quality auto-adapts to network conditions (IVS ABR)
 - [x] **BCAST-06**: Live indicator shows which sessions are currently broadcasting
 
 ### Hangouts (RealTime)
@@ -165,10 +165,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | POOL-04 | Phase 2: Session Model & Resource Pool | Complete |
 | POOL-05 | Phase 2: Session Model & Resource Pool | Complete |
 | BCAST-01 | Phase 3: Broadcasting | Complete |
-| BCAST-02 | Phase 3: Broadcasting | Pending |
+| BCAST-02 | Phase 3: Broadcasting | Complete |
 | BCAST-03 | Phase 3: Broadcasting | Complete |
 | BCAST-04 | Phase 3: Broadcasting | Pending |
-| BCAST-05 | Phase 3: Broadcasting | Pending |
+| BCAST-05 | Phase 3: Broadcasting | Complete |
 | BCAST-06 | Phase 3: Broadcasting | Complete |
 | POOL-06 | Phase 3: Broadcasting | Pending |
 | SESS-03 | Phase 3: Broadcasting | Pending |

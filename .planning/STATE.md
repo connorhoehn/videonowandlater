@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-02T19:37:15.748Z"
+milestone: v1.1
+milestone_name: Replay, Reactions & Hangouts
+status: defining_requirements
+last_updated: "2026-03-02T20:00:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -17,41 +17,26 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-02)
 
-**Core value:** Users can go live instantly -- either broadcasting to viewers or hanging out in small groups -- and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** Phase 4.2: Frontend Integration Fixes
+**Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
+**Current focus:** Milestone v1.1 — Defining requirements
 
 ## Current Position
 
-Phase: 4.2 of 8 (Frontend Integration Fixes)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-02 -- Completed Phase 4.1 verification
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-02 — Milestone v1.1 started
 
-Progress: [████████████████████] 12/12 plans (100%)
+Progress: Not yet planned
 
-## Performance Metrics
+## Performance Metrics (v1.0)
 
-**Velocity:**
-- Total plans completed: 11
+Previous milestone velocity retained for reference:
+- Total plans completed: 13
 - Average duration: 4min
-- Total execution time: 0.97 hours
+- Total execution time: 1.0 hours
 
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-foundation-and-auth | 3/3 ✓ | 19min | 6min |
-| 02-session-model-and-resource-pool | 3/3 ✓ | 15min | 5min |
-| 03-broadcasting | 3/3 ✓ | 14min | 5min |
-| 04-chat | 2/2 ✓ | 8min | 4min |
-
-**Recent Trend:**
-- Last 5 plans: 02-03 (4min), 03-01 (5min), 03-02 (5min), 04-01 (5min), 04-02 (3min)
-- Trend: Accelerating (Phase 4 avg 4min vs Phase 3 avg 5min)
-
-*Updated after each plan completion*
-| Phase 04.1 P01 | 3 | 1 tasks | 2 files |
-| Phase 04.2 P01 | 290 | 3 tasks | 8 files |
+v1.1 metrics will be tracked as work begins.
 
 ## Accumulated Context
 

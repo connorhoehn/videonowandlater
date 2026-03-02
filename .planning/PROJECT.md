@@ -2,11 +2,23 @@
 
 ## What This Is
 
-A live video platform powered by AWS IVS with one-to-many broadcasting and real-time chat. Users can create broadcast sessions instantly (backed by pre-warmed IVS Channel pool), go live with their camera, and chat with viewers in real-time. Built with CDK-managed infrastructure (Cognito auth, API Gateway, DynamoDB, IVS), React frontend, and developer CLI tools for local testing. Recording, replay viewer, hangouts, and reactions are planned for future milestones.
+A live video platform powered by AWS IVS with one-to-many broadcasting, small-group hangouts, and real-time chat. Users can create sessions instantly (backed by pre-warmed IVS resource pools), go live with their camera, and interact through chat and reactions. All sessions are automatically recorded and preserved for replay with synchronized chat and reactions. Built with CDK-managed infrastructure (Cognito auth, API Gateway, DynamoDB, IVS + IVS RealTime + IVS Chat), React frontend, and developer CLI tools for local testing.
 
 ## Core Value
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
+
+## Current Milestone: v1.1 Replay, Reactions & Hangouts
+
+**Goal:** Transform live sessions into persistent, discoverable content with reactions, and expand interaction models from one-to-many broadcasts to small-group hangouts.
+
+**Target features:**
+- Auto-record all sessions (broadcasts + hangouts) to S3 with metadata tracking
+- Home feed showing recently streamed videos (Instagram-style discovery)
+- Replay viewer with video playback + synchronized chat + reactions timeline
+- Reaction system (heart, fire, clap, laugh, etc.) for live and replay viewing
+- IVS RealTime hangouts (multi-participant video, up to 5 participants)
+- Developer CLI for streaming test media, seeding data, simulating presence
 
 ## Requirements
 
@@ -29,18 +41,30 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-- [ ] Small-group IVS RealTime hangouts (up to 5 participants)
-- [ ] UX fully abstracted from AWS concepts (no channels/empty rooms — only "live" or "ready" experiences)
-- [ ] Lambda + API Gateway APIs for presence, reactions, replay metadata
-- [ ] DynamoDB models for presence, reactions, replay metadata
-- [ ] Stream recording/routing for later viewing
-- [ ] Instagram-style "recently streamed videos" replay viewer with reaction summaries
-- [ ] IVS join tokens and chat token/authorization behind REST endpoints
-- [ ] Developer CLI tool suite (create/list/delete users, generate tokens, seed data, simulate presence, stream test media)
-- [ ] Admin/dashboard view (active sessions, participants, messages/reactions, recent replays)
+**v1.1 Milestone (Replay, Reactions & Hangouts):**
+
+- [ ] Auto-record all sessions (broadcasts + hangouts) to S3 using IVS recording configuration
+- [ ] Track recording metadata (duration, viewer count, chat/reaction stats, S3 location)
+- [ ] Home feed showing recently streamed videos (Instagram-style grid/feed)
+- [ ] Replay viewer with video playback + synchronized chat messages
+- [ ] Reaction system (heart, fire, clap, laugh, etc.) during live streams
+- [ ] Reactions during replay viewing, synchronized to video timeline
+- [ ] DynamoDB models for reactions (live + replay), replay metadata
+- [ ] Lambda + API Gateway APIs for reactions, replay listing/retrieval
+- [ ] IVS RealTime Stage setup for small-group hangouts (up to 5 participants)
+- [ ] Participant token generation and join flow for RealTime sessions
+- [ ] Multi-camera participant layout in UI
+- [ ] Chat integration for hangout sessions (same persistent model as broadcasts)
+- [ ] Developer CLI: stream test media files (MP4/MOV) into sessions
+- [ ] Developer CLI: seed data (users, sessions, reactions for testing)
+- [ ] Developer CLI: simulate presence and activity
+- [ ] UX fully abstracted from AWS concepts (no channels/stages/rooms exposed — only "live" or "ready")
 
 ### Out of Scope
 
+- Admin/dashboard view — deferred to future milestone
+- Profile-based recording discovery — v1.1 uses home feed only, profiles later
+- User choice for recording — all sessions record automatically, opt-out later
 - Mobile app — deferred to future subrepo, web-first
 - Email confirmation on signup — explicitly excluded for speed
 - OAuth/social login — username/password only for v1
@@ -84,9 +108,10 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ## Current State
 
-**Shipped:** v1.0 Gap Closure (2026-03-02)
+**Latest milestone:** v1.0 Gap Closure (2026-03-02)
+**Current milestone:** v1.1 Replay, Reactions & Hangouts (started 2026-03-02)
 **Codebase:** ~5,300 LOC TypeScript (frontend + backend + CDK)
-**Status:** Broadcast and chat functional end-to-end. Ready for hangouts, recording, and polish.
+**Status:** Defining requirements for v1.1. Broadcast and chat functional from v1.0.
 
 ---
-*Last updated: 2026-03-02 after v1.0 milestone*
+*Last updated: 2026-03-02 after starting v1.1 milestone*

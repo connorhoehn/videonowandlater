@@ -16,6 +16,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Session Model & Resource Pool** - Session domain model, IVS resource pre-warming, and atomic pool claims (completed 2026-03-02)
 - [ ] **Phase 3: Broadcasting** - One-to-many live broadcasting with IVS Player viewing, pool resource lifecycle, and test streaming
 - [ ] **Phase 4: Chat** - Real-time text chat alongside live sessions with server-side persistence for replay
+- [ ] **Phase 4.1: Verify Phase 01 (INSERTED)** - Run verification on Foundation & Auth phase to validate already-built functionality
+- [ ] **Phase 4.2: Frontend Integration Fixes (INSERTED)** - Wire BroadcastPage/ViewerPage routing, add session creation UI, fix API configuration
 - [ ] **Phase 5: Recording & Replay** - Automatic stream recording, EventBridge-driven processing, and Instagram-style replay viewer with chat sync
 - [ ] **Phase 6: Hangouts** - Multi-participant RealTime video sessions with WebRTC grid, controls, and session type selection
 - [ ] **Phase 7: Reactions & Presence** - Live emoji reactions with animated overlays, presence heartbeats, and replay reaction summaries
@@ -88,6 +90,37 @@ Plans:
 Plans:
 - [ ] 04-01: TBD
 - [ ] 04-02: TBD
+
+### Phase 4.1: Verify Phase 01 Foundation & Auth (INSERTED)
+**Goal**: Validate that Phase 01 foundation and auth functionality is complete by running verification
+**Depends on**: Phase 4 (gap closure from milestone audit)
+**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, DEV-01, DEV-02, DEV-07, DEPLOY-01, DEPLOY-02
+**Gap Closure**: Addresses 9 unsatisfied/partial requirements from v1.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. Phase 01 VERIFICATION.md exists and validates auth flows (signup, login, session persistence, logout)
+  2. CLI tools (create-user, get-token) are verified as working
+  3. Deploy/destroy scripts and CDK output wiring are confirmed functional
+  4. Frontend stack-not-deployed detection is validated
+  5. All Phase 01 requirements are properly marked in REQUIREMENTS.md traceability table
+**Plans**: 1 plan
+
+Plans:
+- [ ] 04.1-01-PLAN.md — Run gsd-verifier on Phase 01 to create VERIFICATION.md
+
+### Phase 4.2: Frontend Integration Fixes (INSERTED)
+**Goal**: Complete frontend integration by wiring existing components and fixing API configuration
+**Depends on**: Phase 4 (gap closure from milestone audit)
+**Requirements**: Enables BCAST-01, BCAST-02, BCAST-03, BCAST-05, BCAST-06, SESS-01, POOL-05, CHAT-01, CHAT-03
+**Gap Closure**: Fixes 3 critical integration issues from v1.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. BroadcastPage and ViewerPage are routed in App.tsx at /broadcast/:sessionId and /viewer/:sessionId
+  2. HomePage includes "Create Broadcast" button that calls POST /sessions API and navigates to broadcast page
+  3. All frontend components use getConfig().apiUrl from aws-config.ts for API calls (no hardcoded URLs or env vars)
+  4. E2E flows work: user creates broadcast → goes live → viewer watches → both can chat
+**Plans**: 1 plan
+
+Plans:
+- [ ] 04.2-01-PLAN.md — Add routing, session creation UI, and fix API configuration
 
 ### Phase 5: Recording & Replay
 **Goal**: Every broadcast is automatically recorded and users can browse and watch replays with synchronized chat playback

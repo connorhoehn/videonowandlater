@@ -50,11 +50,12 @@ Plans:
   3. Two simultaneous "go live" requests each atomically claim separate resources with no race conditions (conditional writes)
   4. Session lifecycle state machine tracks sessions through creating, live, ending, and ended states
   5. No AWS concepts (channels, stages, rooms, ARNs) appear in any API response or frontend-facing data structure
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Session domain model + DynamoDB single-table design with GSI
+- [ ] 02-02-PLAN.md — IVS resource pool replenishment Lambda with EventBridge schedule
+- [ ] 02-03-PLAN.md — Session creation API with atomic pool claims and retry logic
 
 ### Phase 3: Broadcasting
 **Goal**: Users can go live as a broadcaster and viewers can watch in near real-time; sessions clean up gracefully when they end

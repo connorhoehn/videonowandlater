@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
-status: defining_requirements
+status: ready_to_plan
 last_updated: "2026-03-02T20:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,25 +18,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** Milestone v1.1 — Defining requirements
+**Current focus:** Phase 5: Recording Foundation
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-02 — Milestone v1.1 started
+Phase: 5 of 9 (Recording Foundation)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-03-02 — v1.1 roadmap created, milestone started
 
-Progress: Not yet planned
+Progress: [░░░░░░░░░░] 0%
 
-## Performance Metrics (v1.0)
+## Performance Metrics
 
-Previous milestone velocity retained for reference:
-- Total plans completed: 13
-- Average duration: 4min
-- Total execution time: 1.0 hours
+**Velocity:**
+- Total plans completed: 0 (v1.1 milestone)
+- Average duration: TBD
+- Total execution time: 0.0 hours
 
-v1.1 metrics will be tracked as work begins.
+**By Milestone:**
+
+| Milestone | Plans | Total | Avg/Plan |
+|-----------|-------|-------|----------|
+| v1.0 Gap Closure | 13 | 1.0 hrs | 4 min |
+| v1.1 (current) | 0 | 0.0 hrs | TBD |
+
+**Recent Trend:**
+- v1.1 just started
+- Trend: TBD after first plan completion
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -45,40 +56,10 @@ v1.1 metrics will be tracked as work begins.
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: 8 phases derived from 59 requirements; broadcasting before hangouts (simpler IVS validates pool pattern first)
-- [Roadmap]: Chat before replay (persistence must capture messages from day one)
-- [Roadmap]: Session cleanup (SESS-03) grouped with Broadcasting since pool release is testable there
-- [01-01]: us-east-1 region for all stacks (billing metrics only available there)
-- [01-01]: RemovalPolicy.DESTROY on all resources for clean teardown
-- [01-01]: adminUserPassword auth flow enabled on UserPoolClient for DEV-02 token generation
-- [01-02]: REST API with Cognito authorizer for protected endpoints
-- [01-02]: MockIntegration for /health endpoint to avoid Lambda overhead
-- [01-02]: jq-based CDK outputs transform for frontend config generation
-- [01-02]: admin-set-user-password --permanent to bypass FORCE_CHANGE_PASSWORD
-- [01-03]: Auto-confirm Lambda trigger for self-signup (fixes UserNotConfirmedException)
-- [01-03]: Type-only imports for verbatimModuleSyntax compliance
-- [Phase 02-01]: Use Jest for backend testing infrastructure (standard TypeScript testing framework)
-- [Phase 02-01]: Single-table DynamoDB design with GSI for efficient status-based queries
-- [Phase 02-01]: canTransition function for type-safe session lifecycle enforcement
-- [Phase 02-02]: Singleton pattern for AWS SDK clients (Lambda warm start optimization)
-- [Phase 02-02]: 5-minute EventBridge schedule for pool replenishment (balance between freshness and cost)
-- [Phase 02-02]: Store streamKey in pool items during creation (addresses Pitfall 5 - only returned on CreateChannel)
-- [Phase 02-03]: Atomic DynamoDB conditional writes with version check for race-free pool claims
-- [Phase 02-03]: MAX_RETRIES=3 immediate retries (no exponential backoff) for v1 simplicity
-- [Phase 02-03]: 503 with Retry-After header on pool exhaustion (HTTP standard for unavailability)
-- [Phase 04-01]: Server-side token generation only (CHAT-05) with CreateChatTokenCommand and 60-minute sessions
-- [Phase 04-01]: Session-relative timestamps (CHAT-04) enable Phase 5 replay synchronization
-- [Phase 04-01]: Composite sort key pattern {sentAt}#{messageId} for chronological ordering with uniqueness
-- [Phase 04-01]: Broadcaster vs viewer role determined by session ownership (userId === session.userId)
-- [Phase 04-02]: Separate ChatRoomProvider and ChatMessagesProvider contexts to prevent re-render storms
-- [Phase 04-02]: useState initializer for ChatRoom instance (configuration cannot be updated after creation)
-- [Phase 04-02]: Smart auto-scroll only when user at bottom (< 100px distance) to prevent scroll interruption
-- [Phase 04.1]: Phase 01 verification: 9 of 12 requirements verified automated (INFRA/AUTH-04/DEPLOY/DEV), 3 require manual browser testing (AUTH-01/02/03)
-- [Phase 04.1]: Retroactive verification validated Phase 01 foundation; 6 requirements marked complete in REQUIREMENTS.md (AUTH-04, DEPLOY-01/02, DEV-01/02/07)
-- [Phase 04.2-01]: Add BroadcastPage and ViewerPage as sibling routes (not nested in Layout) since they have their own headers
-- [Phase 04.2-01]: Use blue primary action styling for Create Broadcast button to contrast with red logout
-- [Phase 04.2-01]: Pass session data via navigate state to avoid redundant API fetch on BroadcastPage
-- [Phase 04.2-01]: Use localhost:3000/api fallback in getConfig() pattern for local development
+- v1.0: Single-table DynamoDB design with GSI — extends to GSI2 for time-series reactions
+- v1.0: Pre-warmed resource pool pattern — applies to Stage pool for hangouts
+- v1.0: EventBridge for lifecycle events — extends to recording lifecycle
+- v1.0: Server-side timestamps (CHAT-04) — enables replay synchronization
 
 ### Pending Todos
 
@@ -86,11 +67,20 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 5 (Recording/Replay): S3 metadata JSON schema needs verification during planning; chat sync algorithm needs design
-- Phase 6 (Hangouts): IVS RealTime participant token JWT structure and Stage API lifecycle need research during planning
+**Research Flags (from research/SUMMARY.md):**
+- Phase 7 (Chat Replay Sync): YouTube synchronization mechanism needs pattern validation during planning
+- Phase 8 (RealTime Hangouts): Multi-participant grid performance optimization needs research during planning
+
+**Architectural Dependencies:**
+- Recording infrastructure (Phase 5) must complete before replay sync (Phase 7) — reactions need sessionRelativeTime baseline
+- Hangouts (Phase 8) depend on recording + reactions infrastructure for full feature parity
 
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Phase 4.1 complete, ready to plan Phase 4.2
+Stopped at: v1.1 roadmap created, ready to plan Phase 5
 Resume file: None
+
+---
+*State initialized: 2026-03-02*
+*Last updated: 2026-03-02*

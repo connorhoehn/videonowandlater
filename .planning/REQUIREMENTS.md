@@ -126,13 +126,62 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be populated by roadmapper) | | |
+| REC-01 | Phase 5 | Pending |
+| REC-02 | Phase 5 | Pending |
+| REC-03 | Phase 5 | Pending |
+| REC-04 | Phase 5 | Pending |
+| REC-05 | Phase 5 | Pending |
+| REC-06 | Phase 5 | Pending |
+| REC-07 | Phase 5 | Pending |
+| REC-08 | Phase 5 | Pending |
+| REPLAY-01 | Phase 6 | Pending |
+| REPLAY-02 | Phase 6 | Pending |
+| REPLAY-03 | Phase 6 | Pending |
+| REPLAY-04 | Phase 6 | Pending |
+| REPLAY-05 | Phase 6 | Pending |
+| REPLAY-06 | Phase 6 | Pending |
+| REPLAY-07 | Phase 6 | Pending |
+| REPLAY-08 | Phase 6 | Pending |
+| REPLAY-09 | Phase 6 | Pending |
+| REACT-01 | Phase 7 | Pending |
+| REACT-02 | Phase 7 | Pending |
+| REACT-03 | Phase 7 | Pending |
+| REACT-04 | Phase 7 | Pending |
+| REACT-05 | Phase 7 | Pending |
+| REACT-06 | Phase 7 | Pending |
+| REACT-07 | Phase 7 | Pending |
+| REACT-08 | Phase 7 | Pending |
+| REACT-09 | Phase 7 | Pending |
+| REACT-10 | Phase 7 | Pending |
+| HANG-01 | Phase 8 | Pending |
+| HANG-02 | Phase 8 | Pending |
+| HANG-03 | Phase 8 | Pending |
+| HANG-04 | Phase 8 | Pending |
+| HANG-05 | Phase 8 | Pending |
+| HANG-06 | Phase 8 | Pending |
+| HANG-07 | Phase 8 | Pending |
+| HANG-08 | Phase 8 | Pending |
+| HANG-09 | Phase 8 | Pending |
+| HANG-10 | Phase 8 | Pending |
+| HANG-11 | Phase 8 | Pending |
+| HANG-12 | Phase 8 | Pending |
+| HANG-13 | Phase 8 | Pending |
+| HANG-14 | Phase 8 | Pending |
+| HANG-15 | Phase 8 | Pending |
+| HANG-16 | Phase 8 | Pending |
+| DEV-03 | Phase 9 | Pending |
+| DEV-04 | Phase 9 | Pending |
+| DEV-05 | Phase 9 | Pending |
+| DEV-06 | Phase 9 | Pending |
+| DEV-08 | Phase 9 | Pending |
+| DEV-09 | Phase 9 | Pending |
+| DEV-10 | Phase 9 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 45 total
-- Mapped to phases: (pending)
-- Unmapped: (pending)
+- v1.1 requirements: 50 total
+- Mapped to phases: 50/50 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after v1.1 milestone start*
+*Last updated: 2026-03-02 after roadmap creation*

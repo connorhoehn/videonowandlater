@@ -11,6 +11,7 @@ import { SignupPage } from './pages/SignupPage';
 import { HomePage } from './pages/HomePage';
 import { BroadcastPage } from './features/broadcast/BroadcastPage';
 import { ViewerPage } from './features/viewer/ViewerPage';
+import { ReplayViewer } from './features/replay/ReplayViewer';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -93,6 +94,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ViewerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/replay/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ReplayViewer />
               </ProtectedRoute>
             }
           />

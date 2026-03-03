@@ -12,6 +12,13 @@ export interface StreamOptions {
   onProgress?: (data: string) => void;
 }
 
+export interface WHIPStreamOptions {
+  videoFile: string;
+  whipUrl: string;
+  participantToken: string;
+  onProgress?: (data: string) => void;
+}
+
 /**
  * Stream video file to RTMPS endpoint using FFmpeg
  * Uses encoding settings from test-broadcast.sh pattern
@@ -46,6 +53,52 @@ export function streamToRTMPS(options: StreamOptions): Promise<void> {
     // Output format and URL
     '-f', 'flv',
     options.rtmpUrl,
+  ];
+
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', args);
+
+    // Pipe stderr to progress callback if provided
+    ffmpeg.stderr.on('data', (data) => {
+      if (options.onProgress) {
+        options.onProgress(data.toString());
+      }
+    });
+
+    // Handle process completion
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`FFmpeg exited with code ${code}`));
+      }
+    });
+  });
+}
+
+/**
+ * Stream video file to WHIP endpoint using FFmpeg
+ * Uses VP8/Opus codecs for WebRTC compatibility
+ *
+ * @param options WHIP streaming options
+ * @returns Promise that resolves when streaming completes successfully
+ * @throws Error if FFmpeg exits with non-zero code
+ */
+export function streamToWHIP(options: WHIPStreamOptions): Promise<void> {
+  const whipUrlWithToken = `${options.whipUrl}?access_token=${options.participantToken}`;
+
+  const args = [
+    '-re',                           // Read at native frame rate
+    '-i', options.videoFile,
+    // Video encoding: VP8 for WebRTC compatibility
+    '-c:v', 'libvpx-vp8',
+    '-b:v', '2000k',
+    // Audio encoding: Opus for WebRTC
+    '-c:a', 'libopus',
+    '-b:a', '128k',
+    // Output format: WHIP muxer
+    '-f', 'whip',
+    whipUrlWithToken,
   ];
 
   return new Promise((resolve, reject) => {

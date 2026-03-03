@@ -1,10 +1,10 @@
 /**
- * Tests for ffmpeg-streamer - FFmpeg RTMPS streaming wrapper
+ * Tests for ffmpeg-streamer - FFmpeg RTMPS and WHIP streaming wrapper
  */
 
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
-import { streamToRTMPS } from '../lib/ffmpeg-streamer';
+import { streamToRTMPS, streamToWHIP } from '../lib/ffmpeg-streamer';
 
 // Mock child_process
 jest.mock('child_process');
@@ -115,5 +115,80 @@ describe('ffmpeg-streamer', () => {
     setImmediate(() => mockProcess.emit('close', 1));
 
     await expect(streamPromise).rejects.toThrow('FFmpeg exited with code 1');
+  });
+
+  describe('streamToWHIP', () => {
+    it('should spawn ffmpeg with WHIP muxer and VP8/Opus codecs', async () => {
+      const options = {
+        videoFile: '/path/to/test.mp4',
+        whipUrl: 'https://stage-endpoint.ivs.aws/whip',
+        participantToken: 'test-token-123',
+      };
+
+      const streamPromise = streamToWHIP(options);
+      setImmediate(() => mockProcess.emit('close', 0));
+      await streamPromise;
+
+      expect(mockSpawn).toHaveBeenCalledWith('ffmpeg', expect.arrayContaining([
+        '-re',
+        '-i', '/path/to/test.mp4',
+        '-c:v', 'libvpx-vp8',
+        '-b:v', '2000k',
+        '-c:a', 'libopus',
+        '-b:a', '128k',
+        '-f', 'whip',
+      ]));
+    });
+
+    it('should include participant token in WHIP URL query param', async () => {
+      const options = {
+        videoFile: '/path/to/test.mp4',
+        whipUrl: 'https://stage-endpoint.ivs.aws/whip',
+        participantToken: 'test-token-123',
+      };
+
+      const streamPromise = streamToWHIP(options);
+      setImmediate(() => mockProcess.emit('close', 0));
+      await streamPromise;
+
+      const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
+      const whipUrlArg = spawnArgs[spawnArgs.length - 1];
+
+      expect(whipUrlArg).toBe('https://stage-endpoint.ivs.aws/whip?access_token=test-token-123');
+    });
+
+    it('should call onProgress callback with stderr data', async () => {
+      const progressData: string[] = [];
+      const options = {
+        videoFile: '/path/to/test.mp4',
+        whipUrl: 'https://stage-endpoint.ivs.aws/whip',
+        participantToken: 'test-token-123',
+        onProgress: (data: string) => progressData.push(data),
+      };
+
+      const streamPromise = streamToWHIP(options);
+
+      // Emit stderr data
+      (mockProcess as any).stderr.emit('data', Buffer.from('frame=100'));
+      (mockProcess as any).stderr.emit('data', Buffer.from('fps=30'));
+
+      setImmediate(() => mockProcess.emit('close', 0));
+      await streamPromise;
+
+      expect(progressData).toEqual(['frame=100', 'fps=30']);
+    });
+
+    it('should resolve promise when FFmpeg exits with code 0', async () => {
+      const options = {
+        videoFile: '/path/to/test.mp4',
+        whipUrl: 'https://stage-endpoint.ivs.aws/whip',
+        participantToken: 'test-token-123',
+      };
+
+      const streamPromise = streamToWHIP(options);
+      setImmediate(() => mockProcess.emit('close', 0));
+
+      await expect(streamPromise).resolves.toBeUndefined();
+    });
   });
 });

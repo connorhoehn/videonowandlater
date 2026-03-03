@@ -10,6 +10,7 @@ import { streamHangout } from './commands/stream-hangout';
 import { seedSessions } from './commands/seed-sessions';
 import { seedChat } from './commands/seed-chat';
 import { seedReactions } from './commands/seed-reactions';
+import { simulatePresence } from './commands/simulate-presence';
 
 export const program = new Command();
 
@@ -54,6 +55,13 @@ program
   .option('-n, --count <number>', 'Number of reactions', '50')
   .option('--replay', 'Mark as replay reactions', false)
   .action(seedReactions);
+
+program
+  .command('simulate-presence')
+  .description('Simulate presence/viewer activity for testing')
+  .argument('<session-id>', 'Session ID to send presence event')
+  .option('-v, --viewers <number>', 'Number of viewers to simulate', '10')
+  .action(simulatePresence);
 
 // Only parse if this is the main module (not imported for testing)
 if (require.main === module) {

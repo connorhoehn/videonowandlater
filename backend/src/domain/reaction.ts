@@ -7,21 +7,23 @@
  * Emoji types supported for reactions
  * Limited to 5 types for viral engagement patterns
  */
-export enum EmojiType {
-  HEART = 'heart',
-  FIRE = 'fire',
-  CLAP = 'clap',
-  LAUGH = 'laugh',
-  SURPRISED = 'surprised',
-}
+export const EmojiType = {
+  HEART: 'heart',
+  FIRE: 'fire',
+  CLAP: 'clap',
+  LAUGH: 'laugh',
+  SURPRISED: 'surprised',
+} as const;
+export type EmojiType = typeof EmojiType[keyof typeof EmojiType];
 
 /**
  * Reaction type distinguishes live vs replay contexts
  */
-export enum ReactionType {
-  LIVE = 'live',
-  REPLAY = 'replay',
-}
+export const ReactionType = {
+  LIVE: 'live',
+  REPLAY: 'replay',
+} as const;
+export type ReactionType = typeof ReactionType[keyof typeof ReactionType];
 
 /**
  * Reaction entity

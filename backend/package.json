@@ -2,7 +2,11 @@
   "name": "@vnl/backend",
   "version": "0.0.1",
   "private": true,
+  "bin": {
+    "vnl-cli": "./dist/cli/index.js"
+  },
   "scripts": {
+    "build": "tsc",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -15,6 +19,7 @@
     "@aws-sdk/client-ivs-realtime": "^3.1000.0",
     "@aws-sdk/client-ivschat": "^3.1000.0",
     "@aws-sdk/lib-dynamodb": "^3.1000.0",
+    "commander": "^12.1.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

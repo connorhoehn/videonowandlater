@@ -33,8 +33,10 @@ export const handler = async (
   console.log('Recording End event received for resource:', resourceArn);
 
   // Detect ARN type: Channel or Stage
-  const arnParts = resourceArn.split('/');
-  const resourceType = arnParts[arnParts.length - 2]; // "channel" or "stage"
+  // ARN format: arn:aws:ivs:region:account:channel/id or arn:aws:ivs:region:account:stage/id
+  const arnParts = resourceArn.split(':');
+  const resourcePart = arnParts[arnParts.length - 1]; // "channel/id" or "stage/id"
+  const resourceType = resourcePart.split('/')[0]; // "channel" or "stage"
 
   let session: Session | null = null;
 

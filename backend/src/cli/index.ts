@@ -7,6 +7,8 @@
 import { Command } from 'commander';
 import { streamBroadcast } from './commands/stream-broadcast';
 import { streamHangout } from './commands/stream-hangout';
+import { seedSessions } from './commands/seed-sessions';
+import { seedChat } from './commands/seed-chat';
 
 export const program = new Command();
 
@@ -30,6 +32,19 @@ program
   .argument('<session-id>', 'Session ID to stream into')
   .argument('<video-file>', 'Path to MP4/MOV file')
   .action(streamHangout);
+
+program
+  .command('seed-sessions')
+  .description('Create sample broadcast and hangout sessions')
+  .option('-n, --count <number>', 'Number of sessions', '5')
+  .action(seedSessions);
+
+program
+  .command('seed-chat')
+  .description('Seed sample chat messages for testing replay')
+  .argument('<session-id>', 'Session ID to seed chat for')
+  .option('-n, --count <number>', 'Number of messages', '20')
+  .action(seedChat);
 
 // Only parse if this is the main module (not imported for testing)
 if (require.main === module) {

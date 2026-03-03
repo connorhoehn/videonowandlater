@@ -25,9 +25,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
 - [x] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
 - [x] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
-- [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
-- [ ] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
-- [ ] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
+- [x] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
+- [x] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
+- [x] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
 - [x] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
 
 ### Reactions
@@ -139,9 +139,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPLAY-03 | Phase 6 | Complete |
 | REPLAY-04 | Phase 6 | Complete |
 | REPLAY-05 | Phase 6 | Complete |
-| REPLAY-06 | Phase 6 | Pending |
-| REPLAY-07 | Phase 6 | Pending |
-| REPLAY-08 | Phase 6 | Pending |
+| REPLAY-06 | Phase 6 | Complete |
+| REPLAY-07 | Phase 6 | Complete |
+| REPLAY-08 | Phase 6 | Complete |
 | REPLAY-09 | Phase 6 | Complete |
 | REACT-01 | Phase 7 | Pending |
 | REACT-02 | Phase 7 | Pending |

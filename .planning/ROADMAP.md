@@ -19,7 +19,7 @@ Milestone completed. See MILESTONES.md for details.
 **Milestone Goal:** Transform live sessions into persistent, discoverable content with reactions, and expand interaction models from one-to-many broadcasts to small-group hangouts.
 
 - [x] **Phase 5: Recording Foundation** - Auto-record all sessions to S3 with metadata tracking (completed 2026-03-03)
-- [ ] **Phase 6: Replay Viewer** - Home feed and video playback with synchronized chat
+- [x] **Phase 6: Replay Viewer** - Home feed and video playback with synchronized chat (completed 2026-03-03)
 - [ ] **Phase 7: Reactions & Chat Sync** - Live and replay reactions with timeline synchronization
 - [ ] **Phase 8: RealTime Hangouts** - Small-group multi-participant video sessions
 - [ ] **Phase 9: Developer CLI v1.1** - Test media streaming and data seeding tools
@@ -55,9 +55,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Home feed backend + frontend (query API, recording grid)
-- [ ] 06-02-PLAN.md — Replay viewer with video playback (IVS Player, CloudFront CORS)
-- [ ] 06-03-PLAN.md — Chat synchronization (getSyncTime integration, auto-scroll)
+- [x] 06-01-PLAN.md — Recording Discovery Feed (2 tasks, 2 commits, 3 min)
+- [x] 06-02-PLAN.md — Replay Viewer with HLS Playback (2 tasks, 2 commits, 3 min)
+- [x] 06-03-PLAN.md — Synchronized Chat Replay (3 tasks, 3 commits, 2 min)
 
 ### Phase 7: Reactions & Chat Sync
 **Goal**: Users can send emoji reactions during live streams and replay viewing, synchronized to video timeline
@@ -118,12 +118,12 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Recording Foundation | 2/2 | Complete   | 2026-03-03 | - |
-| 6. Replay Viewer | 1/3 | In Progress|  | - |
+| 5. Recording Foundation | v1.1 | 2/2 | Complete   | 2026-03-03 |
+| 6. Replay Viewer | v1.1 | 3/3 | Complete   | 2026-03-03 |
 | 7. Reactions & Chat Sync | v1.1 | 0/TBD | Not started | - |
 | 8. RealTime Hangouts | v1.1 | 0/TBD | Not started | - |
 | 9. Developer CLI v1.1 | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-03*

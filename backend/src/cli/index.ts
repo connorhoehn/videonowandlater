@@ -5,6 +5,7 @@
  */
 
 import { Command } from 'commander';
+import { streamBroadcast } from './commands/stream-broadcast';
 
 export const program = new Command();
 
@@ -13,7 +14,14 @@ program
   .description('VideoNowAndLater developer CLI')
   .version('1.1.0');
 
-// Commands will be registered here in subsequent tasks
+// Register commands
+program
+  .command('stream-broadcast')
+  .description('Stream MP4/MOV file into active broadcast session')
+  .argument('<session-id>', 'Session ID to stream into')
+  .argument('<video-file>', 'Path to MP4/MOV file')
+  .option('--loop', 'Loop video indefinitely', false)
+  .action(streamBroadcast);
 
 // Only parse if this is the main module (not imported for testing)
 if (require.main === module) {

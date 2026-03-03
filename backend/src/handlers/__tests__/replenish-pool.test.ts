@@ -8,6 +8,24 @@ import { getDocumentClient } from '../../lib/dynamodb-client';
 import { handler } from '../replenish-pool';
 import { ResourceType, Status } from '../../domain/types';
 
+jest.mock('../../lib/ivs-clients', () => {
+  function IvsClient(this: any) { this.send = jest.fn().mockResolvedValue({ Count: 10 }); }
+  function IVSRealTimeClient(this: any) { this.send = jest.fn().mockResolvedValue({ Count: 10 }); }
+  function IvschatClient(this: any) { this.send = jest.fn().mockResolvedValue({ Count: 10 }); }
+  return {
+    getIVSClient: jest.fn(() => new (IvsClient as any)()),
+    getIVSRealTimeClient: jest.fn(() => new (IVSRealTimeClient as any)()),
+    getIVSChatClient: jest.fn(() => new (IvschatClient as any)()),
+  };
+});
+
+jest.mock('../../lib/dynamodb-client', () => {
+  function DynamoDBDocumentClient(this: any) { this.send = jest.fn().mockResolvedValue({ Count: 10 }); }
+  return {
+    getDocumentClient: jest.fn(() => new (DynamoDBDocumentClient as any)()),
+  };
+});
+
 describe('IVS Client Singletons', () => {
   it('getIVSClient() returns an IVSClient instance', () => {
     const client = getIVSClient();
@@ -46,6 +64,7 @@ describe('replenish-pool handler', () => {
       MIN_CHANNELS: '3',
       MIN_STAGES: '2',
       MIN_ROOMS: '5',
+      RECORDING_CONFIGURATION_ARN: 'arn:aws:ivs:us-east-1:123456789012:recording-configuration/test',
     };
   });
 

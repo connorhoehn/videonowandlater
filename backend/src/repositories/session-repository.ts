@@ -2,10 +2,10 @@
  * Session repository - session persistence operations
  */
 
-import { PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Session } from '../domain/session';
-import { SessionStatus } from '../domain/session';
+import { SessionStatus, RecordingStatus } from '../domain/session';
 
 /**
  * Create a new session in DynamoDB
@@ -115,6 +115,85 @@ export async function updateSessionStatus(
     },
     UpdateExpression: updateExpression,
     ConditionExpression: '#version = :currentVersion',
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
+  }));
+}
+
+/**
+ * Update session recording metadata fields
+ * Supports partial updates of recording-related fields
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param metadata Partial recording metadata to update
+ */
+export async function updateRecordingMetadata(
+  tableName: string,
+  sessionId: string,
+  metadata: {
+    recordingS3Path?: string;
+    recordingDuration?: number;
+    thumbnailUrl?: string;
+    recordingHlsUrl?: string;
+    recordingStatus?: RecordingStatus | 'processing' | 'available' | 'failed' | 'pending';
+  }
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  // Build dynamic update expression for provided fields only
+  const updateParts: string[] = [];
+  const expressionAttributeNames: Record<string, string> = {
+    '#version': 'version',
+  };
+  const expressionAttributeValues: Record<string, any> = {
+    ':inc': 1,
+  };
+
+  if (metadata.recordingS3Path !== undefined) {
+    updateParts.push('#recordingS3Path = :recordingS3Path');
+    expressionAttributeNames['#recordingS3Path'] = 'recordingS3Path';
+    expressionAttributeValues[':recordingS3Path'] = metadata.recordingS3Path;
+  }
+
+  if (metadata.recordingDuration !== undefined) {
+    updateParts.push('#recordingDuration = :recordingDuration');
+    expressionAttributeNames['#recordingDuration'] = 'recordingDuration';
+    expressionAttributeValues[':recordingDuration'] = metadata.recordingDuration;
+  }
+
+  if (metadata.thumbnailUrl !== undefined) {
+    updateParts.push('#thumbnailUrl = :thumbnailUrl');
+    expressionAttributeNames['#thumbnailUrl'] = 'thumbnailUrl';
+    expressionAttributeValues[':thumbnailUrl'] = metadata.thumbnailUrl;
+  }
+
+  if (metadata.recordingHlsUrl !== undefined) {
+    updateParts.push('#recordingHlsUrl = :recordingHlsUrl');
+    expressionAttributeNames['#recordingHlsUrl'] = 'recordingHlsUrl';
+    expressionAttributeValues[':recordingHlsUrl'] = metadata.recordingHlsUrl;
+  }
+
+  if (metadata.recordingStatus !== undefined) {
+    updateParts.push('#recordingStatus = :recordingStatus');
+    expressionAttributeNames['#recordingStatus'] = 'recordingStatus';
+    expressionAttributeValues[':recordingStatus'] = metadata.recordingStatus;
+  }
+
+  if (updateParts.length === 0) {
+    // No fields to update
+    return;
+  }
+
+  const updateExpression = `SET ${updateParts.join(', ')}, #version = #version + :inc`;
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: updateExpression,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
   }));

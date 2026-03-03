@@ -9,6 +9,7 @@ import { streamBroadcast } from './commands/stream-broadcast';
 import { streamHangout } from './commands/stream-hangout';
 import { seedSessions } from './commands/seed-sessions';
 import { seedChat } from './commands/seed-chat';
+import { seedReactions } from './commands/seed-reactions';
 
 export const program = new Command();
 
@@ -45,6 +46,14 @@ program
   .argument('<session-id>', 'Session ID to seed chat for')
   .option('-n, --count <number>', 'Number of messages', '20')
   .action(seedChat);
+
+program
+  .command('seed-reactions')
+  .description('Seed sample reactions for testing timeline')
+  .argument('<session-id>', 'Session ID to seed reactions for')
+  .option('-n, --count <number>', 'Number of reactions', '50')
+  .option('--replay', 'Mark as replay reactions', false)
+  .action(seedReactions);
 
 // Only parse if this is the main module (not imported for testing)
 if (require.main === module) {

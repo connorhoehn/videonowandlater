@@ -123,10 +123,10 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 5. Recording Foundation | v1.1 | 2/2 | Complete   | 2026-03-03 |
-| 6. Replay Viewer | v1.1 | Complete    | 2026-03-03 | 2026-03-03 |
-| 7. Reactions & Chat Sync | 1/4 | Complete    | 2026-03-03 | - |
-| 8. RealTime Hangouts | 3/3 | Complete    | 2026-03-03 | - |
-| 9. Developer CLI v1.1 | v1.1 | 0/TBD | Not started | - |
+| 6. Replay Viewer | v1.1 | 3/3 | Complete    | 2026-03-03 |
+| 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete    | 2026-03-03 |
+| 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
+| 9. Developer CLI v1.1 | v1.1 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*

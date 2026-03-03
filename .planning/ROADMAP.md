@@ -108,10 +108,12 @@ Plans:
   3. Developer can seed sample sessions, chat messages, and reactions with single command
   4. Developer can simulate presence/viewer activity for load testing
   5. CLI documentation updated with v1.1 commands and usage examples
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md — CLI Foundation & Broadcast Streaming (Commander.js, FFmpeg RTMPS)
+- [ ] 09-02-PLAN.md — Hangout Streaming & Data Seeding (WHIP protocol, session/chat/reaction seeding)
+- [ ] 09-03-PLAN.md — Presence Simulation & Documentation (IVS Chat events, CLI docs)
 
 ## Progress
 

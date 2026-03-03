@@ -241,6 +241,81 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Reaction endpoints
+    const sessionReactionsResource = sessionIdResource.addResource('reactions');
+
+    // POST /sessions/{sessionId}/reactions (create reaction)
+    const createReactionHandler = new NodejsFunction(this, 'CreateReactionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-reaction.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(createReactionHandler);
+
+    // Grant IVS Chat SendEvent permission for live reaction broadcasting
+    createReactionHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
+      })
+    );
+
+    sessionReactionsResource.addMethod('POST', new apigateway.LambdaIntegration(createReactionHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/reactions (get reactions)
+    const getReactionsHandler = new NodejsFunction(this, 'GetReactionsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-reactions.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getReactionsHandler);
+
+    sessionReactionsResource.addMethod('GET', new apigateway.LambdaIntegration(getReactionsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/join (join hangout - generate participant token)
+    const joinHangoutResource = sessionIdResource.addResource('join');
+
+    const joinHangoutHandler = new NodejsFunction(this, 'JoinHangoutHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/join-hangout.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(joinHangoutHandler);
+
+    // Grant IVS RealTime CreateParticipantToken permission
+    joinHangoutHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:CreateParticipantToken'],
+        resources: ['*'], // IVS doesn't support resource-level permissions for CreateParticipantToken
+      })
+    );
+
+    joinHangoutResource.addMethod('POST', new apigateway.LambdaIntegration(joinHangoutHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // GET /recordings (list recently recorded sessions) - public endpoint
     const recordings = api.root.addResource('recordings');
 

@@ -85,6 +85,19 @@ export class SessionStack extends Stack {
       },
     });
 
+    // CloudFront CORS policy for HLS playback
+    const recordingsCorsPolicy = new cloudfront.ResponseHeadersPolicy(this, 'RecordingsCorsPolicy', {
+      corsBehavior: {
+        accessControlAllowOrigins: ['*'],
+        accessControlAllowMethods: ['GET', 'HEAD', 'OPTIONS'],
+        accessControlAllowHeaders: ['*'],
+        accessControlExposeHeaders: ['*'],
+        accessControlAllowCredentials: false,
+        originOverride: true,
+      },
+      comment: 'CORS headers for IVS Player HLS requests',
+    });
+
     // CloudFront distribution for secure recording playback
     const distribution = new cloudfront.Distribution(this, 'RecordingsDistribution', {
       defaultBehavior: {
@@ -93,6 +106,7 @@ export class SessionStack extends Stack {
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        responseHeadersPolicy: recordingsCorsPolicy,
       },
       comment: 'CloudFront distribution for VNL session recordings',
     });

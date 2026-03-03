@@ -2,11 +2,19 @@
  * ReplayViewer - dedicated page for watching replay videos with HLS playback
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { useReplayPlayer } from './useReplayPlayer';
 import { ReplayChat } from './ReplayChat';
+import { ReactionTimeline } from './ReactionTimeline';
+import { useReactionSync } from './useReactionSync';
+import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
+import { ReplayReactionPicker } from './ReplayReactionPicker';
+import { useReactionSender } from '../reactions/useReactionSender';
+import { EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
+import type { Reaction } from '../../../../backend/src/domain/reaction';
 
 interface Session {
   sessionId: string;
@@ -32,6 +40,9 @@ export function ReplayViewer() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allReactions, setAllReactions] = useState<Reaction[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
+  const authToken = localStorage.getItem('token') || '';
 
   // Fetch session metadata
   useEffect(() => {
@@ -68,6 +79,81 @@ export function ReplayViewer() {
 
   // IVS Player hook
   const { videoRef, syncTime } = useReplayPlayer(session?.recordingHlsUrl);
+
+  // Fetch reactions on mount
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const fetchReactions = async () => {
+      const config = getConfig();
+      const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/reactions`);
+        if (response.ok) {
+          const data = await response.json();
+          setAllReactions(data.reactions || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch reactions:', err);
+      }
+    };
+
+    fetchReactions();
+  }, [sessionId]);
+
+  // Filter reactions by syncTime
+  const visibleReactions = useReactionSync(allReactions, syncTime);
+
+  // Track last visible count to detect new reactions
+  const [lastVisibleCount, setLastVisibleCount] = useState(0);
+
+  // Handle floating display when visible reactions change
+  useEffect(() => {
+    if (visibleReactions.length > lastVisibleCount) {
+      // New reactions became visible, add them to floating display
+      const newReactions = visibleReactions.slice(lastVisibleCount);
+      const newFloating = newReactions.map((reaction) => ({
+        id: reaction.reactionId,
+        emoji: EMOJI_MAP[reaction.emojiType as keyof typeof EMOJI_MAP] || '❤️',
+        timestamp: Date.now(),
+      }));
+      setFloatingReactions((prev) => [...prev, ...newFloating]);
+    }
+    setLastVisibleCount(visibleReactions.length);
+  }, [visibleReactions, lastVisibleCount]);
+
+  // Reaction sender hook
+  const { sendReaction } = useReactionSender(sessionId || '', authToken);
+
+  // Handle replay reaction send
+  const handleReaction = async (emoji: EmojiType) => {
+    const result = await sendReaction(emoji, 'replay');
+    if (result) {
+      // Add to allReactions array for immediate display
+      const newReaction: Reaction = {
+        reactionId: result.reactionId,
+        sessionId: sessionId || '',
+        userId: 'me', // placeholder
+        emojiType: emoji,
+        reactionType: 'replay' as any,
+        reactedAt: new Date().toISOString(),
+        sessionRelativeTime: result.sessionRelativeTime,
+        shardId: 0,
+      };
+      setAllReactions((prev) => [...prev, newReaction]);
+
+      // Optimistic floating animation
+      setFloatingReactions((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          emoji: EMOJI_MAP[emoji],
+          timestamp: Date.now(),
+        },
+      ]);
+    }
+  };
 
   // Loading state
   if (loading) {
@@ -145,13 +231,34 @@ export function ReplayViewer() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Video column (takes 2/3 width on desktop) */}
           <div className="lg:col-span-2">
-            {/* Video container */}
-            <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+            {/* Video container with floating reactions */}
+            <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
               <video
                 ref={videoRef}
                 controls
                 playsInline
                 className="w-full h-full"
+              />
+              {/* Floating reactions overlay */}
+              <FloatingReactions reactions={floatingReactions} />
+            </div>
+
+            {/* Reaction timeline below video */}
+            {session?.recordingDuration && (
+              <div className="mt-2">
+                <ReactionTimeline
+                  reactions={allReactions}
+                  currentTime={syncTime}
+                  duration={session.recordingDuration}
+                />
+              </div>
+            )}
+
+            {/* Reaction picker */}
+            <div className="mt-2 flex justify-center">
+              <ReplayReactionPicker
+                onReaction={handleReaction}
+                disabled={!authToken}
               />
             </div>
 

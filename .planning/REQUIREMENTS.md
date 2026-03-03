@@ -69,8 +69,8 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **DEV-05**: CLI command to seed sample sessions (broadcasts + hangouts) with metadata
 - [x] **DEV-06**: CLI command to seed sample chat messages for testing chat replay
 - [x] **DEV-08**: CLI command to seed sample reactions (live + replay) for testing reaction timeline
-- [ ] **DEV-09**: CLI command to simulate presence/viewer activity for testing
-- [ ] **DEV-10**: CLI documentation updated with v1.1 commands and usage examples
+- [x] **DEV-09**: CLI command to simulate presence/viewer activity for testing
+- [x] **DEV-10**: CLI documentation updated with v1.1 commands and usage examples
 
 ## v2 Requirements (Future)
 
@@ -174,8 +174,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-05 | Phase 9 | Complete |
 | DEV-06 | Phase 9 | Complete |
 | DEV-08 | Phase 9 | Complete |
-| DEV-09 | Phase 9 | Pending |
-| DEV-10 | Phase 9 | Pending |
+| DEV-09 | Phase 9 | Complete |
+| DEV-10 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 50 total

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Stage, StageStrategy, SubscribeType } from 'amazon-ivs-web-broadcast';
+import { Stage, type StageStrategy, SubscribeType, StageEvents, LocalStageStream } from 'amazon-ivs-web-broadcast';
 
 interface Participant {
   participantId: string;
@@ -21,7 +21,6 @@ interface UseHangoutOptions {
 }
 
 export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptions) {
-  const [stage, setStage] = useState<Stage | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isJoined, setIsJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
 
         // Define Stage strategy - publish audio/video, subscribe to all participants
         const strategy: StageStrategy = {
-          stageStreamsToPublish: () => SubscribeType.AUDIO_VIDEO,
+          stageStreamsToPublish: (): LocalStageStream[] => [],
           shouldPublishParticipant: () => true,
           shouldSubscribeToParticipant: () => SubscribeType.AUDIO_VIDEO,
         };
@@ -74,7 +73,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
         }
 
         // Set up Stage event listeners
-        stageInstance.on(Stage.Events.STAGE_PARTICIPANT_JOINED, (participant: any) => {
+        stageInstance.on(StageEvents.STAGE_PARTICIPANT_JOINED, (participant: any) => {
           if (!mounted) return;
           console.log('Participant joined:', participant);
           setParticipants((prev) => [
@@ -89,7 +88,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           ]);
         });
 
-        stageInstance.on(Stage.Events.STAGE_PARTICIPANT_LEFT, (participant: any) => {
+        stageInstance.on(StageEvents.STAGE_PARTICIPANT_LEFT, (participant: any) => {
           if (!mounted) return;
           console.log('Participant left:', participant);
           setParticipants((prev) =>
@@ -98,7 +97,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
         });
 
         stageInstance.on(
-          Stage.Events.STAGE_PARTICIPANT_STREAMS_CHANGED,
+          StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
           (participant: any, streams: MediaStream[]) => {
             if (!mounted) return;
             console.log('Participant streams changed:', participant, streams);
@@ -130,7 +129,6 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           ...prev,
         ]);
 
-        setStage(stageInstance);
         setIsJoined(true);
       } catch (err: any) {
         if (mounted) {
@@ -145,7 +143,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
     return () => {
       mounted = false;
       if (stageInstance) {
-        stageInstance.leave().catch(console.error);
+        stageInstance.leave();
       }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());

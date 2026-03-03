@@ -126,11 +126,12 @@ Plans:
   3. Phase 5 test suite passes without mock signature errors (stream-started.test.ts)
   4. `npm run build` completes successfully in both backend and web directories
   5. Hangout UI functions correctly at runtime (multi-participant video, active speaker detection)
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors (useHangout.ts, useActiveSpeaker.ts)
-- [ ] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests (reaction.ts, ReplayViewer.tsx, stream-started.test.ts)
+- [x] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors (useHangout.ts, useActiveSpeaker.ts)
+- [x] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests (reaction.ts, ReplayViewer.tsx, stream-started.test.ts)
+- [ ] 09.1-03-PLAN.md — Fix Jest ESM infrastructure (NODE_OPTIONS=--experimental-vm-modules for AWS SDK v3 compatibility)
 
 ## Progress
 
@@ -144,7 +145,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete    | 2026-03-03 |
 | 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
-| 09.1. TypeScript Build Fixes | 2/2 | Complete   | 2026-03-03 | - |
+| 09.1. TypeScript Build Fixes | v1.1 | 2/3 | In Progress | - |
 
 ---
 *Roadmap created: 2026-03-02*

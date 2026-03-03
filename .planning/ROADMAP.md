@@ -111,14 +111,31 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — CLI Foundation & Broadcast Streaming (Commander.js, FFmpeg RTMPS)
-- [ ] 09-02-PLAN.md — Hangout Streaming & Data Seeding (WHIP protocol, session/chat/reaction seeding)
-- [ ] 09-03-PLAN.md — Presence Simulation & Documentation (IVS Chat events, CLI docs)
+- [x] 09-01-PLAN.md — CLI Foundation & Broadcast Streaming (Commander.js, FFmpeg RTMPS) (3 tasks, 4 commits, 5 min)
+- [x] 09-02-PLAN.md — Hangout Streaming & Data Seeding (WHIP protocol, session/chat/reaction seeding) (3 tasks, 4 commits, 13 min)
+- [x] 09-03-PLAN.md — Presence Simulation & Documentation (IVS Chat events, CLI docs) (3 tasks, 5 commits, 2 min)
+
+### Phase 09.1: TypeScript Build Fixes
+**Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
+**Depends on**: Phase 9
+**Gap Closure**: Addresses tech debt from v1.1 milestone audit
+**Requirements**: HANG-05, HANG-06, HANG-07, HANG-08, HANG-09, HANG-10, HANG-11, REACT-01, REACT-07
+**Success Criteria** (what must be TRUE):
+  1. Phase 8 hangout UI compiles without TypeScript errors (useHangout.ts, useActiveSpeaker.ts)
+  2. Phase 7 reaction components compile without type errors (ReplayViewer.tsx EmojiType import)
+  3. Phase 5 test suite passes without mock signature errors (stream-started.test.ts)
+  4. `npm run build` completes successfully in both backend and web directories
+  5. Hangout UI functions correctly at runtime (multi-participant video, active speaker detection)
+**Plans**: TBD (to be planned)
+
+Plans:
+- [ ] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors
+- [ ] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -126,7 +143,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 | 6. Replay Viewer | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete    | 2026-03-03 |
 | 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
-| 9. Developer CLI v1.1 | v1.1 | 0/3 | Not started | - |
+| 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
+| 09.1. TypeScript Build Fixes | v1.1 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*

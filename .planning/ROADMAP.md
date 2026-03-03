@@ -52,11 +52,12 @@ Plans:
   3. Replay viewer plays HLS video from CloudFront with standard controls (play/pause, seek, volume, fullscreen)
   4. Chat messages display alongside video and auto-scroll in sync with playback position
   5. Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps (no drift on 60+ minute videos)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Home feed backend + frontend (query API, recording grid)
+- [ ] 06-02-PLAN.md — Replay viewer with video playback (IVS Player, CloudFront CORS)
+- [ ] 06-03-PLAN.md — Chat synchronization (getSyncTime integration, auto-scroll)
 
 ### Phase 7: Reactions & Chat Sync
 **Goal**: Users can send emoji reactions during live streams and replay viewing, synchronized to video timeline

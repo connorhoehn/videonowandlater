@@ -89,12 +89,12 @@ Plans:
   6. Participants can mute/unmute audio and toggle camera on/off
   7. Chat works in hangouts using same persistent model as broadcasts
   8. Hangout sessions auto-record via server-side composition and appear in home feed alongside broadcasts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
-- [ ] 08-03: TBD
+- [ ] 08-01-PLAN.md — Participant Token Generation & Session Repository
+- [ ] 08-02-PLAN.md — Multi-Participant Hangout UI with Video Grid & Chat
+- [ ] 08-03-PLAN.md — Hangout Recording Integration & Home Feed
 
 ### Phase 9: Developer CLI v1.1
 **Goal**: Developers can stream test media files, seed sample data, and simulate activity for testing

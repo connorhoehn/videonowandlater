@@ -35,9 +35,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [ ] **REACT-01**: Users can send emoji reactions during live broadcasts (heart, fire, clap, laugh, surprised)
 - [ ] **REACT-02**: Live reactions display as floating animations on broadcaster and viewer screens
 - [ ] **REACT-03**: Reactions sent via IVS Chat custom events
-- [ ] **REACT-04**: Reactions stored in DynamoDB with sessionRelativeTime (ms since stream start)
-- [ ] **REACT-05**: DynamoDB GSI2 created for time-range queries of reactions (supports replay sync)
-- [ ] **REACT-06**: Reaction writes sharded across partitions to handle viral spikes (500+ concurrent users)
+- [x] **REACT-04**: Reactions stored in DynamoDB with sessionRelativeTime (ms since stream start)
+- [x] **REACT-05**: DynamoDB GSI2 created for time-range queries of reactions (supports replay sync)
+- [x] **REACT-06**: Reaction writes sharded across partitions to handle viral spikes (500+ concurrent users)
 - [ ] **REACT-07**: Users can send emoji reactions during replay viewing
 - [ ] **REACT-08**: Replay reactions stored with video timestamp and distinguished from live reactions
 - [ ] **REACT-09**: Replay viewer displays reaction timeline synchronized to video playback position
@@ -146,9 +146,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-01 | Phase 7 | Pending |
 | REACT-02 | Phase 7 | Pending |
 | REACT-03 | Phase 7 | Pending |
-| REACT-04 | Phase 7 | Pending |
-| REACT-05 | Phase 7 | Pending |
-| REACT-06 | Phase 7 | Pending |
+| REACT-04 | Phase 7 | Complete |
+| REACT-05 | Phase 7 | Complete |
+| REACT-06 | Phase 7 | Complete |
 | REACT-07 | Phase 7 | Pending |
 | REACT-08 | Phase 7 | Pending |
 | REACT-09 | Phase 7 | Pending |

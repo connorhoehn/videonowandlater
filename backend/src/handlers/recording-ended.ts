@@ -6,14 +6,14 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
-import { updateSessionStatus } from '../repositories/session-repository';
+import { updateSessionStatus, updateRecordingMetadata } from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus } from '../domain/session';
 
 interface RecordingEndDetail {
   channel_name: string;
   stream_id: string;
-  recording_status: 'Recording End';
+  recording_status: 'Recording End' | 'Recording End Failure';
   recording_s3_bucket_name: string;
   recording_s3_key_prefix: string;
   recording_duration_ms: number;
@@ -23,6 +23,7 @@ export const handler = async (
   event: EventBridgeEvent<'IVS Recording State Change', RecordingEndDetail>
 ): Promise<void> => {
   const tableName = process.env.TABLE_NAME!;
+  const cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN!;
   const channelArn = event.detail.channel_name;
 
   console.log('Recording End event received for channel:', channelArn);
@@ -56,6 +57,30 @@ export const handler = async (
     // Update session: ENDING -> ENDED
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
     console.log('Session transitioned to ENDED:', sessionId);
+
+    // Update recording metadata
+    try {
+      const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
+      const recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/master.m3u8`;
+      const thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/thumb-0.jpg`;
+      const finalStatus = event.detail.recording_status === 'Recording End' ? 'available' : 'failed';
+
+      await updateRecordingMetadata(tableName, sessionId, {
+        recordingDuration: event.detail.recording_duration_ms,
+        recordingHlsUrl,
+        thumbnailUrl,
+        recordingStatus: finalStatus,
+      });
+
+      console.log('Recording metadata updated:', {
+        sessionId,
+        recordingDuration: event.detail.recording_duration_ms,
+        recordingStatus: finalStatus,
+      });
+    } catch (metadataError: any) {
+      console.error('Failed to update recording metadata (non-blocking):', metadataError.message);
+      // Don't throw - metadata update is best-effort, don't block session cleanup
+    }
 
     // Release pool resources
     if (session.claimedResources.channel) {

@@ -32,8 +32,8 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Reactions
 
-- [ ] **REACT-01**: Users can send emoji reactions during live broadcasts (heart, fire, clap, laugh, surprised)
-- [ ] **REACT-02**: Live reactions display as floating animations on broadcaster and viewer screens
+- [x] **REACT-01**: Users can send emoji reactions during live broadcasts (heart, fire, clap, laugh, surprised)
+- [x] **REACT-02**: Live reactions display as floating animations on broadcaster and viewer screens
 - [ ] **REACT-03**: Reactions sent via IVS Chat custom events
 - [x] **REACT-04**: Reactions stored in DynamoDB with sessionRelativeTime (ms since stream start)
 - [x] **REACT-05**: DynamoDB GSI2 created for time-range queries of reactions (supports replay sync)
@@ -143,8 +143,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPLAY-07 | Phase 6 | Complete |
 | REPLAY-08 | Phase 6 | Complete |
 | REPLAY-09 | Phase 6 | Complete |
-| REACT-01 | Phase 7 | Pending |
-| REACT-02 | Phase 7 | Pending |
+| REACT-01 | Phase 7 | Complete |
+| REACT-02 | Phase 7 | Complete |
 | REACT-03 | Phase 7 | Pending |
 | REACT-04 | Phase 7 | Complete |
 | REACT-05 | Phase 7 | Complete |

@@ -70,11 +70,13 @@ Plans:
   4. User can send emoji reactions during replay viewing at any video timestamp
   5. Replay viewer displays reaction timeline markers synchronized to current playback position
   6. System handles viral reaction spikes (500+ concurrent users) without DynamoDB throttling via partition sharding
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Reaction Domain & DynamoDB Infrastructure (3 tasks, backend foundation)
+- [ ] 07-02-PLAN.md — Live Reactions Backend (4 tasks, IVS SendEvent integration)
+- [ ] 07-03-PLAN.md — Live Reactions Frontend (4 tasks, Motion animations)
+- [ ] 07-04-PLAN.md — Replay Reactions (4 tasks, timeline & sync)
 
 ### Phase 8: RealTime Hangouts
 **Goal**: Users can create and join small-group video hangouts with up to 5 participants, fully recorded for replay

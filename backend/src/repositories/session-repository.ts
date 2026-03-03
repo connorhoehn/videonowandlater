@@ -244,3 +244,38 @@ export async function getRecentRecordings(
   // Return limited number of recordings
   return sessions.slice(0, limit);
 }
+
+/**
+ * Find session by Stage ARN
+ * Used by recording-ended handler to map EventBridge events to sessions
+ *
+ * @param tableName DynamoDB table name
+ * @param stageArn IVS RealTime Stage ARN to search for
+ * @returns Session object if found, null otherwise
+ */
+export async function findSessionByStageArn(
+  tableName: string,
+  stageArn: string
+): Promise<Session | null> {
+  const docClient = getDocumentClient();
+
+  // Use Scan with FilterExpression (no GSI available for claimedResources.stage)
+  // This is acceptable for low-frequency queries (recording-ended events only)
+  const result = await docClient.send(new ScanCommand({
+    TableName: tableName,
+    FilterExpression: 'begins_with(PK, :pkPrefix) AND claimedResources.stage = :stageArn',
+    ExpressionAttributeValues: {
+      ':pkPrefix': 'SESSION#',
+      ':stageArn': stageArn,
+    },
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return null;
+  }
+
+  // Return first matching session (Stage ARNs are unique per session)
+  const item = result.Items[0];
+  const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
+  return session as Session;
+}

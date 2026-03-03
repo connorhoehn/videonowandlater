@@ -2,9 +2,13 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
+import * as dynamodbClient from '../../lib/dynamodb-client';
+import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+
+jest.mock('../../lib/dynamodb-client');
 
 describe('session-repository', () => {
   const tableName = 'test-table';
@@ -38,6 +42,92 @@ describe('session-repository', () => {
       await expect(
         updateSessionStatus(tableName, 'test-session', SessionStatus.LIVE, 'startedAt')
       ).rejects.toThrow();
+    });
+  });
+
+  describe('findSessionByStageArn', () => {
+    const mockSend = jest.fn();
+    const STAGE_ARN = 'arn:aws:ivs:us-west-2:123456789012:stage/abcd1234';
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('returns session when claimedResources.stage matches', async () => {
+      const mockSession: Session = {
+        sessionId: 'session123',
+        userId: 'user123',
+        sessionType: SessionType.HANGOUT,
+        status: SessionStatus.LIVE,
+        claimedResources: {
+          stage: STAGE_ARN,
+          chatRoom: 'arn:aws:ivschat:us-west-2:123456789012:room/abc',
+        },
+        createdAt: '2026-03-03T12:00:00Z',
+        version: 1,
+      };
+
+      mockSend.mockResolvedValueOnce({
+        Items: [{
+          PK: 'SESSION#session123',
+          SK: 'METADATA',
+          GSI1PK: 'STATUS#LIVE',
+          GSI1SK: '2026-03-03T12:00:00Z',
+          entityType: 'SESSION',
+          ...mockSession,
+        }],
+      });
+
+      const result = await findSessionByStageArn(tableName, STAGE_ARN);
+
+      expect(result).toEqual(mockSession);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            FilterExpression: 'begins_with(PK, :pkPrefix) AND claimedResources.stage = :stageArn',
+            ExpressionAttributeValues: {
+              ':pkPrefix': 'SESSION#',
+              ':stageArn': STAGE_ARN,
+            },
+          }),
+        })
+      );
+    });
+
+    it('returns null when no matching Stage ARN found', async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [],
+      });
+
+      const result = await findSessionByStageArn(tableName, STAGE_ARN);
+
+      expect(result).toBeNull();
+    });
+
+    it('uses Scan with FilterExpression (no GSI for Stage ARN lookup)', async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [],
+      });
+
+      await findSessionByStageArn(tableName, STAGE_ARN);
+
+      // Verify Scan is used (not Query)
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            FilterExpression: expect.any(String),
+          }),
+        })
+      );
+
+      // Verify no KeyConditionExpression (which would indicate Query)
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.KeyConditionExpression).toBeUndefined();
     });
   });
 });

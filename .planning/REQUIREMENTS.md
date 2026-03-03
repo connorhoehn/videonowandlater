@@ -14,9 +14,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REC-03**: S3 bucket and RecordingConfiguration deployed in same AWS region (05-01)
 - [x] **REC-04**: CloudFront distribution with OAC serves private S3 recordings (05-01)
 - [x] **REC-05**: EventBridge rules capture recording lifecycle events (started, ended, failed) (05-01)
-- [ ] **REC-06**: Lambda handlers process recording-ended events and extract metadata
+- [x] **REC-06**: Lambda handlers process recording-ended events and extract metadata
 - [x] **REC-07**: Session items in DynamoDB extended with recording metadata (duration, S3 path, thumbnail URL) (05-01)
-- [ ] **REC-08**: Recording reconnect windows handled (fragmented streams merged or flagged)
+- [x] **REC-08**: Recording reconnect windows handled (fragmented streams merged or flagged)
 
 ### Replay Viewer
 
@@ -126,14 +126,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REC-01 | Phase 5 | Pending |
-| REC-02 | Phase 5 | Pending |
+| REC-01 | Phase 5 | Complete |
+| REC-02 | Phase 5 | Complete |
 | REC-03 | Phase 5 | Pending |
 | REC-04 | Phase 5 | Pending |
 | REC-05 | Phase 5 | Pending |
-| REC-06 | Phase 5 | Pending |
+| REC-06 | Phase 5 | Complete |
 | REC-07 | Phase 5 | Pending |
-| REC-08 | Phase 5 | Pending |
+| REC-08 | Phase 5 | Complete |
 | REPLAY-01 | Phase 6 | Pending |
 | REPLAY-02 | Phase 6 | Pending |
 | REPLAY-03 | Phase 6 | Pending |

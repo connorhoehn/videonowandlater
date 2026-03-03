@@ -18,7 +18,7 @@ Milestone completed. See MILESTONES.md for details.
 
 **Milestone Goal:** Transform live sessions into persistent, discoverable content with reactions, and expand interaction models from one-to-many broadcasts to small-group hangouts.
 
-- [ ] **Phase 5: Recording Foundation** - Auto-record all sessions to S3 with metadata tracking
+- [x] **Phase 5: Recording Foundation** - Auto-record all sessions to S3 with metadata tracking (completed 2026-03-03)
 - [ ] **Phase 6: Replay Viewer** - Home feed and video playback with synchronized chat
 - [ ] **Phase 7: Reactions & Chat Sync** - Live and replay reactions with timeline synchronization
 - [ ] **Phase 8: RealTime Hangouts** - Small-group multi-participant video sessions
@@ -117,7 +117,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Recording Foundation | v1.1 | 0/2 | Not started | - |
+| 5. Recording Foundation | 2/2 | Complete   | 2026-03-03 | - |
 | 6. Replay Viewer | v1.1 | 0/TBD | Not started | - |
 | 7. Reactions & Chat Sync | v1.1 | 0/TBD | Not started | - |
 | 8. RealTime Hangouts | v1.1 | 0/TBD | Not started | - |

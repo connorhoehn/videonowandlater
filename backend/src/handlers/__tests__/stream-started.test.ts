@@ -16,8 +16,6 @@ interface StreamStartDetail {
 
 describe('stream-started handler', () => {
   const originalEnv = process.env;
-  const mockContext = {} as any;
-  const mockCallback = (() => {}) as any;
 
   beforeEach(() => {
     process.env = {
@@ -49,7 +47,7 @@ describe('stream-started handler', () => {
     };
 
     // Should not throw (even if DynamoDB connection fails in unit test)
-    await expect(handler(event, mockContext, mockCallback)).resolves.not.toThrow();
+    await expect(handler(event)).resolves.not.toThrow();
   });
 
   it('handles missing session gracefully (logs warning)', async () => {
@@ -71,6 +69,6 @@ describe('stream-started handler', () => {
     };
 
     // Should complete without error even if session not found
-    await expect(handler(event, mockContext, mockCallback)).resolves.not.toThrow();
+    await expect(handler(event)).resolves.not.toThrow();
   });
 });

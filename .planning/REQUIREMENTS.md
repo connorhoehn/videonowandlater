@@ -9,13 +9,13 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Recording (Infrastructure)
 
-- [ ] **REC-01**: All broadcast sessions auto-record to S3 using IVS RecordingConfiguration
-- [ ] **REC-02**: All hangout sessions auto-record to S3 using IVS RealTime composite recording
-- [ ] **REC-03**: S3 bucket and RecordingConfiguration deployed in same AWS region
-- [ ] **REC-04**: CloudFront distribution with OAC serves private S3 recordings
-- [ ] **REC-05**: EventBridge rules capture recording lifecycle events (started, ended, failed)
+- [x] **REC-01**: All broadcast sessions auto-record to S3 using IVS RecordingConfiguration (05-01)
+- [x] **REC-02**: All hangout sessions auto-record to S3 using IVS RealTime composite recording (05-01)
+- [x] **REC-03**: S3 bucket and RecordingConfiguration deployed in same AWS region (05-01)
+- [x] **REC-04**: CloudFront distribution with OAC serves private S3 recordings (05-01)
+- [x] **REC-05**: EventBridge rules capture recording lifecycle events (started, ended, failed) (05-01)
 - [ ] **REC-06**: Lambda handlers process recording-ended events and extract metadata
-- [ ] **REC-07**: Session items in DynamoDB extended with recording metadata (duration, S3 path, thumbnail URL)
+- [x] **REC-07**: Session items in DynamoDB extended with recording metadata (duration, S3 path, thumbnail URL) (05-01)
 - [ ] **REC-08**: Recording reconnect windows handled (fragmented streams merged or flagged)
 
 ### Replay Viewer

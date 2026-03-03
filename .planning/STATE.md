@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
-status: ready_to_plan
-last_updated: "2026-03-02T20:00:00.000Z"
+status: executing
+last_updated: "2026-03-03T00:57:51.000Z"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -23,29 +23,29 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 5 of 9 (Recording Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-02 — v1.1 roadmap created, milestone started
+Plan: 1 of 2 in current phase
+Status: Executing plans
+Last activity: 2026-03-03 — Completed 05-01-PLAN.md (Recording Infrastructure)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v1.1 milestone)
-- Average duration: TBD
-- Total execution time: 0.0 hours
+- Total plans completed: 1 (v1.1 milestone)
+- Average duration: 5 minutes
+- Total execution time: 0.08 hours
 
 **By Milestone:**
 
 | Milestone | Plans | Total | Avg/Plan |
 |-----------|-------|-------|----------|
 | v1.0 Gap Closure | 13 | 1.0 hrs | 4 min |
-| v1.1 (current) | 0 | 0.0 hrs | TBD |
+| v1.1 (current) | 1 | 0.08 hrs | 5 min |
 
 **Recent Trend:**
-- v1.1 just started
-- Trend: TBD after first plan completion
+- 05-01: 5 minutes (Recording Infrastructure & Domain)
+- Average holding steady at ~5 min/plan
 
 *Updated after each plan completion*
 
@@ -60,6 +60,10 @@ Recent decisions affecting current work:
 - v1.0: Pre-warmed resource pool pattern — applies to Stage pool for hangouts
 - v1.0: EventBridge for lifecycle events — extends to recording lifecycle
 - v1.0: Server-side timestamps (CHAT-04) — enables replay synchronization
+- 05-01: CloudFront OAC over OAI — modern AWS-recommended approach for S3 origins
+- 05-01: Flat recording fields on Session interface — simpler DynamoDB mapping
+- 05-01: Multi-rendition recording with HD thumbnails — adaptive bitrate playback support
+- 05-01: EventBridge rules created without targets — handlers wired in Plan 05-02
 
 ### Pending Todos
 
@@ -77,8 +81,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02
-Stopped at: v1.1 roadmap created, ready to plan Phase 5
+Last session: 2026-03-03
+Stopped at: Completed 05-01-PLAN.md (Recording Infrastructure & Domain)
 Resume file: None
 
 ---

@@ -39,7 +39,7 @@ Milestone completed. See MILESTONES.md for details.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Recording Infrastructure & Domain
+- [x] 05-01-PLAN.md — Recording Infrastructure & Domain (2 tasks, 2 commits, 5 min)
 - [ ] 05-02-PLAN.md — Recording Lifecycle Handlers
 
 ### Phase 6: Replay Viewer

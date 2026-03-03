@@ -46,9 +46,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 ### Hangouts (RealTime)
 
 - [ ] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
-- [ ] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
-- [ ] **HANG-03**: Participant tokens generated server-side via CreateParticipantTokenCommand
-- [ ] **HANG-04**: Participant tokens include capabilities (PUBLISH, SUBSCRIBE), user_id, 12-hour TTL
+- [x] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
+- [x] **HANG-03**: Participant tokens generated server-side via CreateParticipantTokenCommand
+- [x] **HANG-04**: Participant tokens include capabilities (PUBLISH, SUBSCRIBE), user_id, 12-hour TTL
 - [ ] **HANG-05**: Users can join hangout via participant token exchange
 - [ ] **HANG-06**: Multi-participant video grid displays up to 5 participant streams (desktop)
 - [ ] **HANG-07**: Mobile UI limits video rendering to 3 simultaneous streams (browser constraint)
@@ -154,9 +154,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-09 | Phase 7 | Pending |
 | REACT-10 | Phase 7 | Pending |
 | HANG-01 | Phase 8 | Pending |
-| HANG-02 | Phase 8 | Pending |
-| HANG-03 | Phase 8 | Pending |
-| HANG-04 | Phase 8 | Pending |
+| HANG-02 | Phase 8 | Complete |
+| HANG-03 | Phase 8 | Complete |
+| HANG-04 | Phase 8 | Complete |
 | HANG-05 | Phase 8 | Pending |
 | HANG-06 | Phase 8 | Pending |
 | HANG-07 | Phase 8 | Pending |

@@ -36,11 +36,11 @@ Milestone completed. See MILESTONES.md for details.
   3. EventBridge rules capture recording lifecycle events and trigger metadata processing
   4. CloudFront distribution serves recordings via signed URLs (no direct S3 access)
   5. Reconnect windows handled gracefully with "Processing recording..." UI state during 30-60 second window
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Recording Infrastructure & Domain
+- [ ] 05-02-PLAN.md — Recording Lifecycle Handlers
 
 ### Phase 6: Replay Viewer
 **Goal**: Users can discover recently streamed videos and watch replays with full chat history
@@ -117,7 +117,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Recording Foundation | v1.1 | 0/TBD | Not started | - |
+| 5. Recording Foundation | v1.1 | 0/2 | Not started | - |
 | 6. Replay Viewer | v1.1 | 0/TBD | Not started | - |
 | 7. Reactions & Chat Sync | v1.1 | 0/TBD | Not started | - |
 | 8. RealTime Hangouts | v1.1 | 0/TBD | Not started | - |

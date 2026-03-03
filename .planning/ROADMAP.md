@@ -21,7 +21,7 @@ Milestone completed. See MILESTONES.md for details.
 - [x] **Phase 5: Recording Foundation** - Auto-record all sessions to S3 with metadata tracking (completed 2026-03-03)
 - [x] **Phase 6: Replay Viewer** - Home feed and video playback with synchronized chat (completed 2026-03-03)
 - [x] **Phase 7: Reactions & Chat Sync** - Live and replay reactions with timeline synchronization (completed 2026-03-03)
-- [ ] **Phase 8: RealTime Hangouts** - Small-group multi-participant video sessions
+- [x] **Phase 8: RealTime Hangouts** - Small-group multi-participant video sessions (completed 2026-03-03)
 - [ ] **Phase 9: Developer CLI v1.1** - Test media streaming and data seeding tools
 
 ## Phase Details
@@ -123,7 +123,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9
 | 5. Recording Foundation | v1.1 | 2/2 | Complete   | 2026-03-03 |
 | 6. Replay Viewer | v1.1 | Complete    | 2026-03-03 | 2026-03-03 |
 | 7. Reactions & Chat Sync | 1/4 | Complete    | 2026-03-03 | - |
-| 8. RealTime Hangouts | v1.1 | 0/TBD | Not started | - |
+| 8. RealTime Hangouts | 3/3 | Complete   | 2026-03-03 | - |
 | 9. Developer CLI v1.1 | v1.1 | 0/TBD | Not started | - |
 
 ---

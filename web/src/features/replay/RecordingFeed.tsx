@@ -11,6 +11,7 @@ export interface Recording {
   createdAt: string;
   userId: string;
   endedAt?: string;
+  sessionType?: 'BROADCAST' | 'HANGOUT';
 }
 
 interface RecordingFeedProps {
@@ -63,14 +64,20 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
-      {recordings.map((recording) => (
-        <div
-          key={recording.sessionId}
-          onClick={() => navigate(`/replay/${recording.sessionId}`)}
-          className="group cursor-pointer"
-        >
-          {/* Thumbnail container */}
-          <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
+      {recordings.map((recording) => {
+        const isHangout = recording.sessionType === 'HANGOUT';
+        const destination = isHangout
+          ? `/hangout/${recording.sessionId}`
+          : `/replay/${recording.sessionId}`;
+
+        return (
+          <div
+            key={recording.sessionId}
+            onClick={() => navigate(destination)}
+            className="group cursor-pointer"
+          >
+            {/* Thumbnail container */}
+            <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
             {recording.thumbnailUrl ? (
               <img
                 src={recording.thumbnailUrl}
@@ -101,7 +108,14 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
               </div>
             )}
 
-            {/* Duration badge */}
+            {/* Session type badge (top-right) */}
+            {isHangout && (
+              <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs px-2 py-1 rounded font-medium">
+                Hangout
+              </div>
+            )}
+
+            {/* Duration badge (bottom-right) */}
             {recording.recordingDuration !== undefined && (
               <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">
                 {formatDuration(recording.recordingDuration)}
@@ -122,7 +136,8 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

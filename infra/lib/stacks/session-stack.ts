@@ -58,6 +58,22 @@ export class SessionStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // GSI2 for reaction time-range queries
+    // Example: Query reactions for session X between time Y and Z
+    // GSI2PK = REACTION#{sessionId}, GSI2SK = zero-padded sessionRelativeTime
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI2',
+      partitionKey: {
+        name: 'GSI2PK',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'GSI2SK',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     new CfnOutput(this, 'SessionTableName', {
       value: this.table.tableName,
     });

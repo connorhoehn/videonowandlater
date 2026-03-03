@@ -2,7 +2,7 @@
  * ReplayViewer - dedicated page for watching replay videos with HLS playback
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';

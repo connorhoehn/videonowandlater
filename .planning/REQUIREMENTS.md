@@ -23,12 +23,12 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REPLAY-01**: Home feed displays recently streamed videos in chronological order
 - [x] **REPLAY-02**: Home feed shows thumbnail, title, duration, broadcaster name for each recording
 - [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
-- [ ] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
-- [ ] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
+- [x] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
+- [x] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
 - [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
 - [ ] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
 - [ ] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
-- [ ] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
+- [x] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
 
 ### Reactions
 
@@ -137,12 +137,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPLAY-01 | Phase 6 | Complete |
 | REPLAY-02 | Phase 6 | Complete |
 | REPLAY-03 | Phase 6 | Complete |
-| REPLAY-04 | Phase 6 | Pending |
-| REPLAY-05 | Phase 6 | Pending |
+| REPLAY-04 | Phase 6 | Complete |
+| REPLAY-05 | Phase 6 | Complete |
 | REPLAY-06 | Phase 6 | Pending |
 | REPLAY-07 | Phase 6 | Pending |
 | REPLAY-08 | Phase 6 | Pending |
-| REPLAY-09 | Phase 6 | Pending |
+| REPLAY-09 | Phase 6 | Complete |
 | REACT-01 | Phase 7 | Pending |
 | REACT-02 | Phase 7 | Pending |
 | REACT-03 | Phase 7 | Pending |

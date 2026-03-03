@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: unknown
-last_updated: "2026-03-03T02:01:17.139Z"
+last_updated: "2026-03-03T02:07:31.905Z"
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -23,35 +23,37 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 6 of 9 (Replay Viewer)
-Plan: 1 of 2 in current phase
+Plan: 2 of 3 in current phase
 Status: Executing plans
-Last activity: 2026-03-03 — Completed 06-01-PLAN.md (Recording Discovery Feed)
+Last activity: 2026-03-03 — Completed 06-02-PLAN.md (Replay Viewer with HLS Playback)
 
 Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v1.1 milestone)
-- Average duration: 4 minutes
-- Total execution time: 0.20 hours
+- Total plans completed: 4 (v1.1 milestone)
+- Average duration: 3.5 minutes
+- Total execution time: 0.23 hours
 
 **By Milestone:**
 
 | Milestone | Plans | Total | Avg/Plan |
 |-----------|-------|-------|----------|
 | v1.0 Gap Closure | 13 | 1.0 hrs | 4 min |
-| v1.1 (current) | 3 | 0.20 hrs | 4 min |
+| v1.1 (current) | 4 | 0.23 hrs | 3.5 min |
 
 **Recent Trend:**
 - 05-01: 5 minutes (Recording Infrastructure & Domain)
 - 05-02: 4 minutes (Recording Lifecycle Handlers)
 - 06-01: 3 minutes (Recording Discovery Feed)
-- Average trending down to ~3-4 min/plan
+- 06-02: 3 minutes (Replay Viewer with HLS Playback)
+- Average holding steady at ~3-4 min/plan
 
 *Updated after each plan completion*
 | Phase 05-recording-foundation P02 | 4 | 3 tasks | 5 files |
 | Phase 06 P01 | 3 | 2 tasks | 5 files |
+| Phase 06 P02 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -73,6 +75,9 @@ Recent decisions affecting current work:
 - 06-01: Public /recordings endpoint with no auth — maximizes content discoverability for v1.1
 - 06-01: DynamoDB scan for recordings — acceptable for small dataset, can optimize with GSI later
 - 06-01: Simple userId display as broadcaster name — user profiles deferred to future milestone
+- [Phase 06-02]: Use native video controls over custom UI for faster implementation and better accessibility
+- [Phase 06-02]: Track syncTime via SYNC_TIME_UPDATE in useReplayPlayer to prepare for chat replay sync in Plan 06-03
+- [Phase 06-02]: CloudFront CORS policy allows all origins for public recording playback
 
 ### Pending Todos
 
@@ -91,7 +96,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 06-01-PLAN.md (Recording Discovery Feed)
+Stopped at: Completed 06-02-PLAN.md (Replay Viewer with HLS Playback)
 Resume file: None
 
 ---

@@ -64,7 +64,7 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Developer CLI
 
-- [ ] **DEV-03**: CLI command to stream test media file (MP4/MOV) into active broadcast session
+- [x] **DEV-03**: CLI command to stream test media file (MP4/MOV) into active broadcast session
 - [ ] **DEV-04**: CLI command to stream test media file into active hangout session
 - [ ] **DEV-05**: CLI command to seed sample sessions (broadcasts + hangouts) with metadata
 - [ ] **DEV-06**: CLI command to seed sample chat messages for testing chat replay
@@ -169,7 +169,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HANG-14 | Phase 8 | Complete |
 | HANG-15 | Phase 8 | Complete |
 | HANG-16 | Phase 8 | Complete |
-| DEV-03 | Phase 9 | Pending |
+| DEV-03 | Phase 9 | Complete |
 | DEV-04 | Phase 9 | Pending |
 | DEV-05 | Phase 9 | Pending |
 | DEV-06 | Phase 9 | Pending |

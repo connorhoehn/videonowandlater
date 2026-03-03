@@ -65,10 +65,10 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 ### Developer CLI
 
 - [x] **DEV-03**: CLI command to stream test media file (MP4/MOV) into active broadcast session
-- [ ] **DEV-04**: CLI command to stream test media file into active hangout session
-- [ ] **DEV-05**: CLI command to seed sample sessions (broadcasts + hangouts) with metadata
-- [ ] **DEV-06**: CLI command to seed sample chat messages for testing chat replay
-- [ ] **DEV-08**: CLI command to seed sample reactions (live + replay) for testing reaction timeline
+- [x] **DEV-04**: CLI command to stream test media file into active hangout session
+- [x] **DEV-05**: CLI command to seed sample sessions (broadcasts + hangouts) with metadata
+- [x] **DEV-06**: CLI command to seed sample chat messages for testing chat replay
+- [x] **DEV-08**: CLI command to seed sample reactions (live + replay) for testing reaction timeline
 - [ ] **DEV-09**: CLI command to simulate presence/viewer activity for testing
 - [ ] **DEV-10**: CLI documentation updated with v1.1 commands and usage examples
 
@@ -170,10 +170,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HANG-15 | Phase 8 | Complete |
 | HANG-16 | Phase 8 | Complete |
 | DEV-03 | Phase 9 | Complete |
-| DEV-04 | Phase 9 | Pending |
-| DEV-05 | Phase 9 | Pending |
-| DEV-06 | Phase 9 | Pending |
-| DEV-08 | Phase 9 | Pending |
+| DEV-04 | Phase 9 | Complete |
+| DEV-05 | Phase 9 | Complete |
+| DEV-06 | Phase 9 | Complete |
+| DEV-08 | Phase 9 | Complete |
 | DEV-09 | Phase 9 | Pending |
 | DEV-10 | Phase 9 | Pending |
 

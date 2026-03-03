@@ -4,11 +4,15 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
-import { updateSessionStatus, updateRecordingMetadata } from '../repositories/session-repository';
+import {
+  updateSessionStatus,
+  updateRecordingMetadata,
+  findSessionByStageArn
+} from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus } from '../domain/session';
+import type { Session } from '../domain/session';
 
 interface RecordingEndDetail {
   channel_name: string;
@@ -24,31 +28,52 @@ export const handler = async (
 ): Promise<void> => {
   const tableName = process.env.TABLE_NAME!;
   const cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN!;
-  const channelArn = event.detail.channel_name;
+  const resourceArn = event.detail.channel_name;
 
-  console.log('Recording End event received for channel:', channelArn);
+  console.log('Recording End event received for resource:', resourceArn);
 
-  const docClient = getDocumentClient();
+  // Detect ARN type: Channel or Stage
+  const arnParts = resourceArn.split('/');
+  const resourceType = arnParts[arnParts.length - 2]; // "channel" or "stage"
 
-  // Find session by channel ARN
-  const scanResult = await docClient.send(new ScanCommand({
-    TableName: tableName,
-    FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn',
-    ExpressionAttributeNames: {
-      '#channel': 'channel',
-    },
-    ExpressionAttributeValues: {
-      ':session': 'SESSION#',
-      ':channelArn': channelArn,
-    },
-  }));
+  let session: Session | null = null;
 
-  if (!scanResult.Items || scanResult.Items.length === 0) {
-    console.warn('No session found for channel:', channelArn);
+  if (resourceType === 'channel') {
+    console.log('Detected Channel ARN, finding session by channel');
+    const docClient = getDocumentClient();
+    const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
+
+    // Find session by channel ARN (existing logic)
+    const scanResult = await docClient.send(new ScanCommand({
+      TableName: tableName,
+      FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn',
+      ExpressionAttributeNames: {
+        '#channel': 'channel',
+      },
+      ExpressionAttributeValues: {
+        ':session': 'SESSION#',
+        ':channelArn': resourceArn,
+      },
+    }));
+
+    if (scanResult.Items && scanResult.Items.length > 0) {
+      const item = scanResult.Items[0];
+      const { PK, SK, GSI1PK, GSI1SK, entityType, ...sessionData } = item;
+      session = sessionData as Session;
+    }
+  } else if (resourceType === 'stage') {
+    console.log('Detected Stage ARN, finding session by stage');
+    session = await findSessionByStageArn(tableName, resourceArn);
+  } else {
+    console.error('Unknown resource type in ARN:', resourceArn);
     return;
   }
 
-  const session = scanResult.Items[0];
+  if (!session) {
+    console.warn('No session found for resource:', resourceArn);
+    return;
+  }
+
   const sessionId = session.sessionId;
 
   console.log('Found session:', sessionId, 'transitioning to ENDED');
@@ -82,13 +107,18 @@ export const handler = async (
       // Don't throw - metadata update is best-effort, don't block session cleanup
     }
 
-    // Release pool resources
-    if (session.claimedResources.channel) {
+    // Release pool resources (Channel or Stage)
+    if (session.claimedResources?.channel) {
       await releasePoolResource(tableName, session.claimedResources.channel);
       console.log('Released channel resource:', session.claimedResources.channel);
     }
 
-    if (session.claimedResources.chatRoom) {
+    if (session.claimedResources?.stage) {
+      await releasePoolResource(tableName, session.claimedResources.stage);
+      console.log('Released stage resource:', session.claimedResources.stage);
+    }
+
+    if (session.claimedResources?.chatRoom) {
       await releasePoolResource(tableName, session.claimedResources.chatRoom);
       console.log('Released chat room resource:', session.claimedResources.chatRoom);
     }

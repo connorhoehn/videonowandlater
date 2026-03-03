@@ -19,18 +19,23 @@ export function useReactionSender(sessionId: string, authToken: string) {
   const [error, setError] = useState<string | null>(null);
 
   const sendReaction = useCallback(
-    async (emojiType: EmojiType): Promise<SendReactionResponse | undefined> => {
+    async (emojiType: EmojiType, reactionType?: 'live' | 'replay'): Promise<SendReactionResponse | undefined> => {
       setSending(true);
       setError(null);
 
       try {
+        const body: any = { emojiType };
+        if (reactionType) {
+          body.reactionType = reactionType;
+        }
+
         const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/reactions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${authToken}`,
           },
-          body: JSON.stringify({ emojiType }),
+          body: JSON.stringify(body),
         });
 
         if (!response.ok) {

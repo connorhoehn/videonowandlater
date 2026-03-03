@@ -45,19 +45,19 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Hangouts (RealTime)
 
-- [ ] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
+- [x] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
 - [x] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
 - [x] **HANG-03**: Participant tokens generated server-side via CreateParticipantTokenCommand
 - [x] **HANG-04**: Participant tokens include capabilities (PUBLISH, SUBSCRIBE), user_id, 12-hour TTL
-- [ ] **HANG-05**: Users can join hangout via participant token exchange
-- [ ] **HANG-06**: Multi-participant video grid displays up to 5 participant streams (desktop)
-- [ ] **HANG-07**: Mobile UI limits video rendering to 3 simultaneous streams (browser constraint)
-- [ ] **HANG-08**: Users can mute/unmute audio in hangouts
-- [ ] **HANG-09**: Users can toggle camera on/off in hangouts
-- [ ] **HANG-10**: Active speaker visual indicator highlights current speaker's video tile
-- [ ] **HANG-11**: Active speaker detection uses Web Audio API for client-side audio level monitoring
-- [ ] **HANG-12**: Participant join/leave notifications display in hangout UI
-- [ ] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
+- [x] **HANG-05**: Users can join hangout via participant token exchange
+- [x] **HANG-06**: Multi-participant video grid displays up to 5 participant streams (desktop)
+- [x] **HANG-07**: Mobile UI limits video rendering to 3 simultaneous streams (browser constraint)
+- [x] **HANG-08**: Users can mute/unmute audio in hangouts
+- [x] **HANG-09**: Users can toggle camera on/off in hangouts
+- [x] **HANG-10**: Active speaker visual indicator highlights current speaker's video tile
+- [x] **HANG-11**: Active speaker detection uses Web Audio API for client-side audio level monitoring
+- [x] **HANG-12**: Participant join/leave notifications display in hangout UI
+- [x] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
 - [ ] **HANG-14**: Hangout sessions record via server-side composition to S3
 - [ ] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
 - [ ] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
@@ -153,19 +153,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-08 | Phase 7 | Pending |
 | REACT-09 | Phase 7 | Pending |
 | REACT-10 | Phase 7 | Complete |
-| HANG-01 | Phase 8 | Pending |
+| HANG-01 | Phase 8 | Complete |
 | HANG-02 | Phase 8 | Complete |
 | HANG-03 | Phase 8 | Complete |
 | HANG-04 | Phase 8 | Complete |
-| HANG-05 | Phase 8 | Pending |
-| HANG-06 | Phase 8 | Pending |
-| HANG-07 | Phase 8 | Pending |
-| HANG-08 | Phase 8 | Pending |
-| HANG-09 | Phase 8 | Pending |
-| HANG-10 | Phase 8 | Pending |
-| HANG-11 | Phase 8 | Pending |
-| HANG-12 | Phase 8 | Pending |
-| HANG-13 | Phase 8 | Pending |
+| HANG-05 | Phase 8 | Complete |
+| HANG-06 | Phase 8 | Complete |
+| HANG-07 | Phase 8 | Complete |
+| HANG-08 | Phase 8 | Complete |
+| HANG-09 | Phase 8 | Complete |
+| HANG-10 | Phase 8 | Complete |
+| HANG-11 | Phase 8 | Complete |
+| HANG-12 | Phase 8 | Complete |
+| HANG-13 | Phase 8 | Complete |
 | HANG-14 | Phase 8 | Pending |
 | HANG-15 | Phase 8 | Pending |
 | HANG-16 | Phase 8 | Pending |

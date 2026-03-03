@@ -12,6 +12,7 @@ import { HomePage } from './pages/HomePage';
 import { BroadcastPage } from './features/broadcast/BroadcastPage';
 import { ViewerPage } from './features/viewer/ViewerPage';
 import { ReplayViewer } from './features/replay/ReplayViewer';
+import { HangoutPage } from './features/hangout/HangoutPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -102,6 +103,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ReplayViewer />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/hangout/:sessionId"
+            element={
+              <ProtectedRoute>
+                <HangoutPage />
               </ProtectedRoute>
             }
           />

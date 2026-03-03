@@ -126,11 +126,11 @@ Plans:
   3. Phase 5 test suite passes without mock signature errors (stream-started.test.ts)
   4. `npm run build` completes successfully in both backend and web directories
   5. Hangout UI functions correctly at runtime (multi-participant video, active speaker detection)
-**Plans**: TBD (to be planned)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors
-- [ ] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests
+- [ ] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors (useHangout.ts, useActiveSpeaker.ts)
+- [ ] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests (reaction.ts, ReplayViewer.tsx, stream-started.test.ts)
 
 ## Progress
 

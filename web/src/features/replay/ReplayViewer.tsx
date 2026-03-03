@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getConfig } from '../../config/aws-config';
 import { useReplayPlayer } from './useReplayPlayer';
+import { ReplayChat } from './ReplayChat';
 
 interface Session {
   sessionId: string;
@@ -66,7 +67,7 @@ export function ReplayViewer() {
   }, [sessionId]);
 
   // IVS Player hook
-  const { videoRef } = useReplayPlayer(session?.recordingHlsUrl);
+  const { videoRef, syncTime } = useReplayPlayer(session?.recordingHlsUrl);
 
   // Loading state
   if (loading) {
@@ -140,54 +141,65 @@ export function ReplayViewer() {
 
       {/* Main content */}
       <div className="max-w-6xl mx-auto p-4">
-        {/* Video container */}
-        <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
-          <video
-            ref={videoRef}
-            controls
-            playsInline
-            className="w-full h-full"
-          />
-        </div>
-
-        {/* Metadata panel */}
-        <div className="mt-6 bg-white rounded-lg shadow p-6">
-          <div className="space-y-3">
-            <div>
-              <span className="text-sm font-medium text-gray-500">Broadcaster</span>
-              <p className="text-base text-gray-900 mt-1">
-                {session.userId}
-              </p>
+        {/* Responsive grid layout: video + metadata on left, chat on right */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Video column (takes 2/3 width on desktop) */}
+          <div className="lg:col-span-2">
+            {/* Video container */}
+            <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+              <video
+                ref={videoRef}
+                controls
+                playsInline
+                className="w-full h-full"
+              />
             </div>
 
-            {session.recordingDuration !== undefined && (
-              <div>
-                <span className="text-sm font-medium text-gray-500">Duration</span>
-                <p className="text-base text-gray-900 mt-1">
-                  {formatDuration(session.recordingDuration)}
-                </p>
+            {/* Metadata panel */}
+            <div className="mt-4 bg-white rounded-lg shadow p-6">
+              <div className="space-y-3">
+                <div>
+                  <span className="text-sm font-medium text-gray-500">Broadcaster</span>
+                  <p className="text-base text-gray-900 mt-1">
+                    {session.userId}
+                  </p>
+                </div>
+
+                {session.recordingDuration !== undefined && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Duration</span>
+                    <p className="text-base text-gray-900 mt-1">
+                      {formatDuration(session.recordingDuration)}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-sm font-medium text-gray-500">Recorded</span>
+                  <p className="text-base text-gray-900 mt-1">
+                    {new Date(session.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                {session.endedAt && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Ended</span>
+                    <p className="text-base text-gray-900 mt-1">
+                      {new Date(session.endedAt).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-gray-200">
+                  <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
+                </div>
               </div>
-            )}
-
-            <div>
-              <span className="text-sm font-medium text-gray-500">Recorded</span>
-              <p className="text-base text-gray-900 mt-1">
-                {new Date(session.createdAt).toLocaleString()}
-              </p>
             </div>
+          </div>
 
-            {session.endedAt && (
-              <div>
-                <span className="text-sm font-medium text-gray-500">Ended</span>
-                <p className="text-base text-gray-900 mt-1">
-                  {new Date(session.endedAt).toLocaleString()}
-                </p>
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-gray-200">
-              <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
-            </div>
+          {/* Chat column (takes 1/3 width on desktop, fixed height) */}
+          <div className="lg:col-span-1 h-[600px]">
+            <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} />
           </div>
         </div>
       </div>

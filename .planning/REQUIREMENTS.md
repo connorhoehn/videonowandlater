@@ -38,9 +38,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REACT-04**: Reactions stored in DynamoDB with sessionRelativeTime (ms since stream start)
 - [x] **REACT-05**: DynamoDB GSI2 created for time-range queries of reactions (supports replay sync)
 - [x] **REACT-06**: Reaction writes sharded across partitions to handle viral spikes (500+ concurrent users)
-- [ ] **REACT-07**: Users can send emoji reactions during replay viewing
-- [ ] **REACT-08**: Replay reactions stored with video timestamp and distinguished from live reactions
-- [ ] **REACT-09**: Replay viewer displays reaction timeline synchronized to video playback position
+- [x] **REACT-07**: Users can send emoji reactions during replay viewing
+- [x] **REACT-08**: Replay reactions stored with video timestamp and distinguished from live reactions
+- [x] **REACT-09**: Replay viewer displays reaction timeline synchronized to video playback position
 - [x] **REACT-10**: Lambda API endpoints for creating and querying reactions (live + replay)
 
 ### Hangouts (RealTime)
@@ -149,9 +149,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-04 | Phase 7 | Complete |
 | REACT-05 | Phase 7 | Complete |
 | REACT-06 | Phase 7 | Complete |
-| REACT-07 | Phase 7 | Pending |
-| REACT-08 | Phase 7 | Pending |
-| REACT-09 | Phase 7 | Pending |
+| REACT-07 | Phase 7 | Complete |
+| REACT-08 | Phase 7 | Complete |
+| REACT-09 | Phase 7 | Complete |
 | REACT-10 | Phase 7 | Complete |
 | HANG-01 | Phase 8 | Complete |
 | HANG-02 | Phase 8 | Complete |

@@ -2,7 +2,7 @@
  * Session repository - session persistence operations
  */
 
-import { PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Session } from '../domain/session';
 import { SessionStatus, RecordingStatus } from '../domain/session';
@@ -73,7 +73,7 @@ export async function updateSessionStatus(
   timestampField?: 'startedAt' | 'endedAt'
 ): Promise<void> {
   const { UpdateCommand } = await import('@aws-sdk/lib-dynamodb');
-  const { canTransition } = await import('../domain/session');
+  const { canTransition } = await import('../domain/session.js');
   const docClient = getDocumentClient();
 
   // First get current session to validate transition
@@ -197,4 +197,50 @@ export async function updateRecordingMetadata(
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
   }));
+}
+
+/**
+ * Get recently recorded sessions
+ * Returns sessions with recordingStatus='available' sorted by endedAt descending
+ *
+ * @param tableName DynamoDB table name
+ * @param limit Maximum number of recordings to return (default 20)
+ * @returns Array of Session objects with available recordings
+ */
+export async function getRecentRecordings(
+  tableName: string,
+  limit: number = 20
+): Promise<Session[]> {
+  const docClient = getDocumentClient();
+
+  const result = await docClient.send(new ScanCommand({
+    TableName: tableName,
+    FilterExpression: 'recordingStatus = :available AND begins_with(PK, :pk)',
+    ExpressionAttributeValues: {
+      ':available': 'available',
+      ':pk': 'SESSION#',
+    },
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return [];
+  }
+
+  // Extract session fields (remove DynamoDB keys) and filter sessions with endedAt
+  const sessions = result.Items
+    .filter(item => item.endedAt !== undefined)
+    .map(item => {
+      const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
+      return session as Session;
+    });
+
+  // Sort descending by endedAt (most recent first)
+  sessions.sort((a, b) => {
+    const aTime = new Date(a.endedAt!).getTime();
+    const bTime = new Date(b.endedAt!).getTime();
+    return bTime - aTime;
+  });
+
+  // Return limited number of recordings
+  return sessions.slice(0, limit);
 }

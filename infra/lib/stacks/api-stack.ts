@@ -241,6 +241,24 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // GET /recordings (list recently recorded sessions) - public endpoint
+    const recordings = api.root.addResource('recordings');
+
+    const listRecordingsHandler = new NodejsFunction(this, 'ListRecordingsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-recordings.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(listRecordingsHandler);
+
+    // No authorizer - public endpoint for discovery
+    recordings.addMethod('GET', new apigateway.LambdaIntegration(listRecordingsHandler));
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

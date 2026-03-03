@@ -62,110 +62,6 @@ export class SessionStack extends Stack {
       value: this.table.tableName,
     });
 
-    // Lambda function for pool replenishment
-    const replenishPoolFn = new nodejs.NodejsFunction(this, 'ReplenishPool', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/replenish-pool.ts'),
-      timeout: Duration.minutes(5), // Time to create multiple IVS resources
-      environment: {
-        TABLE_NAME: this.table.tableName,
-        MIN_CHANNELS: '3',
-        MIN_STAGES: '2',
-        MIN_ROOMS: '5',
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-
-    // Grant DynamoDB permissions
-    this.table.grantReadWriteData(replenishPoolFn);
-
-    // Grant IVS permissions
-    // Note: IVS doesn't support resource-level permissions for Create* actions
-    replenishPoolFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['ivs:CreateChannel', 'ivs:TagResource'],
-        resources: ['*'],
-      })
-    );
-
-    replenishPoolFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['ivs:CreateStage'],
-        resources: ['*'],
-      })
-    );
-
-    replenishPoolFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['ivschat:CreateRoom', 'ivschat:TagResource'],
-        resources: ['*'],
-      })
-    );
-
-    // EventBridge schedule to trigger Lambda every 5 minutes
-    new events.Rule(this, 'ReplenishPoolSchedule', {
-      schedule: events.Schedule.rate(Duration.minutes(5)),
-      targets: [new targets.LambdaFunction(replenishPoolFn)],
-      description: 'Replenish IVS resource pool every 5 minutes',
-    });
-
-    // Lambda function for stream-started events
-    const streamStartedFn = new nodejs.NodejsFunction(this, 'StreamStarted', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/stream-started.ts'),
-      timeout: Duration.seconds(30),
-      environment: {
-        TABLE_NAME: this.table.tableName,
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-
-    // Grant DynamoDB permissions
-    this.table.grantReadWriteData(streamStartedFn);
-
-    // EventBridge rule for IVS Stream Start events
-    new events.Rule(this, 'StreamStartRule', {
-      eventPattern: {
-        source: ['aws.ivs'],
-        detailType: ['IVS Stream State Change'],
-        detail: {
-          event_name: ['Stream Start'],
-        },
-      },
-      targets: [new targets.LambdaFunction(streamStartedFn)],
-      description: 'Transition session to LIVE when IVS stream starts',
-    });
-
-    // Lambda function for recording-ended events
-    const recordingEndedFn = new nodejs.NodejsFunction(this, 'RecordingEnded', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/recording-ended.ts'),
-      timeout: Duration.seconds(30),
-      environment: {
-        TABLE_NAME: this.table.tableName,
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-
-    // Grant DynamoDB permissions
-    this.table.grantReadWriteData(recordingEndedFn);
-
-    // EventBridge rule for IVS Recording End events
-    new events.Rule(this, 'RecordingEndRule', {
-      eventPattern: {
-        source: ['aws.ivs'],
-        detailType: ['IVS Recording State Change'],
-        detail: {
-          recording_status: ['Recording End'],
-        },
-      },
-      targets: [new targets.LambdaFunction(recordingEndedFn)],
-      description: 'Transition session to ENDED and release pool resources when recording ends',
-    });
-
     // ============================================================
     // Recording Infrastructure
     // ============================================================
@@ -246,7 +142,7 @@ export class SessionStack extends Stack {
       description: 'CloudFront domain for session recordings',
     });
 
-    // EventBridge rules for recording lifecycle (targets will be added in Plan 05-02)
+    // EventBridge rules for recording lifecycle
     this.recordingStartRule = new events.Rule(this, 'RecordingStartRule', {
       eventPattern: {
         source: ['aws.ivs'],
@@ -269,8 +165,137 @@ export class SessionStack extends Stack {
       description: 'Capture recording end events from IVS',
     });
 
-    // Grant S3 read access to existing Lambda functions for recording metadata
+
+    // Lambda function for pool replenishment
+    const replenishPoolFn = new nodejs.NodejsFunction(this, 'ReplenishPool', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/replenish-pool.ts'),
+      timeout: Duration.minutes(5), // Time to create multiple IVS resources
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        MIN_CHANNELS: '3',
+        MIN_STAGES: '2',
+        MIN_ROOMS: '5',
+        RECORDING_CONFIGURATION_ARN: recordingConfiguration.attrArn,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(replenishPoolFn);
+
+    // Grant IVS permissions
+    // Note: IVS doesn't support resource-level permissions for Create* actions
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:CreateChannel', 'ivs:TagResource'],
+        resources: ['*'],
+      })
+    );
+
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:CreateStage'],
+        resources: ['*'],
+      })
+    );
+
+    replenishPoolFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:CreateRoom', 'ivschat:TagResource'],
+        resources: ['*'],
+      })
+    );
+
+    // EventBridge schedule to trigger Lambda every 5 minutes
+    new events.Rule(this, 'ReplenishPoolSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(5)),
+      targets: [new targets.LambdaFunction(replenishPoolFn)],
+      description: 'Replenish IVS resource pool every 5 minutes',
+    });
+
+    // Lambda function for stream-started events
+    const streamStartedFn = new nodejs.NodejsFunction(this, 'StreamStarted', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/stream-started.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(streamStartedFn);
+
+    // EventBridge rule for IVS Stream Start events
+    new events.Rule(this, 'StreamStartRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Stream State Change'],
+        detail: {
+          event_name: ['Stream Start'],
+        },
+      },
+      targets: [new targets.LambdaFunction(streamStartedFn)],
+      description: 'Transition session to LIVE when IVS stream starts',
+    });
+
+    // Lambda function for recording-ended events
+    const recordingEndedFn = new nodejs.NodejsFunction(this, 'RecordingEnded', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/recording-ended.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(recordingEndedFn);
+
+    // EventBridge rule for IVS Recording End events (legacy, keeping for backward compatibility)
+    new events.Rule(this, 'RecordingEndRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Recording State Change'],
+        detail: {
+          recording_status: ['Recording End'],
+        },
+      },
+      targets: [new targets.LambdaFunction(recordingEndedFn)],
+      description: 'Transition session to ENDED and release pool resources when recording ends',
+    });
+
+    // Lambda handler for Recording Start events
+    const recordingStartedFn = new nodejs.NodejsFunction(this, 'RecordingStarted', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/recording-started.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions
+    this.table.grantReadWriteData(recordingStartedFn);
+
+    // Wire Lambda targets to EventBridge rules
+    this.recordingStartRule.addTarget(new targets.LambdaFunction(recordingStartedFn));
+    this.recordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn));
+
+    // Update recording-ended function with CloudFront domain
+    recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
+
+    // Grant S3 read access to Lambda functions for recording metadata
     recordingsBucket.grantRead(streamStartedFn);
     recordingsBucket.grantRead(recordingEndedFn);
+    recordingsBucket.grantRead(recordingStartedFn);
   }
 }

@@ -30,8 +30,14 @@ interface ReplenishResult {
  */
 export const handler: Handler = async (_event): Promise<ReplenishResult> => {
   const tableName = process.env.TABLE_NAME;
+  const recordingConfigArn = process.env.RECORDING_CONFIGURATION_ARN;
+
   if (!tableName) {
     throw new Error('TABLE_NAME environment variable is required');
+  }
+
+  if (!recordingConfigArn) {
+    throw new Error('RECORDING_CONFIGURATION_ARN environment variable is required');
   }
 
   const minChannels = parseInt(process.env.MIN_CHANNELS || '3', 10);
@@ -61,8 +67,8 @@ export const handler: Handler = async (_event): Promise<ReplenishResult> => {
 
   // Create resources in parallel
   await Promise.all([
-    ...Array.from({ length: channelsToCreate }, () => createChannel(tableName)),
-    ...Array.from({ length: stagesToCreate }, () => createStage(tableName)),
+    ...Array.from({ length: channelsToCreate }, () => createChannel(tableName, recordingConfigArn)),
+    ...Array.from({ length: stagesToCreate }, () => createStage(tableName, recordingConfigArn)),
     ...Array.from({ length: roomsToCreate }, () => createRoom(tableName)),
   ]);
 
@@ -106,7 +112,7 @@ async function countAvailableResources(tableName: string, resourceType: Resource
 /**
  * Create a new IVS Low-Latency channel and store in pool
  */
-async function createChannel(tableName: string): Promise<void> {
+async function createChannel(tableName: string, recordingConfigArn: string): Promise<void> {
   const ivsClient = getIVSClient();
   const docClient = getDocumentClient();
 
@@ -116,6 +122,7 @@ async function createChannel(tableName: string): Promise<void> {
         name: `vnl-pool-${uuidv4()}`,
         latencyMode: 'LOW',
         type: 'STANDARD',
+        recordingConfigurationArn: recordingConfigArn,
       })
     );
 
@@ -162,7 +169,7 @@ async function createChannel(tableName: string): Promise<void> {
 /**
  * Create a new IVS RealTime stage and store in pool
  */
-async function createStage(tableName: string): Promise<void> {
+async function createStage(tableName: string, recordingConfigArn: string): Promise<void> {
   const ivsRealTimeClient = getIVSRealTimeClient();
   const docClient = getDocumentClient();
 
@@ -170,6 +177,10 @@ async function createStage(tableName: string): Promise<void> {
     const response = await ivsRealTimeClient.send(
       new CreateStageCommand({
         name: `vnl-pool-${uuidv4()}`,
+        autoParticipantRecordingConfiguration: {
+          storageConfigurationArn: recordingConfigArn,
+          mediaTypes: ['AUDIO_VIDEO'],
+        },
       })
     );
 

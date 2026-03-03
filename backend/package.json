@@ -7,8 +7,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch"
   },
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.31.0",

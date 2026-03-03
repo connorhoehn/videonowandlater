@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 09.1-03-PLAN.md (Backend Jest ESM Gap Closure)
-last_updated: "2026-03-03T20:38:03.823Z"
+stopped_at: Completed 09.1-04-PLAN.md (Handler Test AWS Mock Coverage)
+last_updated: "2026-03-03T21:29:18.967Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
   total_phases: 6
   completed_phases: 6
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 19
+  completed_plans: 19
   percent: 100
 ---
 
@@ -82,6 +82,7 @@ Progress: [████████████] 100%
 | Phase 09.1 P01 | 2 | 3 tasks | 2 files |
 | Phase 09.1 P02 | 2 | 3 tasks | 3 files |
 | Phase 09.1 P03 | 3 | 2 tasks | 1 files |
+| Phase 09.1 P04 | 2 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: Use any[] for STAGE_PARTICIPANT_STREAMS_ADDED callback streams param — matches participant: any pattern; StageStream type not needed at call site
 - [Phase 09.1-02]: Keep both frontend and backend EmojiType as structurally identical string unions after enum-to-const fix (TypeScript duck-typing unifies them — no import changes needed in ReplayViewer.tsx)
 - [Phase 09.1]: Use NODE_OPTIONS=--experimental-vm-modules env prefix in test script (not jest.config.js or package.json type:module) — correct scope for runtime-level ESM flag without breaking CommonJS/Lambda interop
+- [Phase 09.1]: Use named constructor functions with this-assignment in jest.mock factories so constructor.name matches function name for singleton identity checks
+- [Phase 09.1]: Mock session-repository and resource-pool-repository in recording-ended tests (not just dynamodb-client) to prevent transitive AWS calls through repository layer
 
 ### Pending Todos
 
@@ -154,8 +157,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-03T20:38:03.821Z
-Stopped at: Completed 09.1-03-PLAN.md (Backend Jest ESM Gap Closure)
+Last session: 2026-03-03T21:29:18.965Z
+Stopped at: Completed 09.1-04-PLAN.md (Handler Test AWS Mock Coverage)
 Resume file: None
 
 ---

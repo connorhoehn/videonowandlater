@@ -7,6 +7,12 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../stream-started';
 
+jest.mock('../../lib/dynamodb-client', () => ({
+  getDocumentClient: jest.fn(() => ({
+    send: jest.fn().mockResolvedValue({ Items: [] }),
+  })),
+}));
+
 interface StreamStartDetail {
   event_name: 'Stream Start';
   channel_name: string;

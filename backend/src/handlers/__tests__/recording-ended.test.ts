@@ -7,6 +7,22 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../recording-ended';
 
+jest.mock('../../lib/dynamodb-client', () => ({
+  getDocumentClient: jest.fn(() => ({
+    send: jest.fn().mockResolvedValue({ Items: [] }),
+  })),
+}));
+
+jest.mock('../../repositories/session-repository', () => ({
+  updateSessionStatus: jest.fn().mockResolvedValue(undefined),
+  updateRecordingMetadata: jest.fn().mockResolvedValue(undefined),
+  findSessionByStageArn: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('../../repositories/resource-pool-repository', () => ({
+  releasePoolResource: jest.fn().mockResolvedValue(undefined),
+}));
+
 interface RecordingEndDetail {
   channel_name: string;
   stream_id: string;

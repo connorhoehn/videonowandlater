@@ -23,6 +23,16 @@ export enum SessionType {
 }
 
 /**
+ * Recording status enum - represents the lifecycle of session recordings
+ */
+export enum RecordingStatus {
+  PENDING = 'pending',      // Session created but recording not started
+  PROCESSING = 'processing', // Recording in progress or finalizing
+  AVAILABLE = 'available',   // Recording complete and ready
+  FAILED = 'failed',        // Recording encountered an error
+}
+
+/**
  * Resources claimed by a session
  */
 export interface ClaimedResources {
@@ -45,6 +55,12 @@ export interface Session {
   startedAt?: string;
   endedAt?: string;
   version: number;
+  // Recording metadata fields (populated when recording lifecycle events occur)
+  recordingS3Path?: string;
+  recordingDuration?: number;
+  thumbnailUrl?: string;
+  recordingHlsUrl?: string;
+  recordingStatus?: RecordingStatus;
 }
 
 /**

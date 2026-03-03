@@ -5,6 +5,10 @@ import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as ivs from 'aws-cdk-lib/aws-ivs';
 import * as path from 'path';
 import { Construct } from 'constructs';
 
@@ -17,6 +21,8 @@ import { Construct } from 'constructs';
  */
 export class SessionStack extends Stack {
   public readonly table: dynamodb.Table;
+  public readonly recordingStartRule: events.Rule;
+  public readonly recordingEndRule: events.Rule;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -159,5 +165,112 @@ export class SessionStack extends Stack {
       targets: [new targets.LambdaFunction(recordingEndedFn)],
       description: 'Transition session to ENDED and release pool resources when recording ends',
     });
+
+    // ============================================================
+    // Recording Infrastructure
+    // ============================================================
+
+    // S3 bucket for session recordings
+    const recordingsBucket = new s3.Bucket(this, 'RecordingsBucket', {
+      bucketName: `vnl-recordings-${this.stackName.toLowerCase()}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    // CloudFront Origin Access Control for S3
+    const oac = new cloudfront.CfnOriginAccessControl(this, 'RecordingsOAC', {
+      originAccessControlConfig: {
+        name: 'vnl-recordings-oac',
+        originAccessControlOriginType: 's3',
+        signingBehavior: 'always',
+        signingProtocol: 'sigv4',
+      },
+    });
+
+    // CloudFront distribution for secure recording playback
+    const distribution = new cloudfront.Distribution(this, 'RecordingsDistribution', {
+      defaultBehavior: {
+        origin: new origins.S3Origin(recordingsBucket, {
+          originAccessControlId: oac.attrId,
+        }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      comment: 'CloudFront distribution for VNL session recordings',
+    });
+
+    // Grant CloudFront access to S3 bucket
+    recordingsBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`${recordingsBucket.bucketArn}/*`],
+        principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+        conditions: {
+          StringEquals: {
+            'AWS:SourceArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+          },
+        },
+      })
+    );
+
+    // IVS Recording Configuration (L1 constructs)
+    const recordingConfiguration = new ivs.CfnRecordingConfiguration(this, 'RecordingConfiguration', {
+      destinationConfiguration: {
+        s3: {
+          bucketName: recordingsBucket.bucketName,
+        },
+      },
+      thumbnailConfiguration: {
+        recordingMode: 'INTERVAL',
+        targetIntervalSeconds: 10,
+        resolution: 'HD',
+      },
+      renditionConfiguration: {
+        renditions: ['HD', 'SD', 'LOWEST_RESOLUTION'],
+      },
+      name: 'vnl-recording-config',
+    });
+
+    // Export RecordingConfiguration ARN and CloudFront domain
+    new CfnOutput(this, 'RecordingConfigArn', {
+      value: recordingConfiguration.attrArn,
+      exportName: 'vnl-recording-config-arn',
+      description: 'ARN of IVS RecordingConfiguration',
+    });
+
+    new CfnOutput(this, 'RecordingsDomain', {
+      value: distribution.distributionDomainName,
+      exportName: 'vnl-recordings-domain',
+      description: 'CloudFront domain for session recordings',
+    });
+
+    // EventBridge rules for recording lifecycle (targets will be added in Plan 05-02)
+    this.recordingStartRule = new events.Rule(this, 'RecordingStartRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Recording State Change'],
+        detail: {
+          event_name: ['Recording Start'],
+        },
+      },
+      description: 'Capture recording start events from IVS',
+    });
+
+    this.recordingEndRule = new events.Rule(this, 'RecordingEndRuleV2', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Recording State Change'],
+        detail: {
+          event_name: ['Recording End'],
+        },
+      },
+      description: 'Capture recording end events from IVS',
+    });
+
+    // Grant S3 read access to existing Lambda functions for recording metadata
+    recordingsBucket.grantRead(streamStartedFn);
+    recordingsBucket.grantRead(recordingEndedFn);
   }
 }

@@ -163,7 +163,7 @@ export class ApiStack extends Stack {
 
     // Grant IVS GetStream permission
     getViewerCountHandler.addToRolePolicy(
-      new apigateway.aws_iam.PolicyStatement({
+      new iam.PolicyStatement({
         actions: ['ivs:GetStream'],
         resources: ['*'],
       })

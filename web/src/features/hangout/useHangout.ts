@@ -98,7 +98,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
 
         stageInstance.on(
           StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
-          (participant: any, streams: MediaStream[]) => {
+          (participant: any, streams: any[]) => {
             if (!mounted) return;
             console.log('Participant streams changed:', participant, streams);
             setParticipants((prev) =>

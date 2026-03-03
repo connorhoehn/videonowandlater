@@ -7,6 +7,12 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../start-broadcast';
 
+jest.mock('../../lib/dynamodb-client', () => ({
+  getDocumentClient: jest.fn(() => ({
+    send: jest.fn().mockResolvedValue({}),
+  })),
+}));
+
 describe('start-broadcast handler', () => {
   const originalEnv = process.env;
   const mockContext = {} as any;

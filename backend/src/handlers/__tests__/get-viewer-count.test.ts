@@ -7,6 +7,18 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../get-viewer-count';
 
+jest.mock('../../lib/dynamodb-client', () => ({
+  getDocumentClient: jest.fn(() => ({
+    send: jest.fn().mockResolvedValue({}),
+  })),
+}));
+
+jest.mock('../../lib/ivs-clients', () => ({
+  getIVSClient: jest.fn(() => ({ send: jest.fn().mockResolvedValue({}) })),
+  getIVSRealTimeClient: jest.fn(() => ({ send: jest.fn().mockResolvedValue({}) })),
+  getIVSChatClient: jest.fn(() => ({ send: jest.fn().mockResolvedValue({}) })),
+}));
+
 describe('get-viewer-count handler', () => {
   const originalEnv = process.env;
   const mockContext = {} as any;

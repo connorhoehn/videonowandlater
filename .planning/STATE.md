@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: unknown
-last_updated: "2026-03-03T01:06:38.747Z"
+last_updated: "2026-03-03T02:01:17.139Z"
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 18
+  completed_plans: 16
 ---
 
 # Project State
@@ -22,34 +22,36 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 
 ## Current Position
 
-Phase: 5 of 9 (Recording Foundation)
-Plan: 2 of 2 in current phase
+Phase: 6 of 9 (Replay Viewer)
+Plan: 1 of 2 in current phase
 Status: Executing plans
-Last activity: 2026-03-03 — Completed 05-02-PLAN.md (Recording Lifecycle Handlers)
+Last activity: 2026-03-03 — Completed 06-01-PLAN.md (Recording Discovery Feed)
 
 Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v1.1 milestone)
+- Total plans completed: 3 (v1.1 milestone)
 - Average duration: 4 minutes
-- Total execution time: 0.15 hours
+- Total execution time: 0.20 hours
 
 **By Milestone:**
 
 | Milestone | Plans | Total | Avg/Plan |
 |-----------|-------|-------|----------|
 | v1.0 Gap Closure | 13 | 1.0 hrs | 4 min |
-| v1.1 (current) | 2 | 0.15 hrs | 4 min |
+| v1.1 (current) | 3 | 0.20 hrs | 4 min |
 
 **Recent Trend:**
 - 05-01: 5 minutes (Recording Infrastructure & Domain)
 - 05-02: 4 minutes (Recording Lifecycle Handlers)
-- Average holding steady at ~4 min/plan
+- 06-01: 3 minutes (Recording Discovery Feed)
+- Average trending down to ~3-4 min/plan
 
 *Updated after each plan completion*
 | Phase 05-recording-foundation P02 | 4 | 3 tasks | 5 files |
+| Phase 06 P01 | 3 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -68,6 +70,9 @@ Recent decisions affecting current work:
 - 05-01: EventBridge rules created without targets — handlers wired in Plan 05-02
 - [Phase 05-recording-foundation]: Best-effort recording metadata updates - failures logged but don't block session transitions
 - [Phase 05-recording-foundation]: RecordingConfiguration attached at pool creation - all new resources are recording-ready
+- 06-01: Public /recordings endpoint with no auth — maximizes content discoverability for v1.1
+- 06-01: DynamoDB scan for recordings — acceptable for small dataset, can optimize with GSI later
+- 06-01: Simple userId display as broadcaster name — user profiles deferred to future milestone
 
 ### Pending Todos
 
@@ -86,9 +91,9 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 05-01-PLAN.md (Recording Infrastructure & Domain)
+Stopped at: Completed 06-01-PLAN.md (Recording Discovery Feed)
 Resume file: None
 
 ---
 *State initialized: 2026-03-02*
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-03*

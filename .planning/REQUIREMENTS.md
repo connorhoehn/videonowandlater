@@ -20,9 +20,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Replay Viewer
 
-- [ ] **REPLAY-01**: Home feed displays recently streamed videos in chronological order
-- [ ] **REPLAY-02**: Home feed shows thumbnail, title, duration, broadcaster name for each recording
-- [ ] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
+- [x] **REPLAY-01**: Home feed displays recently streamed videos in chronological order
+- [x] **REPLAY-02**: Home feed shows thumbnail, title, duration, broadcaster name for each recording
+- [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
 - [ ] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
 - [ ] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
 - [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
@@ -134,9 +134,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REC-06 | Phase 5 | Complete |
 | REC-07 | Phase 5 | Pending |
 | REC-08 | Phase 5 | Complete |
-| REPLAY-01 | Phase 6 | Pending |
-| REPLAY-02 | Phase 6 | Pending |
-| REPLAY-03 | Phase 6 | Pending |
+| REPLAY-01 | Phase 6 | Complete |
+| REPLAY-02 | Phase 6 | Complete |
+| REPLAY-03 | Phase 6 | Complete |
 | REPLAY-04 | Phase 6 | Pending |
 | REPLAY-05 | Phase 6 | Pending |
 | REPLAY-06 | Phase 6 | Pending |

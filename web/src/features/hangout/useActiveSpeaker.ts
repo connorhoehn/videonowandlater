@@ -26,7 +26,7 @@ export function useActiveSpeaker({
   useEffect(() => {
     const audioContextMap = new Map<string, AudioContext>();
     const analyserMap = new Map<string, AnalyserNode>();
-    let intervalId: NodeJS.Timeout;
+    let intervalId: ReturnType<typeof setInterval>;
 
     // Set up audio analyzers for each participant with audio tracks
     participants.forEach((participant) => {

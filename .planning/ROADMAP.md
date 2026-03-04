@@ -124,7 +124,11 @@ Plans:
   1. Replay viewer shows chat messages synchronized to video playback (ReplayChat.tsx fetches correct API path)
   2. Local participant in hangout displays correct username, not "undefined (You)"
   3. `recording-ended` Lambda is invoked exactly once per IVS Recording End event (legacy rule removed)
-**Plans**: 0 plans
+**Plans**: 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — ReplayChat path+auth fix and join-hangout userId fix (REPLAY-06, REPLAY-07, HANG-01)
+- [ ] 10-02-PLAN.md — Remove legacy RecordingEndRule from session-stack.ts (EventBridge dedup)
 
 ### Phase 11: Hangout Recording Lifecycle Fix
 **Goal**: Fix Stage ARN detection in recording-ended handler so hangout composite recordings get metadata written and appear in the home feed alongside broadcasts
@@ -180,7 +184,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
-| 10. Integration Wiring Fixes | v1.1 | 0/0 | Pending | - |
+| 10. Integration Wiring Fixes | v1.1 | 0/2 | Pending | - |
 | 11. Hangout Recording Lifecycle Fix | v1.1 | 0/0 | Pending | - |
 | 12. Hangout Creation UI | v1.1 | 0/0 | Pending | - |
 

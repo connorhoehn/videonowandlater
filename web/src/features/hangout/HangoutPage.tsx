@@ -5,16 +5,25 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { useHangout } from './useHangout';
 import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
 import { ChatPanel } from '../chat/ChatPanel';
+import { ChatRoomProvider } from '../chat/ChatRoomProvider';
+import { useChatRoom } from '../chat/useChatRoom';
 import { getConfig } from '../../config/aws-config';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const authToken = localStorage.getItem('token') || '';
+  const [authToken, setAuthToken] = useState('');
+
+  React.useEffect(() => {
+    fetchAuthSession().then(session => {
+      setAuthToken(session.tokens?.idToken?.toString() || '');
+    });
+  }, []);
 
   // Get userId from localStorage (set during auth)
   const [userId, setUserId] = useState<string>('');
@@ -49,6 +58,7 @@ export function HangoutPage() {
   });
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
+  const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId: sessionId || '', authToken });
 
   // Merge activeSpeakerId into participants array
   const participantsWithSpeaking = useMemo(
@@ -90,6 +100,7 @@ export function HangoutPage() {
   }
 
   return (
+    <ChatRoomProvider value={room}>
     <div className="h-screen flex flex-col">
       {/* Header */}
       <div className="bg-gray-800 text-white p-4 flex justify-between items-center">
@@ -164,6 +175,7 @@ export function HangoutPage() {
                 authToken={authToken}
                 isMobile={false}
                 isOpen={true}
+                connectionState={chatConnectionState}
               />
             </div>
           )}
@@ -178,6 +190,7 @@ export function HangoutPage() {
           authToken={authToken}
           isMobile={true}
           isOpen={isChatOpen}
+          connectionState={chatConnectionState}
           onClose={() => setIsChatOpen(false)}
         />
       )}
@@ -185,5 +198,6 @@ export function HangoutPage() {
       {/* Local video preview (hidden - used by useHangout) */}
       <video ref={localVideoRef} style={{ display: 'none' }} autoPlay muted />
     </div>
+    </ChatRoomProvider>
   );
 }

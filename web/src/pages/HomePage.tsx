@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
 import { RecordingFeed, type Recording } from '../features/replay/RecordingFeed';
@@ -8,6 +9,7 @@ export function HomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [error, setError] = useState('');
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loadingRecordings, setLoadingRecordings] = useState(true);
@@ -55,13 +57,15 @@ export function HomePage() {
     setError(''); // Clear previous errors per user decision
 
     try {
-      const authToken = localStorage.getItem('token') || '';
+      const session = await fetchAuthSession();
+      const authToken = session.tokens?.idToken?.toString() || '';
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ sessionType: 'BROADCAST' }),
       });
 
       if (!response.ok) {
@@ -78,6 +82,44 @@ export function HomePage() {
       setError('Failed to create session. Try again.'); // Exact wording per user decision
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleCreateHangout = async () => {
+    const config = getConfig();
+    if (!config?.apiUrl) {
+      setError('Configuration not loaded');
+      return;
+    }
+
+    setIsCreatingHangout(true);
+    setError('');
+
+    try {
+      const session = await fetchAuthSession();
+      const authToken = session.tokens?.idToken?.toString() || '';
+      const response = await fetch(`${config.apiUrl}/sessions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionType: 'HANGOUT' }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const sessionData = await response.json();
+
+      navigate(`/hangout/${sessionData.sessionId}`, {
+        state: { session: sessionData }
+      });
+    } catch (err) {
+      setError('Failed to create session. Try again.');
+    } finally {
+      setIsCreatingHangout(false);
     }
   };
 
@@ -107,23 +149,41 @@ export function HomePage() {
         }}>
           <h1 style={{ marginBottom: '1rem' }}>Welcome, {user?.username}!</h1>
 
-          <button
-            onClick={handleCreateBroadcast}
-            disabled={isCreating}
-            style={{
-              padding: '0.75rem 2rem',
-              backgroundColor: isCreating ? '#9e9e9e' : '#1976d2', // Blue for primary action
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '1rem',
-              fontWeight: 500,
-              cursor: isCreating ? 'not-allowed' : 'pointer',
-              marginBottom: '1rem',
-            }}
-          >
-            {isCreating ? 'Creating...' : 'Create Broadcast'}
-          </button>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '1rem' }}>
+            <button
+              onClick={handleCreateBroadcast}
+              disabled={isCreating || isCreatingHangout}
+              style={{
+                padding: '0.75rem 2rem',
+                backgroundColor: isCreating ? '#9e9e9e' : '#1976d2',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '1rem',
+                fontWeight: 500,
+                cursor: (isCreating || isCreatingHangout) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isCreating ? 'Creating...' : 'Go Live'}
+            </button>
+
+            <button
+              onClick={handleCreateHangout}
+              disabled={isCreating || isCreatingHangout}
+              style={{
+                padding: '0.75rem 2rem',
+                backgroundColor: isCreatingHangout ? '#9e9e9e' : '#7b1fa2',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '1rem',
+                fontWeight: 500,
+                cursor: (isCreating || isCreatingHangout) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isCreatingHangout ? 'Creating...' : 'Start Hangout'}
+            </button>
+          </div>
 
           {error && (
             <p style={{ color: '#d32f2f', fontSize: '0.875rem', marginBottom: '1rem' }}>

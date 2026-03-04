@@ -1,6 +1,7 @@
 /**
  * EventBridge handler for IVS Recording End events
- * Transitions session from ENDING to ENDED and releases pool resources
+ * Handles both IVS Low-Latency (broadcast) and IVS RealTime Stage (hangout) recording-end events.
+ * Transitions session from ENDING to ENDED and releases pool resources.
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
@@ -14,8 +15,8 @@ import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus } from '../domain/session';
 import type { Session } from '../domain/session';
 
-interface RecordingEndDetail {
-  channel_name: string;
+interface BroadcastRecordingEndDetail {
+  channel_name: string;          // Human-readable channel name (NOT the ARN)
   stream_id: string;
   recording_status: 'Recording End' | 'Recording End Failure';
   recording_s3_bucket_name: string;
@@ -23,12 +24,21 @@ interface RecordingEndDetail {
   recording_duration_ms: number;
 }
 
+interface StageParticipantRecordingEndDetail {
+  session_id: string;
+  event_name: 'Recording End';
+  participant_id: string;
+  recording_s3_bucket_name: string;
+  recording_s3_key_prefix: string;
+  recording_duration_ms: number;
+}
+
 export const handler = async (
-  event: EventBridgeEvent<'IVS Recording State Change', RecordingEndDetail>
+  event: EventBridgeEvent<string, Record<string, any>>
 ): Promise<void> => {
   const tableName = process.env.TABLE_NAME!;
   const cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN!;
-  const resourceArn = event.detail.channel_name;
+  const resourceArn = event.resources[0];
 
   console.log('Recording End event received for resource:', resourceArn);
 
@@ -88,9 +98,23 @@ export const handler = async (
     // Update recording metadata
     try {
       const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
-      const recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/master.m3u8`;
-      const thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/thumb-0.jpg`;
-      const finalStatus = event.detail.recording_status === 'Recording End' ? 'available' : 'failed';
+      let recordingHlsUrl: string;
+      let thumbnailUrl: string;
+
+      if (resourceType === 'channel') {
+        // IVS Low-Latency broadcast recording structure
+        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/master.m3u8`;
+        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/thumb-0.jpg`;
+      } else {
+        // IVS RealTime Stage participant recording structure
+        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/multivariant.m3u8`;
+        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/latest_thumbnail/high/thumb.jpg`;
+      }
+
+      // recording_status field only exists on broadcast events; Stage "Recording End" events are always successful
+      const finalStatus = event.detail.recording_status === 'Recording End Failure'
+        ? 'failed'
+        : 'available';
 
       await updateRecordingMetadata(tableName, sessionId, {
         recordingDuration: event.detail.recording_duration_ms,

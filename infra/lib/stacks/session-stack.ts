@@ -91,16 +91,6 @@ export class SessionStack extends Stack {
       autoDeleteObjects: true,
     });
 
-    // CloudFront Origin Access Control for S3
-    const oac = new cloudfront.CfnOriginAccessControl(this, 'RecordingsOAC', {
-      originAccessControlConfig: {
-        name: 'vnl-recordings-oac',
-        originAccessControlOriginType: 's3',
-        signingBehavior: 'always',
-        signingProtocol: 'sigv4',
-      },
-    });
-
     // CloudFront CORS policy for HLS playback
     const recordingsCorsPolicy = new cloudfront.ResponseHeadersPolicy(this, 'RecordingsCorsPolicy', {
       corsBehavior: {
@@ -117,9 +107,7 @@ export class SessionStack extends Stack {
     // CloudFront distribution for secure recording playback
     const distribution = new cloudfront.Distribution(this, 'RecordingsDistribution', {
       defaultBehavior: {
-        origin: new origins.S3Origin(recordingsBucket, {
-          originAccessControlId: oac.attrId,
-        }),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(recordingsBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         responseHeadersPolicy: recordingsCorsPolicy,
@@ -306,6 +294,19 @@ export class SessionStack extends Stack {
     // Wire Lambda targets to EventBridge rules
     this.recordingStartRule.addTarget(new targets.LambdaFunction(recordingStartedFn));
     this.recordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn));
+
+    // EventBridge rule for IVS RealTime Stage participant recording end events (hangouts)
+    const stageRecordingEndRule = new events.Rule(this, 'StageRecordingEndRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Participant Recording State Change'],
+        detail: {
+          event_name: ['Recording End'],
+        },
+      },
+      description: 'Capture IVS RealTime participant recording end events for hangout sessions',
+    });
+    stageRecordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn));
 
     // Update recording-ended function with CloudFront domain
     recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);

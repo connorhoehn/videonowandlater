@@ -139,7 +139,10 @@ Plans:
   1. IVS RealTime Stage Recording End EventBridge event is correctly parsed (correct field used for ARN)
   2. Hangout sessions have recordingStatus='available' after recording completes
   3. Hangout recordings appear in home feed alongside broadcast recordings
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 11-01-PLAN.md — Fix Stage ARN detection, EventBridge rule, S3 paths, and recording-ended tests (HANG-14, HANG-15, HANG-16)
 
 ### Phase 12: Hangout Creation UI
 **Goal**: Users can create a hangout session directly from the home page without knowing a direct URL
@@ -185,7 +188,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
 | 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
-| 11. Hangout Recording Lifecycle Fix | v1.1 | 0/0 | Pending | - |
+| 11. Hangout Recording Lifecycle Fix | v1.1 | 0/1 | Pending | - |
 | 12. Hangout Creation UI | v1.1 | 0/0 | Pending | - |
 
 ---

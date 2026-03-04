@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 10-01-PLAN.md (Integration Wiring Fixes)
-last_updated: "2026-03-04T02:13:13.792Z"
+stopped_at: Completed 10-02-PLAN.md (Remove Legacy RecordingEndRule)
+last_updated: "2026-03-04T02:13:38.391Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
   percent: 100
 ---
 
@@ -84,6 +84,7 @@ Progress: [████████████] 100%
 | Phase 09.1 P03 | 3 | 2 tasks | 1 files |
 | Phase 09.1 P04 | 2 | 3 tasks | 6 files |
 | Phase 10 P01 | 1 | 2 tasks | 3 files |
+| Phase 10-integration-wiring-fixes P02 | 2 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: Mock session-repository and resource-pool-repository in recording-ended tests (not just dynamodb-client) to prevent transitive AWS calls through repository layer
 - [Phase 10]: No architectural changes required — both integration bugs fixed with surgical one-line/one-field edits; authToken already in scope in ReplayViewer from localStorage
 - [Phase 10]: Pass authToken as explicit prop from parent (ReplayViewer) to child data-fetching component (ReplayChat) — clear data flow pattern
+- [Phase 10-integration-wiring-fixes]: Remove legacy RecordingEndRule entirely — backward compatibility comment was misleading; rule was causing harm via duplicate Lambda invocations
+- [Phase 10-integration-wiring-fixes]: cdk deploy VNL-Session required in live AWS environment to apply rule deletion; CloudFormation will delete the EventBridge resource on next deploy
 
 ### Pending Todos
 
@@ -160,8 +163,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T02:13:13.790Z
-Stopped at: Completed 10-01-PLAN.md (Integration Wiring Fixes)
+Last session: 2026-03-04T02:13:38.389Z
+Stopped at: Completed 10-02-PLAN.md (Remove Legacy RecordingEndRule)
 Resume file: None
 
 ---

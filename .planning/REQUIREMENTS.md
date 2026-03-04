@@ -25,8 +25,8 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
 - [x] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
 - [x] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
-- [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
-- [ ] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
+- [x] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
+- [x] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
 - [x] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
 - [x] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
 
@@ -45,7 +45,7 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Hangouts (RealTime)
 
-- [ ] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
+- [x] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
 - [ ] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
 - [x] **HANG-03**: Participant tokens generated server-side via CreateParticipantTokenCommand
 - [x] **HANG-04**: Participant tokens include capabilities (PUBLISH, SUBSCRIBE), user_id, 12-hour TTL
@@ -139,8 +139,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPLAY-03 | Phase 6 | Complete |
 | REPLAY-04 | Phase 6 | Complete |
 | REPLAY-05 | Phase 6 | Complete |
-| REPLAY-06 | Phase 10 | Pending |
-| REPLAY-07 | Phase 10 | Pending |
+| REPLAY-06 | Phase 10 | Complete |
+| REPLAY-07 | Phase 10 | Complete |
 | REPLAY-08 | Phase 6 | Complete |
 | REPLAY-09 | Phase 6 | Complete |
 | REACT-01 | Phase 7 | Complete |
@@ -153,7 +153,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-08 | Phase 7 | Complete |
 | REACT-09 | Phase 7 | Complete |
 | REACT-10 | Phase 7 | Complete |
-| HANG-01 | Phase 10 | Pending |
+| HANG-01 | Phase 10 | Complete |
 | HANG-02 | Phase 12 | Pending |
 | HANG-03 | Phase 8 | Complete |
 | HANG-04 | Phase 8 | Complete |

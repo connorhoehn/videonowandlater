@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 09.1-04-PLAN.md (Handler Test AWS Mock Coverage)
-last_updated: "2026-03-03T21:32:57.663Z"
+stopped_at: Completed 10-01-PLAN.md (Integration Wiring Fixes)
+last_updated: "2026-03-04T02:13:13.792Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
-  total_phases: 6
+  total_phases: 9
   completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 21
+  completed_plans: 20
   percent: 100
 ---
 
@@ -83,6 +83,7 @@ Progress: [████████████] 100%
 | Phase 09.1 P02 | 2 | 3 tasks | 3 files |
 | Phase 09.1 P03 | 3 | 2 tasks | 1 files |
 | Phase 09.1 P04 | 2 | 3 tasks | 6 files |
+| Phase 10 P01 | 1 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: Use NODE_OPTIONS=--experimental-vm-modules env prefix in test script (not jest.config.js or package.json type:module) — correct scope for runtime-level ESM flag without breaking CommonJS/Lambda interop
 - [Phase 09.1]: Use named constructor functions with this-assignment in jest.mock factories so constructor.name matches function name for singleton identity checks
 - [Phase 09.1]: Mock session-repository and resource-pool-repository in recording-ended tests (not just dynamodb-client) to prevent transitive AWS calls through repository layer
+- [Phase 10]: No architectural changes required — both integration bugs fixed with surgical one-line/one-field edits; authToken already in scope in ReplayViewer from localStorage
+- [Phase 10]: Pass authToken as explicit prop from parent (ReplayViewer) to child data-fetching component (ReplayChat) — clear data flow pattern
 
 ### Pending Todos
 
@@ -157,8 +160,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-03T21:29:18.965Z
-Stopped at: Completed 09.1-04-PLAN.md (Handler Test AWS Mock Coverage)
+Last session: 2026-03-04T02:13:13.790Z
+Stopped at: Completed 10-01-PLAN.md (Integration Wiring Fixes)
 Resume file: None
 
 ---

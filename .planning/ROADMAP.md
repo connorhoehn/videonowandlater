@@ -184,7 +184,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
-| 10. Integration Wiring Fixes | v1.1 | 0/2 | Pending | - |
+| 10. Integration Wiring Fixes | 1/2 | In Progress|  | - |
 | 11. Hangout Recording Lifecycle Fix | v1.1 | 0/0 | Pending | - |
 | 12. Hangout Creation UI | v1.1 | 0/0 | Pending | - |
 

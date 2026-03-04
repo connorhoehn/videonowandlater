@@ -152,7 +152,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. HomePage has a "Start Hangout" button alongside the existing "Go Live" broadcast button
   2. Clicking "Start Hangout" calls POST /sessions with sessionType HANGOUT and navigates to /hangout/:id
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 12-01-PLAN.md — Add Start Hangout button and handleCreateHangout handler to HomePage.tsx (HANG-02)
 
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
@@ -189,8 +192,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
 | 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Hangout Recording Lifecycle Fix | 1/1 | Complete   | 2026-03-04 | - |
-| 12. Hangout Creation UI | v1.1 | 0/0 | Pending | - |
+| 12. Hangout Creation UI | v1.1 | 0/1 | Pending | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-03*
+*Last updated: 2026-03-04*

@@ -58,9 +58,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **HANG-11**: Active speaker detection uses Web Audio API for client-side audio level monitoring
 - [x] **HANG-12**: Participant join/leave notifications display in hangout UI
 - [x] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
-- [ ] **HANG-14**: Hangout sessions record via server-side composition to S3
-- [ ] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
-- [ ] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
+- [x] **HANG-14**: Hangout sessions record via server-side composition to S3
+- [x] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
+- [x] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
 
 ### Developer CLI
 
@@ -166,9 +166,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HANG-11 | Phase 8 | Complete |
 | HANG-12 | Phase 8 | Complete |
 | HANG-13 | Phase 8 | Complete |
-| HANG-14 | Phase 11 | Pending |
-| HANG-15 | Phase 11 | Pending |
-| HANG-16 | Phase 11 | Pending |
+| HANG-14 | Phase 11 | Complete |
+| HANG-15 | Phase 11 | Complete |
+| HANG-16 | Phase 11 | Complete |
 | DEV-03 | Phase 9 | Complete |
 | DEV-04 | Phase 9 | Complete |
 | DEV-05 | Phase 9 | Complete |

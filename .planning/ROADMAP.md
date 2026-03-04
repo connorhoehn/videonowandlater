@@ -157,6 +157,29 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — Add Start Hangout button and handleCreateHangout handler to HomePage.tsx (HANG-02)
 
+### Phase 13: Replay Viewer Integration Fixes
+**Goal**: Fix auth headers and time-domain mismatch in the replay viewer so video loads, chat messages display, and chat/reaction timelines synchronize correctly with playback position
+**Depends on**: Phase 12
+**Gap Closure**: Closes REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09 gaps from v1.1 audit
+**Requirements**: REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09
+**Success Criteria** (what must be TRUE):
+  1. Replay viewer loads session and begins playing HLS video (GET /sessions/:id includes Authorization header)
+  2. Chat messages appear in replay and scroll as video plays (authToken in ReplayChat useEffect deps; fetch gated on token ready)
+  3. Chat messages visible at correct video positions — messages at 2:00 not visible at 0:30 (sessionRelativeTime compared against syncTime - session.startedAt, not raw UTC ms)
+  4. Reaction timeline markers appear at correct positions and advance with video playback (same fix as chat sync)
+  5. Reaction timeline populates with existing reactions (GET /sessions/:id/reactions includes Authorization header)
+**Plans**: 0 plans
+
+### Phase 14: Data Quality & Hangout Identity Polish
+**Goal**: Home feed shows only playable recordings, and hangout participants display their real Cognito username in chat
+**Depends on**: Phase 13
+**Gap Closure**: Closes REPLAY-01, HANG-13 gaps from v1.1 audit
+**Requirements**: REPLAY-01, HANG-13
+**Success Criteria** (what must be TRUE):
+  1. Home feed contains only recordings with recordingStatus='available' — no "Awaiting recording..." permanent stubs
+  2. Hangout participants display their authenticated username in chat (same identity as join-hangout token)
+**Plans**: 0 plans
+
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
 **Depends on**: Phase 9
@@ -193,6 +216,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Hangout Recording Lifecycle Fix | 1/1 | Complete    | 2026-03-04 | - |
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
+| 13. Replay Viewer Integration Fixes | v1.1 | 0/0 | Pending    | - |
+| 14. Data Quality & Hangout Identity Polish | v1.1 | 0/0 | Pending    | - |
 
 ---
 *Roadmap created: 2026-03-02*

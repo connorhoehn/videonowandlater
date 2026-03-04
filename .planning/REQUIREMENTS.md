@@ -20,15 +20,15 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Replay Viewer
 
-- [x] **REPLAY-01**: Home feed displays recently streamed videos in chronological order
+- [ ] **REPLAY-01**: Home feed displays recently streamed videos in chronological order
 - [x] **REPLAY-02**: Home feed shows thumbnail, title, duration, broadcaster name for each recording
 - [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
-- [x] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
+- [ ] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
 - [x] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
-- [x] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
-- [x] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
+- [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
+- [ ] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
 - [x] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
-- [x] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
+- [ ] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
 
 ### Reactions
 
@@ -40,7 +40,7 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REACT-06**: Reaction writes sharded across partitions to handle viral spikes (500+ concurrent users)
 - [x] **REACT-07**: Users can send emoji reactions during replay viewing
 - [x] **REACT-08**: Replay reactions stored with video timestamp and distinguished from live reactions
-- [x] **REACT-09**: Replay viewer displays reaction timeline synchronized to video playback position
+- [ ] **REACT-09**: Replay viewer displays reaction timeline synchronized to video playback position
 - [x] **REACT-10**: Lambda API endpoints for creating and querying reactions (live + replay)
 
 ### Hangouts (RealTime)
@@ -57,7 +57,7 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **HANG-10**: Active speaker visual indicator highlights current speaker's video tile
 - [x] **HANG-11**: Active speaker detection uses Web Audio API for client-side audio level monitoring
 - [x] **HANG-12**: Participant join/leave notifications display in hangout UI
-- [x] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
+- [ ] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
 - [x] **HANG-14**: Hangout sessions record via server-side composition to S3
 - [x] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
 - [x] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
@@ -134,15 +134,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REC-06 | Phase 5 | Complete |
 | REC-07 | Phase 5 | Pending |
 | REC-08 | Phase 5 | Complete |
-| REPLAY-01 | Phase 6 | Complete |
+| REPLAY-01 | Phase 14 | Pending |
 | REPLAY-02 | Phase 6 | Complete |
 | REPLAY-03 | Phase 6 | Complete |
-| REPLAY-04 | Phase 6 | Complete |
+| REPLAY-04 | Phase 13 | Pending |
 | REPLAY-05 | Phase 6 | Complete |
-| REPLAY-06 | Phase 10 | Complete |
-| REPLAY-07 | Phase 10 | Complete |
+| REPLAY-06 | Phase 13 | Pending |
+| REPLAY-07 | Phase 13 | Pending |
 | REPLAY-08 | Phase 6 | Complete |
-| REPLAY-09 | Phase 6 | Complete |
+| REPLAY-09 | Phase 13 | Pending |
 | REACT-01 | Phase 7 | Complete |
 | REACT-02 | Phase 7 | Complete |
 | REACT-03 | Phase 7 | Complete |
@@ -151,7 +151,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-06 | Phase 7 | Complete |
 | REACT-07 | Phase 7 | Complete |
 | REACT-08 | Phase 7 | Complete |
-| REACT-09 | Phase 7 | Complete |
+| REACT-09 | Phase 13 | Pending |
 | REACT-10 | Phase 7 | Complete |
 | HANG-01 | Phase 10 | Complete |
 | HANG-02 | Phase 12 | Complete |
@@ -165,7 +165,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HANG-10 | Phase 8 | Complete |
 | HANG-11 | Phase 8 | Complete |
 | HANG-12 | Phase 8 | Complete |
-| HANG-13 | Phase 8 | Complete |
+| HANG-13 | Phase 14 | Pending |
 | HANG-14 | Phase 11 | Complete |
 | HANG-15 | Phase 11 | Complete |
 | HANG-16 | Phase 11 | Complete |
@@ -181,6 +181,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 - v1.1 requirements: 50 total
 - Mapped to phases: 50/50 (100%)
 - Unmapped: 0
+- Pending (gap closure): 7 (REPLAY-01, REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09, HANG-13)
 
 ---
 *Requirements defined: 2026-03-02*

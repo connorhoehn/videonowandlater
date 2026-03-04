@@ -97,6 +97,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         token: response.participantToken.token,
         participantId: response.participantToken.participantId,
         expirationTime: response.participantToken.expirationTime?.toISOString(),
+        userId: username,
       }),
     };
   } catch (error) {

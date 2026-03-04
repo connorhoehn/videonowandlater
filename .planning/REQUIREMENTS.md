@@ -25,8 +25,8 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **REPLAY-03**: User can click thumbnail to navigate to replay viewer page
 - [x] **REPLAY-04**: Replay viewer plays HLS video from CloudFront using react-player
 - [x] **REPLAY-05**: Replay viewer shows video playback controls (play/pause, seek, volume, fullscreen)
-- [x] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
-- [x] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
+- [ ] **REPLAY-06**: Chat messages display alongside replay video in synchronized timeline
+- [ ] **REPLAY-07**: Chat auto-scrolls as video plays, matching video.currentTime to message timestamps
 - [x] **REPLAY-08**: Chat synchronization uses IVS Sync Time API for accurate video-relative timestamps
 - [x] **REPLAY-09**: Replay viewer shows session metadata (broadcaster, duration, viewer count)
 
@@ -45,8 +45,8 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 
 ### Hangouts (RealTime)
 
-- [x] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
-- [x] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
+- [ ] **HANG-01**: Users can create small-group hangout sessions (RealTime Stage-based)
+- [ ] **HANG-02**: Pre-warmed Stage pool maintains ready-to-use RealTime Stages (mirrors Channel pool pattern)
 - [x] **HANG-03**: Participant tokens generated server-side via CreateParticipantTokenCommand
 - [x] **HANG-04**: Participant tokens include capabilities (PUBLISH, SUBSCRIBE), user_id, 12-hour TTL
 - [x] **HANG-05**: Users can join hangout via participant token exchange
@@ -58,9 +58,9 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **HANG-11**: Active speaker detection uses Web Audio API for client-side audio level monitoring
 - [x] **HANG-12**: Participant join/leave notifications display in hangout UI
 - [x] **HANG-13**: Chat integration works in hangouts (same IVS Chat model as broadcasts)
-- [x] **HANG-14**: Hangout sessions record via server-side composition to S3
-- [x] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
-- [x] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
+- [ ] **HANG-14**: Hangout sessions record via server-side composition to S3
+- [ ] **HANG-15**: Composite recording metadata processed via EventBridge (same pattern as broadcasts)
+- [ ] **HANG-16**: Hangout recordings appear in home feed alongside broadcast recordings
 
 ### Developer CLI
 
@@ -139,8 +139,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPLAY-03 | Phase 6 | Complete |
 | REPLAY-04 | Phase 6 | Complete |
 | REPLAY-05 | Phase 6 | Complete |
-| REPLAY-06 | Phase 6 | Complete |
-| REPLAY-07 | Phase 6 | Complete |
+| REPLAY-06 | Phase 10 | Pending |
+| REPLAY-07 | Phase 10 | Pending |
 | REPLAY-08 | Phase 6 | Complete |
 | REPLAY-09 | Phase 6 | Complete |
 | REACT-01 | Phase 7 | Complete |
@@ -153,8 +153,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REACT-08 | Phase 7 | Complete |
 | REACT-09 | Phase 7 | Complete |
 | REACT-10 | Phase 7 | Complete |
-| HANG-01 | Phase 8 | Complete |
-| HANG-02 | Phase 8 | Complete |
+| HANG-01 | Phase 10 | Pending |
+| HANG-02 | Phase 12 | Pending |
 | HANG-03 | Phase 8 | Complete |
 | HANG-04 | Phase 8 | Complete |
 | HANG-05 | Phase 8 | Complete |
@@ -166,9 +166,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HANG-11 | Phase 8 | Complete |
 | HANG-12 | Phase 8 | Complete |
 | HANG-13 | Phase 8 | Complete |
-| HANG-14 | Phase 8 | Complete |
-| HANG-15 | Phase 8 | Complete |
-| HANG-16 | Phase 8 | Complete |
+| HANG-14 | Phase 11 | Pending |
+| HANG-15 | Phase 11 | Pending |
+| HANG-16 | Phase 11 | Pending |
 | DEV-03 | Phase 9 | Complete |
 | DEV-04 | Phase 9 | Complete |
 | DEV-05 | Phase 9 | Complete |

@@ -115,6 +115,38 @@ Plans:
 - [x] 09-02-PLAN.md — Hangout Streaming & Data Seeding (WHIP protocol, session/chat/reaction seeding) (3 tasks, 4 commits, 13 min)
 - [x] 09-03-PLAN.md — Presence Simulation & Documentation (IVS Chat events, CLI docs) (3 tasks, 5 commits, 2 min)
 
+### Phase 10: Integration Wiring Fixes
+**Goal**: Fix three broken cross-phase wiring issues identified by milestone audit to restore synchronized chat replay, fix hangout participant display, and eliminate duplicate EventBridge invocations
+**Depends on**: Phase 09.1
+**Gap Closure**: Closes REPLAY-06, REPLAY-07, HANG-01, REC-05 gaps from v1.1 audit
+**Requirements**: REPLAY-06, REPLAY-07, HANG-01
+**Success Criteria** (what must be TRUE):
+  1. Replay viewer shows chat messages synchronized to video playback (ReplayChat.tsx fetches correct API path)
+  2. Local participant in hangout displays correct username, not "undefined (You)"
+  3. `recording-ended` Lambda is invoked exactly once per IVS Recording End event (legacy rule removed)
+**Plans**: 0 plans
+
+### Phase 11: Hangout Recording Lifecycle Fix
+**Goal**: Fix Stage ARN detection in recording-ended handler so hangout composite recordings get metadata written and appear in the home feed alongside broadcasts
+**Depends on**: Phase 10
+**Gap Closure**: Closes HANG-14, HANG-15, HANG-16 gaps from v1.1 audit
+**Requirements**: HANG-14, HANG-15, HANG-16
+**Success Criteria** (what must be TRUE):
+  1. IVS RealTime Stage Recording End EventBridge event is correctly parsed (correct field used for ARN)
+  2. Hangout sessions have recordingStatus='available' after recording completes
+  3. Hangout recordings appear in home feed alongside broadcast recordings
+**Plans**: 0 plans
+
+### Phase 12: Hangout Creation UI
+**Goal**: Users can create a hangout session directly from the home page without knowing a direct URL
+**Depends on**: Phase 11
+**Gap Closure**: Closes HANG-02 gap from v1.1 audit
+**Requirements**: HANG-02
+**Success Criteria** (what must be TRUE):
+  1. HomePage has a "Start Hangout" button alongside the existing "Go Live" broadcast button
+  2. Clicking "Start Hangout" calls POST /sessions with sessionType HANGOUT and navigates to /hangout/:id
+**Plans**: 0 plans
+
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
 **Depends on**: Phase 9
@@ -148,6 +180,9 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
 | 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
+| 10. Integration Wiring Fixes | v1.1 | 0/0 | Pending | - |
+| 11. Hangout Recording Lifecycle Fix | v1.1 | 0/0 | Pending | - |
+| 12. Hangout Creation UI | v1.1 | 0/0 | Pending | - |
 
 ---
 *Roadmap created: 2026-03-02*

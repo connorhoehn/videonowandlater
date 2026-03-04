@@ -306,7 +306,7 @@ export function ReplayViewer() {
 
           {/* Chat column (takes 1/3 width on desktop, fixed height) */}
           <div className="lg:col-span-1 h-[600px]">
-            <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} />
+            <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
           </div>
         </div>
       </div>

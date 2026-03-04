@@ -7,12 +7,13 @@ const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';
 interface ReplayChatProps {
   sessionId: string;
   currentSyncTime: number;
+  authToken: string;
 }
 
 /**
  * Read-only chat panel for replay viewing with synchronized message display
  */
-export function ReplayChat({ sessionId, currentSyncTime }: ReplayChatProps) {
+export function ReplayChat({ sessionId, currentSyncTime, authToken }: ReplayChatProps) {
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,11 +24,12 @@ export function ReplayChat({ sessionId, currentSyncTime }: ReplayChatProps) {
     const fetchMessages = async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/sessions/${sessionId}/messages`,
+          `${API_BASE_URL}/sessions/${sessionId}/chat/messages`,
           {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
             },
           }
         );

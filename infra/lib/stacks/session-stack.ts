@@ -288,19 +288,6 @@ export class SessionStack extends Stack {
     // Grant DynamoDB permissions
     this.table.grantReadWriteData(recordingEndedFn);
 
-    // EventBridge rule for IVS Recording End events (legacy, keeping for backward compatibility)
-    new events.Rule(this, 'RecordingEndRule', {
-      eventPattern: {
-        source: ['aws.ivs'],
-        detailType: ['IVS Recording State Change'],
-        detail: {
-          recording_status: ['Recording End'],
-        },
-      },
-      targets: [new targets.LambdaFunction(recordingEndedFn)],
-      description: 'Transition session to ENDED and release pool resources when recording ends',
-    });
-
     // Lambda handler for Recording Start events
     const recordingStartedFn = new nodejs.NodejsFunction(this, 'RecordingStarted', {
       runtime: lambda.Runtime.NODEJS_20_X,

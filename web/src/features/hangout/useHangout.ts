@@ -26,13 +26,18 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
   const [error, setError] = useState<string | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // Holds the LocalStageStream wrappers so the strategy closure can read them
+  const localStageStreamsRef = useRef<LocalStageStream[]>([]);
 
-  // Join hangout on mount
+  // Join hangout on mount — guard against empty authToken (same pattern as useBroadcast)
   useEffect(() => {
+    if (!authToken) return;
+
     let mounted = true;
     let stageInstance: Stage | null = null;
 
     const joinHangout = async () => {
+      setError(null);
       try {
         // Fetch participant token from backend
         const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/join`, {
@@ -49,9 +54,35 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
 
         const { token, participantId, userId } = await response.json();
 
-        // Define Stage strategy - publish audio/video, subscribe to all participants
+        // Acquire camera + microphone BEFORE creating the Stage so the
+        // stageStreamsToPublish closure has the tracks ready to return.
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true,
+        });
+
+        if (!mounted) {
+          localStream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        localStreamRef.current = localStream;
+
+        // Wrap each track as a LocalStageStream for the IVS Stage SDK
+        const stageStreams = localStream.getTracks().map(
+          (track) => new LocalStageStream(track)
+        );
+        localStageStreamsRef.current = stageStreams;
+
+        // Attach local stream to preview
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+        }
+
+        // Define Stage strategy — publish audio/video, subscribe to all participants.
+        // stageStreamsToPublish reads from the ref so it always has the current tracks.
         const strategy: StageStrategy = {
-          stageStreamsToPublish: (): LocalStageStream[] => [],
+          stageStreamsToPublish: (): LocalStageStream[] => localStageStreamsRef.current,
           shouldPublishParticipant: () => true,
           shouldSubscribeToParticipant: () => SubscribeType.AUDIO_VIDEO,
         };
@@ -59,28 +90,15 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
         // Create Stage instance
         stageInstance = new Stage(token, strategy);
 
-        // Get local camera and microphone
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true,
-        });
-
-        localStreamRef.current = localStream;
-
-        // Attach local stream to preview
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream;
-        }
-
-        // Set up Stage event listeners
+        // Set up Stage event listeners before joining
         stageInstance.on(StageEvents.STAGE_PARTICIPANT_JOINED, (participant: any) => {
           if (!mounted) return;
-          console.log('Participant joined:', participant);
+          console.log('[useHangout] Participant joined:', participant);
           setParticipants((prev) => [
             ...prev,
             {
               participantId: participant.id,
-              userId: participant.attributes?.userId || 'Unknown',
+              userId: participant.attributes?.userId || participant.id,
               isLocal: false,
               streams: [],
               isSpeaking: false,
@@ -90,7 +108,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
 
         stageInstance.on(StageEvents.STAGE_PARTICIPANT_LEFT, (participant: any) => {
           if (!mounted) return;
-          console.log('Participant left:', participant);
+          console.log('[useHangout] Participant left:', participant);
           setParticipants((prev) =>
             prev.filter((p) => p.participantId !== participant.id)
           );
@@ -100,7 +118,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
           (participant: any, streams: any[]) => {
             if (!mounted) return;
-            console.log('Participant streams changed:', participant, streams);
+            console.log('[useHangout] Participant streams added:', participant, streams);
             setParticipants((prev) =>
               prev.map((p) =>
                 p.participantId === participant.id ? { ...p, streams } : p
@@ -117,7 +135,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           return;
         }
 
-        // Add local participant to state
+        // Add local participant first in the list
         setParticipants((prev) => [
           {
             participantId: participantId,
@@ -133,7 +151,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
       } catch (err: any) {
         if (mounted) {
           setError(err.message);
-          console.error('Failed to join hangout:', err);
+          console.error('[useHangout] Failed to join hangout:', err);
         }
       }
     };
@@ -145,20 +163,31 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
       if (stageInstance) {
         stageInstance.leave();
       }
+      localStageStreamsRef.current = [];
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
       }
     };
   }, [sessionId, apiBaseUrl, authToken]);
 
-  // Toggle mute
+  // Toggle mute — disable the audio track on the live stream and update
+  // the LocalStageStream wrapper so the Stage SDK sees the change.
   const toggleMute = (muted: boolean) => {
     if (!localStreamRef.current) return;
 
     const audioTrack = localStreamRef.current.getAudioTracks()[0];
     if (audioTrack) {
+      // When muted=true we want the track disabled, and vice-versa
       audioTrack.enabled = !muted;
     }
+
+    // Reflect on LocalStageStream wrappers
+    localStageStreamsRef.current.forEach((lss) => {
+      if (lss.mediaStreamTrack.kind === 'audio') {
+        lss.setMuted(muted);
+      }
+    });
   };
 
   // Toggle camera
@@ -169,6 +198,13 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
     if (videoTrack) {
       videoTrack.enabled = enabled;
     }
+
+    // Reflect on LocalStageStream wrappers
+    localStageStreamsRef.current.forEach((lss) => {
+      if (lss.mediaStreamTrack.kind === 'video') {
+        lss.setMuted(!enabled);
+      }
+    });
   };
 
   return {

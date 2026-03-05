@@ -11,8 +11,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
 import { getIVSRealTimeClient } from '../lib/ivs-clients';
-import { getSessionById } from '../repositories/session-repository';
-import { SessionType } from '../domain/session';
+import { getSessionById, updateSessionStatus } from '../repositories/session-repository';
+import { SessionType, SessionStatus } from '../domain/session';
 
 /**
  * Lambda handler for participant token generation
@@ -78,10 +78,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       capabilities: ['PUBLISH', 'SUBSCRIBE'],
       attributes: {
         username,
+        userId: username,
       },
     });
 
     const response = await ivsRealTimeClient.send(command);
+
+    // Transition session to LIVE so send-message accepts chat messages (HANG-11)
+    try {
+      await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
+    } catch (err: any) {
+      // Already LIVE (second+ participant joining) — expected, not an error
+      console.info('[join-hangout] Status transition skipped (likely already LIVE):', err.message);
+    }
 
     if (!response.participantToken) {
       return {

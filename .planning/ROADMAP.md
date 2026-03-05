@@ -199,8 +199,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md — Extend getSession() with recording fields and add get-session.test.ts (REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09)
-- [ ] 15-02-PLAN.md — Fix join-hangout LIVE transition, userId attribute, IAM grant, and RecordingFeed navigation (HANG-11, HANG-12, HANG-15)
+- [x] 15-01-PLAN.md — Extend getSession() with recording fields and add get-session.test.ts (REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09)
+- [x] 15-02-PLAN.md — Fix join-hangout LIVE transition, userId attribute, IAM grant, and RecordingFeed navigation (HANG-11, HANG-12, HANG-15)
 
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds

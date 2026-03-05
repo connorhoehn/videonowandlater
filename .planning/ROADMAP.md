@@ -181,7 +181,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Home feed contains only recordings with recordingStatus='available' — no "Awaiting recording..." permanent stubs
   2. Hangout participants display their authenticated username in chat (same identity as join-hangout token)
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [x] 14-01-PLAN.md — Data quality filter and hangout identity fix (REPLAY-01, HANG-13)
 
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
@@ -220,7 +223,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 11. Hangout Recording Lifecycle Fix | 1/1 | Complete    | 2026-03-04 | - |
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete    | 2026-03-04 |
-| 14. Data Quality & Hangout Identity Polish | v1.1 | 0/0 | Pending    | - |
+| 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete    | 2026-03-04 |
 
 ---
 *Roadmap created: 2026-03-02*

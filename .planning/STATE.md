@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 13-01-PLAN.md (Replay Viewer Integration Fixes - auth headers and syncTime time domain)
+stopped_at: Completed 14-01-PLAN.md (Data Quality & Hangout Identity - recordingStatus filter + cognito:username fix)
 last_updated: "2026-03-04T00:00:00.000Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
@@ -159,6 +159,8 @@ Recent decisions affecting current work:
 - [Phase 12-hangout-creation-ui]: Navigate to /hangout/ singular matching App.tsx route registration; broadcast button relabeled Go Live per Phase 12 success criteria
 - [Phase 13]: player.getPosition() * 1000 used for syncTime (elapsed playback ms) — no startedAt subtraction needed; same domain as sessionRelativeTime
 - [Phase 13]: Auth fixes were partially applied in working tree before plan execution; idempotent task approach handled gracefully
+- [Phase 14]: FilterExpression uses begins_with(PK, :pk) AND recordingStatus = :available for home feed — consistent with single-table DynamoDB pattern
+- [Phase 14]: Hangout userId uses cognito:username claim not sub (UUID) — consistent with create-chat-token.ts and create-session.ts identity chain
 
 ### Pending Todos
 

@@ -72,6 +72,46 @@ Requirements for milestone v1.1. Each maps to roadmap phases.
 - [x] **DEV-09**: CLI command to simulate presence/viewer activity for testing
 - [x] **DEV-10**: CLI documentation updated with v1.1 commands and usage examples
 
+## v1.2 Requirements (Activity Feed & Intelligence)
+
+Requirements for milestone v1.2. Each maps to roadmap phases (starting at Phase 16).
+
+### Participant Tracking
+
+- [ ] **PTCP-01**: Each hangout participant join is persisted to DynamoDB with userId, displayName, and joinedAt timestamp
+- [ ] **PTCP-02**: Hangout session record stores final participant count when session ends
+- [ ] **PTCP-03**: Hangout participant list is retrievable by session ID via repository function
+
+### Reaction Summary
+
+- [ ] **RSUMM-01**: Per-emoji reaction counts are pre-computed and stored on session record when session ends
+- [ ] **RSUMM-02**: Reaction summary counts are displayed on recording cards on the homepage
+- [ ] **RSUMM-03**: Reaction summary counts are displayed in the replay info panel
+
+### Activity Feed & Homepage
+
+- [ ] **ACTV-01**: Homepage displays broadcast recordings in a horizontal scrollable slider (3–4 items visible with peek)
+- [ ] **ACTV-02**: Homepage displays a unified activity feed below the recording slider showing all recent sessions
+- [ ] **ACTV-03**: Broadcast entries in the activity feed show title, duration, reaction summary counts, and relative timestamp
+- [ ] **ACTV-04**: Hangout entries in the activity feed show participant list, message count, duration, and relative timestamp
+- [ ] **ACTV-05**: Hangout sessions are filtered out of the recording slider (no longer appear as "pending" spinning tiles)
+- [ ] **ACTV-06**: A GET /activity API endpoint returns recent sessions (broadcasts + hangouts) with all activity metadata
+
+### Transcription Pipeline
+
+- [ ] **TRNS-01**: A Transcribe job is automatically started when a broadcast recording is confirmed available in S3
+- [ ] **TRNS-02**: Transcription job name encodes the session ID to enable correlation without extra DynamoDB reads
+- [ ] **TRNS-03**: Transcript text is stored on the session record in DynamoDB when the Transcribe job completes successfully
+- [ ] **TRNS-04**: Transcription failures are recorded on the session record without blocking pool release or other session data
+
+### AI Summary Pipeline
+
+- [ ] **AI-01**: An AI-generated one-paragraph summary is automatically produced from the session transcript via Bedrock/Claude
+- [ ] **AI-02**: AI summary text is stored on the session record in DynamoDB
+- [ ] **AI-03**: AI summary (truncated to 2 lines) is displayed on recording cards on the homepage
+- [ ] **AI-04**: Full AI summary is displayed in the replay info panel
+- [ ] **AI-05**: "Summary coming soon" placeholder is shown on cards while the AI pipeline is still processing
+
 ## v2 Requirements (Future)
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -119,6 +159,12 @@ Explicitly excluded. Documented to prevent scope creep.
 | Paid subscriptions/monetization | Payment processing orthogonal to core video platform |
 | Content moderation/AI filtering | Massive scope (profanity, NSFW, harassment); defer to v2 |
 | Multi-region deployment | Cross-region IVS resource management; single region for v1.1 |
+| Real-time transcription during live sessions | Requires separate SDK and separate streaming infrastructure; fundamentally different from batch transcription |
+| Full transcript text viewer in replay | 5,000+ words inline overwhelms the UI; AI summary + S3 URI sufficient for v1.2 |
+| Per-user reaction breakdown | Violates the anonymous-by-design reaction system; do not implement |
+| Speaker diarization on hangout transcripts | IVS Chat lacks speaker fidelity; hallucination risk with Bedrock |
+| Keyword search on transcripts | Requires transcript corpus to exist first (deferred until v1.2 has populated data) |
+| AI topic chapters | Requires NLP topic modeling on top of transcription; v2+ |
 
 ## Traceability
 
@@ -177,12 +223,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-09 | Phase 9 | Complete |
 | DEV-10 | Phase 9 | Complete |
 
+| PTCP-01 | Phase 16 | Pending |
+| PTCP-02 | Phase 16 | Pending |
+| PTCP-03 | Phase 16 | Pending |
+| RSUMM-01 | Phase 17 | Pending |
+| RSUMM-02 | Phase 18 | Pending |
+| RSUMM-03 | Phase 18 | Pending |
+| ACTV-01 | Phase 18 | Pending |
+| ACTV-02 | Phase 18 | Pending |
+| ACTV-03 | Phase 18 | Pending |
+| ACTV-04 | Phase 18 | Pending |
+| ACTV-05 | Phase 18 | Pending |
+| ACTV-06 | Phase 18 | Pending |
+| TRNS-01 | Phase 19 | Pending |
+| TRNS-02 | Phase 19 | Pending |
+| TRNS-03 | Phase 19 | Pending |
+| TRNS-04 | Phase 19 | Pending |
+| AI-01 | Phase 20 | Pending |
+| AI-02 | Phase 20 | Pending |
+| AI-03 | Phase 20 | Pending |
+| AI-04 | Phase 20 | Pending |
+| AI-05 | Phase 20 | Pending |
+
 **Coverage:**
-- v1.1 requirements: 50 total
-- Mapped to phases: 50/50 (100%)
-- Unmapped: 0
-- Pending (gap closure): 0 — all requirements satisfied as of 2026-03-04
+- v1.1 requirements: 50 total (all complete)
+- v1.2 requirements: 21 total
+- Mapped to phases: 21/21 (100%)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after roadmap creation*
+*Last updated: 2026-03-05 after v1.2 milestone start*

@@ -4,7 +4,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { Session } from '../domain/session';
-import { SessionType, SessionStatus } from '../domain/session';
+import { SessionType, SessionStatus, RecordingStatus } from '../domain/session';
 import { ResourceType } from '../domain/types';
 import { claimNextAvailableResource } from '../repositories/resource-pool-repository';
 import { createSession, getSessionById } from '../repositories/session-repository';
@@ -21,6 +21,20 @@ interface CreateSessionResponse {
   sessionType: SessionType;
   status: SessionStatus;
   error?: string;
+}
+
+interface GetSessionResponse {
+  sessionId: string;
+  sessionType: SessionType;
+  status: SessionStatus;
+  userId: string;
+  createdAt: string;
+  startedAt?: string;
+  endedAt?: string;
+  recordingHlsUrl?: string;
+  recordingDuration?: number;
+  thumbnailUrl?: string;
+  recordingStatus?: RecordingStatus;
 }
 
 /**
@@ -132,7 +146,7 @@ async function claimResourceWithRetry(
  * @param sessionId Session ID to retrieve
  * @returns Session response with sessionId, type, and status (no ARNs)
  */
-export async function getSession(tableName: string, sessionId: string): Promise<CreateSessionResponse | null> {
+export async function getSession(tableName: string, sessionId: string): Promise<GetSessionResponse | null> {
   const session = await getSessionById(tableName, sessionId);
   if (!session) {
     return null;
@@ -143,5 +157,13 @@ export async function getSession(tableName: string, sessionId: string): Promise<
     sessionId: session.sessionId,
     sessionType: session.sessionType,
     status: session.status,
+    userId: session.userId,
+    createdAt: session.createdAt,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    recordingHlsUrl: session.recordingHlsUrl,
+    recordingDuration: session.recordingDuration,
+    thumbnailUrl: session.thumbnailUrl,
+    recordingStatus: session.recordingStatus,
   };
 }

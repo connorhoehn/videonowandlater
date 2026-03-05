@@ -20,8 +20,8 @@ export function ViewerPage() {
 
   React.useEffect(() => {
     fetchAuthSession().then(session => {
-      const sub = session.tokens?.idToken?.payload?.sub as string | undefined;
-      if (sub) setUserId(sub);
+      const username = session.tokens?.idToken?.payload?.['cognito:username'] as string | undefined;
+      if (username) setUserId(username);
       setAuthToken(session.tokens?.idToken?.toString() || '');
     }).catch(err => {
       console.error('Failed to get auth session:', err);

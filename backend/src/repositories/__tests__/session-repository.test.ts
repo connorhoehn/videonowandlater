@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
 import * as dynamodbClient from '../../lib/dynamodb-client';
@@ -42,6 +42,58 @@ describe('session-repository', () => {
       await expect(
         updateSessionStatus(tableName, 'test-session', SessionStatus.LIVE, 'startedAt')
       ).rejects.toThrow();
+    });
+  });
+
+  describe('getRecentRecordings', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('filters by status=ended AND recordingStatus=available', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      await getRecentRecordings(tableName, 20);
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            FilterExpression: expect.stringContaining('recordingStatus = :available'),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':ended': 'ended',
+              ':available': 'available',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('returns sessions sorted by endedAt descending', async () => {
+      const baseSession = {
+        PK: 'SESSION#s1', SK: 'METADATA', GSI1PK: 'STATUS#ENDED', GSI1SK: '',
+        entityType: 'SESSION',
+        sessionId: 's1', userId: 'user1', sessionType: SessionType.BROADCAST,
+        status: SessionStatus.ENDED, claimedResources: {}, version: 1, createdAt: '2026-01-01T00:00:00Z',
+        recordingStatus: 'available',
+      };
+
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          { ...baseSession, sessionId: 'older', endedAt: '2026-01-01T10:00:00Z' },
+          { ...baseSession, sessionId: 'newer', endedAt: '2026-01-02T10:00:00Z' },
+        ],
+      });
+
+      const results = await getRecentRecordings(tableName, 20);
+
+      expect(results[0].sessionId).toBe('newer');
+      expect(results[1].sessionId).toBe('older');
     });
   });
 

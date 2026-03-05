@@ -356,9 +356,9 @@ export function BroadcastPage() {
     const getSession = async () => {
       try {
         const session = await fetchAuthSession();
-        const sub = session.tokens?.idToken?.payload?.sub as string;
-        if (sub) {
-          setUserId(sub);
+        const username = session.tokens?.idToken?.payload?.['cognito:username'] as string;
+        if (username) {
+          setUserId(username);
         }
         setAuthToken(session.tokens?.idToken?.toString() || '');
       } catch (error) {

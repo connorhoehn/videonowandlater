@@ -165,10 +165,13 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Replay viewer loads session and begins playing HLS video (GET /sessions/:id includes Authorization header)
   2. Chat messages appear in replay and scroll as video plays (authToken in ReplayChat useEffect deps; fetch gated on token ready)
-  3. Chat messages visible at correct video positions — messages at 2:00 not visible at 0:30 (sessionRelativeTime compared against syncTime - session.startedAt, not raw UTC ms)
+  3. Chat messages visible at correct video positions — messages at 2:00 not visible at 0:30 (sessionRelativeTime compared against elapsed playback ms, not raw UTC ms)
   4. Reaction timeline markers appear at correct positions and advance with video playback (same fix as chat sync)
   5. Reaction timeline populates with existing reactions (GET /sessions/:id/reactions includes Authorization header)
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — Fix auth headers and syncTime time domain (REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09)
 
 ### Phase 14: Data Quality & Hangout Identity Polish
 **Goal**: Home feed shows only playable recordings, and hangout participants display their real Cognito username in chat
@@ -216,7 +219,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Hangout Recording Lifecycle Fix | 1/1 | Complete    | 2026-03-04 | - |
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
-| 13. Replay Viewer Integration Fixes | v1.1 | 0/0 | Pending    | - |
+| 13. Replay Viewer Integration Fixes | v1.1 | 0/1 | Pending    | - |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 0/0 | Pending    | - |
 
 ---

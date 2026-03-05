@@ -31,7 +31,7 @@ describe('start-broadcast handler', () => {
 
   it('returns 401 if user not authenticated', async () => {
     const event = {
-      pathParameters: { id: 'session-123' },
+      pathParameters: { sessionId: 'session-123' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 
@@ -47,7 +47,7 @@ describe('start-broadcast handler', () => {
 
   it('returns 404 if session does not exist', async () => {
     const event = {
-      pathParameters: { id: 'nonexistent' },
+      pathParameters: { sessionId: 'nonexistent' },
       requestContext: {
         authorizer: {
           claims: { 'cognito:username': 'user123' },
@@ -67,7 +67,7 @@ describe('start-broadcast handler', () => {
 
   it('returns correct response structure with ingestEndpoint and streamKey', async () => {
     const event = {
-      pathParameters: { id: 'test-session' },
+      pathParameters: { sessionId: 'test-session' },
       requestContext: {
         authorizer: {
           claims: { 'cognito:username': 'test-user' },

@@ -37,7 +37,7 @@ describe('get-viewer-count handler', () => {
 
   it('returns 404 if session does not exist', async () => {
     const event = {
-      pathParameters: { id: 'nonexistent' },
+      pathParameters: { sessionId: 'nonexistent' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 
@@ -52,7 +52,7 @@ describe('get-viewer-count handler', () => {
 
   it('returns 200 with viewerCount for valid session', async () => {
     const event = {
-      pathParameters: { id: 'test-session' },
+      pathParameters: { sessionId: 'test-session' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 
@@ -68,7 +68,7 @@ describe('get-viewer-count handler', () => {
 
   it('does not require authentication (public endpoint)', async () => {
     const event = {
-      pathParameters: { id: 'test-session' },
+      pathParameters: { sessionId: 'test-session' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 

@@ -176,6 +176,7 @@ describe('join-hangout handler', () => {
       token: PARTICIPANT_TOKEN,
       participantId: PARTICIPANT_ID,
       expirationTime: new Date(EXPIRATION_TIME).toISOString(),
+      userId: USERNAME,
     });
   });
 });

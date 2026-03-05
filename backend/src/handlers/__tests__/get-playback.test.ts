@@ -31,7 +31,7 @@ describe('get-playback handler', () => {
 
   it('returns 404 if session does not exist', async () => {
     const event = {
-      pathParameters: { id: 'nonexistent' },
+      pathParameters: { sessionId: 'nonexistent' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 
@@ -46,7 +46,7 @@ describe('get-playback handler', () => {
 
   it('returns 200 with playbackUrl and status for any session', async () => {
     const event = {
-      pathParameters: { id: 'test-session' },
+      pathParameters: { sessionId: 'test-session' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 
@@ -75,7 +75,7 @@ describe('get-playback handler', () => {
   it('does not require authentication (public endpoint)', async () => {
     // Event with no authorizer claims
     const event = {
-      pathParameters: { id: 'test-session' },
+      pathParameters: { sessionId: 'test-session' },
       requestContext: {},
     } as any as APIGatewayProxyEvent;
 

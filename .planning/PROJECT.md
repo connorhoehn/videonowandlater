@@ -8,17 +8,16 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Current Milestone: v1.1 Replay, Reactions & Hangouts
+## Current Milestone: v1.2 Activity Feed & Intelligence
 
-**Goal:** Transform live sessions into persistent, discoverable content with reactions, and expand interaction models from one-to-many broadcasts to small-group hangouts.
+**Goal:** Surface richer session context on the homepage (hangout activity cards, reaction summary counts, horizontal recording slider + activity feed), and add an automated transcription + AI summary pipeline to every recording.
 
 **Target features:**
-- Auto-record all sessions (broadcasts + hangouts) to S3 with metadata tracking
-- Home feed showing recently streamed videos (Instagram-style discovery)
-- Replay viewer with video playback + synchronized chat + reactions timeline
-- Reaction system (heart, fire, clap, laugh, etc.) for live and replay viewing
-- IVS RealTime hangouts (multi-participant video, up to 5 participants)
-- Developer CLI for streaming test media, seeding data, simulating presence
+- Homepage redesign: horizontal recording slider (3-4 visible, scrollable) + activity feed below
+- Hangout activity cards: participants, message count, duration — no longer shows as "pending" recording tile
+- Reaction summary counts displayed on recording cards and replay info panel
+- Transcription pipeline: recording lands in S3 → Lambda → Amazon Transcribe → transcript stored on recording
+- AI summary: transcript → Bedrock/Claude → one-paragraph summary stored + displayed on cards and replay page
 
 ## Requirements
 
@@ -38,27 +37,27 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - ✓ Frontend routing for broadcast and viewer pages — Phase 4.2
 - ✓ Session creation UI with loading/error states — Phase 4.2
 - ✓ Centralized API configuration across frontend — Phase 4.2
+- ✓ Auto-record all sessions (broadcasts + hangouts) to S3 — Phase 5
+- ✓ Home feed showing recently streamed videos (Instagram-style grid) — Phase 6
+- ✓ Replay viewer with video playback + synchronized chat — Phase 6
+- ✓ Reaction system (live + replay, synchronized to video timeline) — Phase 7
+- ✓ IVS RealTime hangouts (multi-participant video, up to 5 participants) — Phase 8
+- ✓ Developer CLI: stream test media, seed data, simulate presence — Phase 9
 
 ### Active
 
-**v1.1 Milestone (Replay, Reactions & Hangouts):**
+**v1.2 Milestone (Activity Feed & Intelligence):**
 
-- [ ] Auto-record all sessions (broadcasts + hangouts) to S3 using IVS recording configuration
-- [ ] Track recording metadata (duration, viewer count, chat/reaction stats, S3 location)
-- [ ] Home feed showing recently streamed videos (Instagram-style grid/feed)
-- [ ] Replay viewer with video playback + synchronized chat messages
-- [ ] Reaction system (heart, fire, clap, laugh, etc.) during live streams
-- [ ] Reactions during replay viewing, synchronized to video timeline
-- [ ] DynamoDB models for reactions (live + replay), replay metadata
-- [ ] Lambda + API Gateway APIs for reactions, replay listing/retrieval
-- [ ] IVS RealTime Stage setup for small-group hangouts (up to 5 participants)
-- [ ] Participant token generation and join flow for RealTime sessions
-- [ ] Multi-camera participant layout in UI
-- [ ] Chat integration for hangout sessions (same persistent model as broadcasts)
-- [ ] Developer CLI: stream test media files (MP4/MOV) into sessions
-- [ ] Developer CLI: seed data (users, sessions, reactions for testing)
-- [ ] Developer CLI: simulate presence and activity
-- [ ] UX fully abstracted from AWS concepts (no channels/stages/rooms exposed — only "live" or "ready")
+- [ ] Homepage redesigned: horizontal recording slider (3–4 visible, scrollable) for replay-able broadcasts
+- [ ] Homepage activity feed below slider: recent hangouts + broadcasts as list/card items
+- [ ] Hangout sessions tracked with participant list (join/leave events persisted to DynamoDB)
+- [ ] Hangout activity cards on homepage: participants, message count, duration, timestamp
+- [ ] Reaction summary counts (per type) stored on session record after session ends
+- [ ] Reaction summary counts displayed on recording cards and replay info panel
+- [ ] Transcription pipeline: S3 recording event → Lambda → Amazon Transcribe job started
+- [ ] Transcribe job completion → transcript stored on recording record in DynamoDB
+- [ ] AI summary pipeline: transcript → Bedrock/Claude → one-paragraph summary generated
+- [ ] AI summary stored on recording record and displayed on recording cards + replay page
 
 ### Out of Scope
 
@@ -108,10 +107,10 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ## Current State
 
-**Latest milestone:** v1.0 Gap Closure (2026-03-02)
-**Current milestone:** v1.1 Replay, Reactions & Hangouts (started 2026-03-02)
-**Codebase:** ~5,300 LOC TypeScript (frontend + backend + CDK)
-**Status:** Defining requirements for v1.1. Broadcast and chat functional from v1.0.
+**Latest milestone:** v1.1 Replay, Reactions & Hangouts (shipped 2026-03-05, 15 phases, 27 plans)
+**Current milestone:** v1.2 Activity Feed & Intelligence (started 2026-03-05)
+**Codebase:** ~6,000 LOC TypeScript (frontend + backend + CDK)
+**Status:** Defining requirements for v1.2.
 
 ---
-*Last updated: 2026-03-02 after starting v1.1 milestone*
+*Last updated: 2026-03-05 after starting v1.2 milestone*

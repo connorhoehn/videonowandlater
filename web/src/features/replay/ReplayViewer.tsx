@@ -44,9 +44,12 @@ export function ReplayViewer() {
   const [allReactions, setAllReactions] = useState<Reaction[]>([]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
   const [authToken, setAuthToken] = useState('');
+  const [currentUserId, setCurrentUserId] = useState('');
 
   useEffect(() => {
     fetchAuthSession().then(session => {
+      const username = session.tokens?.idToken?.payload?.['cognito:username'] as string | undefined;
+      if (username) setCurrentUserId(username);
       setAuthToken(session.tokens?.idToken?.toString() || '');
     });
   }, []);
@@ -145,7 +148,7 @@ export function ReplayViewer() {
       const newReaction: Reaction = {
         reactionId: result.reactionId,
         sessionId: sessionId || '',
-        userId: 'me', // placeholder
+        userId: currentUserId,
         emojiType: emoji,
         reactionType: 'replay' as any,
         reactedAt: new Date().toISOString(),

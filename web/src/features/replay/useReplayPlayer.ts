@@ -12,7 +12,7 @@ declare global {
 }
 
 export function useReplayPlayer(recordingHlsUrl: string | undefined) {
-  const [syncTime, setSyncTime] = useState<number>(0); // UTC milliseconds from getSyncTime
+  const [syncTime, setSyncTime] = useState<number>(0); // Elapsed playback milliseconds from player.getPosition()
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);

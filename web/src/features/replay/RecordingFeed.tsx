@@ -67,9 +67,7 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
       {recordings.map((recording) => {
         const isHangout = recording.sessionType === 'HANGOUT';
-        const destination = isHangout
-          ? `/hangout/${recording.sessionId}`
-          : `/replay/${recording.sessionId}`;
+        const destination = `/replay/${recording.sessionId}`;
         const isAvailable = !recording.recordingStatus || recording.recordingStatus === 'available';
 
         return (

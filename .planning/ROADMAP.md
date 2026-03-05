@@ -186,6 +186,18 @@ Plans:
 Plans:
 - [x] 14-01-PLAN.md — Data quality filter and hangout identity fix (REPLAY-01, HANG-13)
 
+### Phase 15: Replay & Hangout Integration Fixes
+**Goal**: Fix get-session to expose recording fields for replay viewer, transition HANGOUT sessions to LIVE for chat persistence, and correct hangout recording navigation
+**Depends on**: Phase 14
+**Gap Closure**: Closes REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09, HANG-11, HANG-12, HANG-15 gaps from v1.1 audit
+**Requirements**: REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09, HANG-11, HANG-12, HANG-15
+**Success Criteria** (what must be TRUE):
+  1. Replay viewer loads HLS video (get-session returns recordingHlsUrl, recordingDuration, userId, createdAt, endedAt, recordingStatus)
+  2. HANGOUT chat messages persist (join-hangout sets session status=LIVE and startedAt after first participant token)
+  3. Hangout recordings in RecordingFeed navigate to /replay/:id instead of /hangout/:id
+  4. Remote participants in hangout show Cognito username (not UUID participantId)
+**Plans**: 0 plans
+
 ### Phase 09.1: TypeScript Build Fixes
 **Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
 **Depends on**: Phase 9
@@ -224,6 +236,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete    | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete    | 2026-03-04 |
+| 15. Replay & Hangout Integration Fixes | v1.1 | 0/0 | Pending    | - |
 
 ---
 *Roadmap created: 2026-03-02*

@@ -171,7 +171,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 13-01-PLAN.md — Fix auth headers and syncTime time domain (REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09)
+- [x] 13-01-PLAN.md — Fix auth headers and syncTime time domain (REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09)
 
 ### Phase 14: Data Quality & Hangout Identity Polish
 **Goal**: Home feed shows only playable recordings, and hangout participants display their real Cognito username in chat
@@ -219,7 +219,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
 | 11. Hangout Recording Lifecycle Fix | 1/1 | Complete    | 2026-03-04 | - |
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
-| 13. Replay Viewer Integration Fixes | v1.1 | 0/1 | Pending    | - |
+| 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete    | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 0/0 | Pending    | - |
 
 ---

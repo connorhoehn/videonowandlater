@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 12-01-PLAN.md (Hangout Creation UI - Start Hangout button on HomePage)
-last_updated: "2026-03-04T22:25:59.085Z"
+stopped_at: Completed 13-01-PLAN.md (Replay Viewer Integration Fixes - auth headers and syncTime time domain)
+last_updated: "2026-03-04T00:00:00.000Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
   total_phases: 9
@@ -157,6 +157,8 @@ Recent decisions affecting current work:
 - [Phase 12-hangout-creation-ui]: Purple #7b1fa2 for Start Hangout button matches hangout badge color in RecordingFeed.tsx for visual consistency
 - [Phase 12-hangout-creation-ui]: Both buttons disabled with isCreating || isCreatingHangout to prevent double-session creation
 - [Phase 12-hangout-creation-ui]: Navigate to /hangout/ singular matching App.tsx route registration; broadcast button relabeled Go Live per Phase 12 success criteria
+- [Phase 13]: player.getPosition() * 1000 used for syncTime (elapsed playback ms) — no startedAt subtraction needed; same domain as sessionRelativeTime
+- [Phase 13]: Auth fixes were partially applied in working tree before plan execution; idempotent task approach handled gracefully
 
 ### Pending Todos
 

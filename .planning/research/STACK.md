@@ -1,580 +1,307 @@
-# Technology Stack
+# Stack Research
 
-**Project:** VideoNowAndLater v1.1 (Recording, Reactions, RealTime Hangouts)
-**Researched:** 2026-03-02
-**Overall Confidence:** HIGH (verified via official AWS docs + npm registry)
-
----
-
-## Context: Stack Additions Only
-
-This research focuses on **stack additions/changes needed for v1.1 features**:
-- S3 recording (IVS Channels + RealTime Stages)
-- Replay playback (HLS video from S3)
-- Reaction storage/synchronization (live + replay)
-- IVS RealTime Stage management (multi-participant hangouts)
-
-**Existing validated stack (NOT re-researched):**
-- IVS broadcasting, IVS Chat, Cognito auth, DynamoDB single-table, CDK infrastructure, React frontend, developer CLI
+**Domain:** AI pipeline additions to AWS IVS video platform (v1.2 Activity Feed & Intelligence)
+**Researched:** 2026-03-05
+**Confidence:** HIGH (all claims verified against official AWS docs and npm registry)
 
 ---
 
-## Stack Additions Required
+## Scope: New Stack Only
 
-### Frontend: New Package
+The existing stack is validated and unchanged. This document covers only what is being added for v1.2:
 
-| Package | Version | Purpose | Why Recommended | Confidence |
-|---------|---------|---------|-----------------|------------|
-| `react-player` | ^2.16.0 | HLS replay video playback | Maintained by Mux (2025), native HLS support via hls.js, lightweight React API, no DOM manipulation needed | HIGH |
+**Existing (do not re-research):** IVS, IVS RealTime, IVS Chat, Lambda + API Gateway, DynamoDB single-table, CDK `^2.170.0`, React + Vite + Tailwind, Cognito, CloudFront + S3, EventBridge
 
-**Installation:**
-```bash
-cd web
-npm install react-player@^2.16.0
-```
-
-**Why react-player over alternatives:**
-- **vs video.js (8.23.7):** Simpler React integration (component-based), lighter bundle, sufficient for replay use case. video.js is overkill (designed for live DVR, ads, DRM).
-- **vs react-hls-player (3.0.7):** Less maintained, smaller community. react-player is backed by Mux and actively updated.
-- **vs custom hls.js wrapper:** react-player already bundles hls.js and handles browser compatibility/fallbacks.
-
-**Integration with existing stack:**
-- Compatible with React 19.2.0 (already installed)
-- Works alongside `amazon-ivs-player` (use IVS Player for live, react-player for replay)
-- No peer dependency conflicts
+**New for v1.2:** Amazon Transcribe (batch jobs), Amazon Bedrock (Claude InvokeModel), two new Lambda handlers, one new EventBridge rule, expanded IAM permissions
 
 ---
 
-### Backend: No New Packages Needed
+## New SDK Dependencies (Backend)
 
-**Existing packages cover all v1.1 requirements:**
+### Core New Packages
 
-| Package | Current Version | New Use in v1.1 | Status |
-|---------|----------------|-----------------|--------|
-| `@aws-sdk/client-ivs` | ^3.1000.0 | Create/manage RecordingConfiguration for Channels | ✓ Already installed |
-| `@aws-sdk/client-ivs-realtime` | ^3.1000.0 | Create Stages with StorageConfiguration, generate participant tokens | ✓ Already installed |
-| `@aws-sdk/client-s3` | Not currently installed | Generate presigned URLs for replay access, manage recording bucket | **ADD THIS** |
-| `@aws-sdk/lib-dynamodb` | ^3.1000.0 | Store reactions with timestamps, store replay metadata | ✓ Already installed |
+| Technology | Package | Version | Purpose | Why |
+|------------|---------|---------|---------|-----|
+| Amazon Transcribe | `@aws-sdk/client-transcribe` | `^3.1000.0` | Start batch transcription jobs from S3 recordings | Matches existing SDK v3 monorepo pattern (`^3.1000.0` already used for `client-dynamodb`, `client-ivs`, etc.). Batch jobs are fire-and-forget from Lambda — no long polling. npm latest: `3.916.0` |
+| Amazon Bedrock Runtime | `@aws-sdk/client-bedrock-runtime` | `^3.1000.0` | Invoke Claude model for AI summary generation | Same SDK v3 monorepo. `bedrock-runtime` is the invocation client — `client-bedrock` is the separate control-plane client (model management) and must NOT be confused with it. npm latest: `3.1002.0` |
 
-**Add to backend/package.json:**
+### Installation
+
 ```bash
 cd backend
-npm install @aws-sdk/client-s3@^3
+npm install @aws-sdk/client-transcribe @aws-sdk/client-bedrock-runtime
 ```
 
-**Why no other changes needed:**
-- Participant token generation → Use existing `@aws-sdk/client-ivs-realtime` (`CreateParticipantToken` API)
-- Reaction storage → Use existing DynamoDB client with new access patterns
-- Recording metadata → Use existing DynamoDB client with EventBridge triggers
+### No New Frontend Packages
+
+Activity feed, recording slider, and AI summary display use existing React + Tailwind. No additional npm packages needed on the frontend.
 
 ---
 
-### Infrastructure (CDK): Use Existing Library
+## New Infrastructure (CDK)
 
-**All required constructs available in `aws-cdk-lib@^2.170.0` (already installed):**
+No new CDK library packages. All v1.2 infrastructure uses primitives already imported from `aws-cdk-lib` in the existing stacks.
 
-| Construct | Import Path | Purpose | Type |
-|-----------|-------------|---------|------|
-| `CfnRecordingConfiguration` | `aws-cdk-lib/aws-ivs` | Configure S3 recording for IVS Channels | L1 (stable) |
-| `CfnStorageConfiguration` | `aws-cdk-lib/aws-ivsrealtime` | Configure S3 storage for RealTime Stages | L1 (stable) |
-| `Bucket` | `aws-cdk-lib/aws-s3` | Create S3 bucket for recordings | L2 (stable) |
-| `Rule` | `aws-cdk-lib/aws-events` | EventBridge rules for recording state changes | L2 (stable) |
-| `LambdaFunction` (target) | `aws-cdk-lib/aws-events-targets` | Trigger Lambda on recording completion | L2 (stable) |
-| `CfnStage` | `aws-cdk-lib/aws-ivs` | Create RealTime Stage with recording | L1 (stable) |
+### CDK Components to Add
 
-**Do NOT install `@aws-cdk/aws-ivs-alpha`:**
-- Reason: Alpha stability (not subject to semver), can introduce breaking changes
-- Status: Not needed — L1 constructs are sufficient and stable
-- When to use L2 constructs: Only if you need higher-level abstractions (not required for v1.1)
+| Component | Type | Location | Purpose |
+|-----------|------|----------|---------|
+| `StartTranscription` NodejsFunction | New Lambda | `session-stack.ts` | Triggered by existing `recordingEndRule`; calls `transcribe:StartTranscriptionJob` |
+| `GenerateSummary` NodejsFunction | New Lambda | `session-stack.ts` | Triggered by new `TranscribeCompletedRule`; calls Bedrock InvokeModel, writes summary to DynamoDB |
+| `TranscribeCompletedRule` events.Rule | New EventBridge rule | `session-stack.ts` | Listens for `aws.transcribe` / `Transcribe Job State Change` with status `COMPLETED` or `FAILED` |
 
-**No changes needed to infra/package.json.**
+The `StartTranscription` Lambda is added as a second target on the **existing** `recordingEndRule` — no new IVS EventBridge rule needed.
+
+---
+
+## IAM Permissions
+
+### StartTranscription Lambda
+
+```typescript
+// transcribe:StartTranscriptionJob — no resource-level scoping supported by Transcribe
+startTranscriptionFn.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['transcribe:StartTranscriptionJob'],
+  resources: ['*'],
+}));
+
+// S3: read the IVS recording MP4 (audio input to Transcribe)
+recordingsBucket.grantRead(startTranscriptionFn);
+
+// S3: write transcript JSON output to same bucket
+// Transcribe uses the Lambda execution role to write output — grantPut is required
+recordingsBucket.grantPut(startTranscriptionFn);
+```
+
+**Why `resources: ['*']` for Transcribe:** Transcribe does not support resource-level IAM conditions on `StartTranscriptionJob`. This is the same established pattern already used in this project for `ivs:CreateChannel`, `ivs:CreateStage`, and `ivs:CreateParticipantToken`.
+
+### GenerateSummary Lambda
+
+```typescript
+// transcribe:GetTranscriptionJob — retrieve TranscriptFileUri after EventBridge fires
+generateSummaryFn.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['transcribe:GetTranscriptionJob'],
+  resources: ['*'],
+}));
+
+// bedrock:InvokeModel — scoped to specific model ARN (least privilege)
+generateSummaryFn.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['bedrock:InvokeModel'],
+  resources: [
+    `arn:aws:bedrock:${Stack.of(this).region}::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0`,
+  ],
+}));
+
+// S3: read the transcript JSON that Transcribe wrote
+recordingsBucket.grantRead(generateSummaryFn);
+
+// DynamoDB: write AI summary back to the session record
+table.grantReadWriteData(generateSummaryFn);
+```
+
+**Scoping `bedrock:InvokeModel` to the model ARN** is correct and follows least-privilege. A wildcard `resources: ['*']` works but grants access to every Bedrock model in the account.
+
+---
+
+## AI Model Selection
+
+**Recommended model:** `anthropic.claude-3-5-haiku-20241022-v1:0`
+
+| Model ID | Input Cost | Output Cost | Regions | Why |
+|----------|-----------|-------------|---------|-----|
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | ~$0.80/M tokens | ~$4.00/M tokens | `us-east-1`, `us-east-2`, `us-west-2` | Best cost/quality for short summarization. Meaningfully smarter than Claude 3 Haiku for text comprehension tasks. |
+| `anthropic.claude-3-haiku-20240307-v1:0` | ~$0.25/M tokens | ~$1.25/M tokens | Most regions | Cheaper fallback if cost becomes a concern at scale. |
+
+**Per-session Bedrock cost:** A 30-minute session transcript is ~6,000 input tokens. A one-paragraph summary is ~250 output tokens. Total: **~$0.006 per session** — negligible.
+
+**Bedrock model access requirement (critical manual step):** As of September 2025, AWS automatically enables serverless foundation models for all accounts without console enablement. However, **Anthropic models still require a one-time First Time Use (FTU) form** in the Bedrock console before `InvokeModel` will succeed. This cannot be automated via CDK. It is a pre-deployment manual step to document in the phase plan.
+
+---
+
+## Pipeline Architecture: Two-Lambda Event-Driven
+
+```
+IVS Recording Ends
+  → EventBridge (aws.ivs: IVS Recording State Change, status=Recording End)
+      → [existing] recording-ended Lambda  (marks session ENDED, stores recording URL)
+      → [NEW] start-transcription Lambda   (submits Transcribe batch job, stores job name)
+
+Transcribe Job Completes (~2-10 min later)
+  → EventBridge (aws.transcribe: Transcribe Job State Change, status=COMPLETED)
+      → [NEW] generate-summary Lambda     (fetches transcript from S3, calls Bedrock, writes summary)
+```
+
+**Why two Lambdas, not one polling Lambda:** IVS recordings for typical sessions (5-60 minutes) produce Transcribe jobs that take 1-10 minutes to complete. A single Lambda polling `GetTranscriptionJob` in a loop would either exceed the 15-minute Lambda timeout or burn execution time sleeping. The EventBridge `Transcribe Job State Change` pattern is the correct AWS-native approach — zero cost, zero latency, and no timeout risk.
+
+### EventBridge Pattern for Transcribe Completion
+
+```json
+{
+  "source": ["aws.transcribe"],
+  "detail-type": ["Transcribe Job State Change"],
+  "detail": {
+    "TranscriptionJobStatus": ["COMPLETED", "FAILED"]
+  }
+}
+```
+
+Event detail fields:
+- `detail.TranscriptionJobName` — the job name (embed `sessionId` here for lookup)
+- `detail.TranscriptionJobStatus` — `COMPLETED` or `FAILED`
+
+**Job naming convention:** `vnl-{sessionId}-{epochMs}` — allows the completion Lambda to parse `sessionId` directly from the event without additional DynamoDB reads.
+
+---
+
+## Code Patterns
+
+### StartTranscriptionJob (Lambda)
+
+```typescript
+import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
+
+const transcribeClient = new TranscribeClient({});
+
+// Called from recording-ended EventBridge handler
+export async function startTranscription(sessionId: string, s3Key: string, bucketName: string) {
+  const jobName = `vnl-${sessionId}-${Date.now()}`;
+
+  await transcribeClient.send(new StartTranscriptionJobCommand({
+    TranscriptionJobName: jobName,
+    Media: { MediaFileUri: `s3://${bucketName}/${s3Key}` },
+    MediaFormat: 'mp4',           // IVS records as MP4
+    LanguageCode: 'en-US',        // or use IdentifyLanguage: true for multilingual
+    OutputBucketName: bucketName,
+    OutputKey: `transcripts/${sessionId}.json`,
+  }));
+
+  // Store jobName on DynamoDB session record for correlation
+  await updateSessionTranscribeJob(sessionId, jobName);
+}
+```
+
+### Bedrock InvokeModel (Lambda)
+
+```typescript
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+
+const bedrockClient = new BedrockRuntimeClient({});
+
+export async function generateSummary(transcript: string): Promise<string> {
+  const payload = {
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 300,   // one paragraph ~150-250 tokens
+    messages: [{
+      role: 'user',
+      content: [{
+        type: 'text',
+        text: `Summarize this video session transcript in one paragraph:\n\n${transcript}`,
+      }],
+    }],
+  };
+
+  const command = new InvokeModelCommand({
+    modelId: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    contentType: 'application/json',
+    body: JSON.stringify(payload),
+  });
+
+  const response = await bedrockClient.send(command);
+  const body = JSON.parse(new TextDecoder().decode(response.body));
+  return body.content[0].text;
+}
+```
+
+Use `InvokeModelCommand` (synchronous, waits for full response) — not `InvokeModelWithResponseStreamCommand`. Lambda writes the complete summary to DynamoDB; streaming adds complexity with no benefit in this batch pipeline.
+
+### Transcript Text Extraction
+
+Transcribe writes a JSON file to S3. The plain text is at:
+
+```typescript
+const transcriptData = JSON.parse(rawJson);
+const transcriptText = transcriptData.results.transcripts[0].transcript;
+```
+
+The `GenerateSummary` Lambda retrieves the S3 URI by calling `GetTranscriptionJob`, then fetches the JSON file using `@aws-sdk/client-s3` (already installed), then extracts the text before passing to Bedrock.
+
+---
+
+## Cost Model
+
+### Per-Session Estimate
+
+| Component | Assumption | Unit Cost | Per-Session Cost |
+|-----------|-----------|-----------|-----------------|
+| Transcribe batch | 30-min broadcast | $0.024/min | **$0.72** |
+| Transcribe batch | 5-min hangout | $0.024/min | **$0.12** |
+| Bedrock Claude 3.5 Haiku | ~6,250 tokens total | $0.80/M input + $4.00/M output | **~$0.006** |
+| S3 transcript JSON storage | ~50KB per session | Negligible | <$0.001 |
+| Lambda execution | ~500ms start + ~3s generate | Negligible | <$0.001 |
+
+**Transcribe dominates cost.** Bedrock is effectively free at any realistic scale.
+
+### Scale Projections
+
+| Volume | Transcribe/Month | Bedrock/Month | Total AI/Month |
+|--------|-----------------|---------------|----------------|
+| 100 sessions (30 min avg) | ~$72 | ~$0.60 | **~$73** |
+| 500 sessions | ~$360 | ~$3 | **~$363** |
+| 1,000 sessions | ~$720 | ~$6 | **~$726** |
+
+**Cost mitigation option:** If Transcribe cost becomes a concern, make transcription opt-in per session (user toggle) rather than always-on. The pipeline architecture supports this — simply skip `StartTranscriptionJob` if the session opted out.
+
+---
+
+## Alternatives Considered
+
+| Our Choice | Alternative | Why Not |
+|------------|-------------|---------|
+| `@aws-sdk/client-bedrock-runtime` | `@anthropic-ai/sdk` direct | Direct Anthropic API requires a separate API key stored as a secret. Bedrock uses the Lambda IAM execution role — no secret management. Consistent with all existing AWS auth patterns in this project. |
+| EventBridge `aws.transcribe` completion event | Polling `GetTranscriptionJob` in a loop | Polling wastes Lambda execution time (billed per ms), risks hitting the 15-minute timeout for long sessions, and adds unnecessary complexity. EventBridge is zero-cost and zero-latency. |
+| Store transcripts in same `vnl-recordings-*` S3 bucket | Separate transcripts bucket | Fewer resources, simpler IAM grants, same CloudFront distribution available if transcripts need serving later. |
+| Claude 3.5 Haiku | Claude 3.5 Sonnet | Haiku is 5-6x cheaper. One-paragraph summarization of a transcript does not require Sonnet-level capability. |
+| `InvokeModelCommand` (sync) | `InvokeModelWithResponseStreamCommand` | Streaming has no benefit when the Lambda is writing the full summary to DynamoDB as a single string. Sync is simpler and correct here. |
 
 ---
 
 ## What NOT to Add
 
-| Package | Why Avoid | Use Instead |
-|---------|-----------|-------------|
-| `@aws-cdk/aws-ivs-alpha` | Alpha status, breaking changes risk | L1 constructs from `aws-cdk-lib` |
-| `video.js` | Overkill for replay, requires DOM integration, heavier bundle | `react-player` |
-| `hls.js` | Automatically bundled by react-player | Implicit via `react-player` |
-| `react-hls-player` | Less maintained, smaller community | `react-player` |
-| Separate WebRTC/RealTime SDK | No separate SDK exists for Web | `amazon-ivs-web-broadcast` (already installed) |
-| WebSocket library for reactions | Adds complexity, not needed | DynamoDB + polling or EventBridge + Lambda |
-| GraphQL subscriptions | Not in project spec, adds complexity | REST + DynamoDB Streams + Lambda |
-
----
-
-## Integration Patterns
-
-### 1. Recording Configuration (IVS Channels)
-
-**CDK Setup:**
-```typescript
-import * as ivs from 'aws-cdk-lib/aws-ivs';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import { RemovalPolicy } from 'aws-cdk-lib';
-
-// S3 bucket for recordings
-const recordingBucket = new s3.Bucket(this, 'RecordingBucket', {
-  bucketName: 'vnl-recordings',
-  removalPolicy: RemovalPolicy.DESTROY,
-  autoDeleteObjects: true, // Dev only
-  versioned: false,
-  publicReadAccess: false, // Private by default
-});
-
-// Recording configuration
-const recordingConfig = new ivs.CfnRecordingConfiguration(this, 'RecordingConfig', {
-  destinationConfiguration: {
-    s3: {
-      bucketName: recordingBucket.bucketName,
-    },
-  },
-  recordingReconnectWindowSeconds: 60, // Merge fragmented streams
-  thumbnailConfiguration: {
-    recordingMode: 'INTERVAL',
-    targetIntervalSeconds: 10, // Thumbnail every 10 seconds
-    resolution: 'HD', // or 'SD', 'FULL_HD'
-  },
-});
-
-// Attach to Channel (during pool creation)
-const channel = new ivs.CfnChannel(this, 'Channel', {
-  recordingConfigurationArn: recordingConfig.attrArn,
-  // ... other props
-});
-```
-
-**S3 Prefix Structure (IVS creates automatically):**
-```
-s3://vnl-recordings/ivs/v1/<account-id>/<channel-id>/<year>/<month>/<day>/<hour>/<minute>/<recording-id>/
-  ├── events/
-  │   ├── recording-started.json
-  │   ├── recording-ended.json
-  │   └── recording-failed.json (if applicable)
-  └── media/
-      ├── hls/
-      │   ├── master.m3u8
-      │   ├── playlist.m3u8
-      │   └── *.ts (segments)
-      └── thumbnails/ (if enabled)
-          └── *.jpg
-```
-
----
-
-### 2. RealTime Stage Recording
-
-**CDK Setup:**
-```typescript
-import * as ivsrealtime from 'aws-cdk-lib/aws-ivsrealtime';
-
-// Storage configuration for RealTime Stages
-const storageConfig = new ivsrealtime.CfnStorageConfiguration(this, 'StageStorage', {
-  name: 'vnl-stage-storage',
-  s3: {
-    bucketName: recordingBucket.bucketName,
-  },
-});
-
-// Stage with auto-participant recording
-const stage = new ivs.CfnStage(this, 'Stage', {
-  name: 'vnl-stage',
-  autoParticipantRecordingConfiguration: {
-    storageConfigurationArn: storageConfig.attrArn,
-    mediaTypes: ['AUDIO_VIDEO'], // or ['AUDIO_ONLY']
-  },
-});
-```
-
-**Recording Options:**
-- **Individual participant recording:** Each publisher's media saved as separate files
-- **Composite recording:** All publishers combined into single view (requires additional config)
-
-**For v1.1, use individual participant recording** (simpler, flexible for future editing).
-
----
-
-### 3. EventBridge for Recording State Changes
-
-**CDK Setup:**
-```typescript
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
-import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
-
-// Lambda to process completed recordings
-const processRecordingFn = new lambda.NodejsFunction(this, 'ProcessRecording', {
-  entry: path.join(__dirname, '../../../backend/src/handlers/process-recording.ts'),
-  handler: 'handler',
-  environment: {
-    TABLE_NAME: sessionTable.tableName,
-    RECORDING_BUCKET: recordingBucket.bucketName,
-  },
-});
-
-// Grant S3 read access
-recordingBucket.grantRead(processRecordingFn);
-
-// EventBridge rule for recording completion
-new events.Rule(this, 'RecordingCompleteRule', {
-  eventPattern: {
-    source: ['aws.ivs'],
-    detailType: ['IVS Recording State Change'],
-    detail: {
-      recording_status: ['RECORDING_STOPPED'], // Also: RECORDING_STARTED, RECORDING_FAILED
-    },
-  },
-  targets: [new targets.LambdaFunction(processRecordingFn)],
-});
-```
-
-**EventBridge Event Structure:**
-```json
-{
-  "version": "0",
-  "id": "event-id",
-  "detail-type": "IVS Recording State Change",
-  "source": "aws.ivs",
-  "account": "123456789012",
-  "time": "2026-03-02T12:00:00Z",
-  "region": "us-west-2",
-  "resources": ["arn:aws:ivs:us-west-2:123456789012:channel/abcd1234"],
-  "detail": {
-    "channel_arn": "arn:aws:ivs:us-west-2:123456789012:channel/abcd1234",
-    "recording_status": "RECORDING_STOPPED",
-    "recording_s3_bucket_name": "vnl-recordings",
-    "recording_s3_key_prefix": "ivs/v1/123456789012/abcd1234/2026/03/02/12/00/recording-xyz/",
-    "recording_duration_ms": 120000,
-    "recording_status_reason": "" // Empty on success, error message on RECORDING_FAILED
-  }
-}
-```
-
-**Lambda handler stores replay metadata in DynamoDB:**
-```typescript
-// backend/src/handlers/process-recording.ts
-export const handler = async (event: EventBridgeEvent<'IVS Recording State Change', IVSRecordingDetail>) => {
-  const { detail } = event;
-
-  // Store in DynamoDB
-  await ddbClient.send(new PutCommand({
-    TableName: process.env.TABLE_NAME,
-    Item: {
-      PK: `SESSION#${sessionId}`,
-      SK: 'REPLAY',
-      s3Bucket: detail.recording_s3_bucket_name,
-      s3Prefix: detail.recording_s3_key_prefix,
-      durationMs: detail.recording_duration_ms,
-      status: 'AVAILABLE',
-      createdAt: new Date().toISOString(),
-
-      // For GSI1 (query all replays)
-      GSI1PK: 'REPLAY',
-      GSI1SK: detail.time, // Sort by recording time
-    },
-  }));
-};
-```
-
----
-
-### 4. Replay Playback (React)
-
-**Frontend Component:**
-```tsx
-import ReactPlayer from 'react-player';
-
-interface ReplayViewerProps {
-  s3Prefix: string; // e.g., "ivs/v1/.../recording-xyz/"
-}
-
-function ReplayViewer({ s3Prefix }: ReplayViewerProps) {
-  // Construct HLS manifest URL (via CloudFront or presigned URL)
-  const manifestUrl = `https://cdn.example.com/${s3Prefix}media/hls/master.m3u8`;
-
-  return (
-    <ReactPlayer
-      url={manifestUrl}
-      controls
-      playing={false} // User-initiated playback
-      width="100%"
-      height="100%"
-      config={{
-        file: {
-          forceHLS: true, // Use hls.js for HLS streams
-          hlsOptions: {
-            // Optional: custom hls.js config
-            maxBufferLength: 30,
-          },
-        },
-      }}
-      onProgress={(state) => {
-        // state.playedSeconds — use for syncing chat/reactions
-        console.log('Current time:', state.playedSeconds);
-      }}
-    />
-  );
-}
-```
-
-**CloudFront Setup (CDK):**
-```typescript
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-
-// CloudFront distribution for serving recordings
-const distribution = new cloudfront.Distribution(this, 'RecordingCDN', {
-  defaultBehavior: {
-    origin: new origins.S3Origin(recordingBucket),
-    viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-    cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED, // Cache HLS segments
-  },
-});
-
-new CfnOutput(this, 'RecordingCDNUrl', {
-  value: distribution.distributionDomainName,
-});
-```
-
-**Alternative: Presigned URLs (no CloudFront):**
-```typescript
-// backend/src/handlers/get-replay.ts
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
-const s3Client = new S3Client({});
-
-export const handler = async (event: APIGatewayProxyEvent) => {
-  const { sessionId } = event.pathParameters;
-
-  // Get replay metadata from DynamoDB
-  const replay = await getReplayMetadata(sessionId);
-
-  // Generate presigned URL for master.m3u8
-  const command = new GetObjectCommand({
-    Bucket: replay.s3Bucket,
-    Key: `${replay.s3Prefix}media/hls/master.m3u8`,
-  });
-
-  const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ manifestUrl: url }),
-  };
-};
-```
-
----
-
-### 5. Reaction Storage (DynamoDB)
-
-**Access Pattern (use existing table):**
-
-```typescript
-// Reaction item
-{
-  PK: 'SESSION#<sessionId>',
-  SK: 'REACTION#<timestamp>#<userId>#<reactionId>',
-  type: 'heart', // heart, fire, clap, laugh, etc.
-  timestamp: 12500, // Milliseconds into video (for replay sync)
-  userId: 'user123',
-  username: 'alice',
-  createdAt: '2026-03-02T12:00:25.500Z',
-
-  // GSI1 for querying reactions by session
-  GSI1PK: 'SESSION#<sessionId>#REACTIONS',
-  GSI1SK: 'TIMESTAMP#<timestamp>',
-}
-```
-
-**Query Patterns:**
-1. **Get all reactions for a session:** Query `PK = SESSION#<sessionId>` and `SK begins_with REACTION#`
-2. **Get reactions after a timestamp:** Query `GSI1PK = SESSION#<sessionId>#REACTIONS` and `GSI1SK > TIMESTAMP#<timestamp>`
-
-**API Endpoint (POST /sessions/{sessionId}/reactions):**
-```typescript
-// backend/src/handlers/create-reaction.ts
-export const handler = async (event: APIGatewayProxyEvent) => {
-  const { sessionId } = event.pathParameters;
-  const { type, timestamp } = JSON.parse(event.body);
-  const userId = event.requestContext.authorizer.claims.sub;
-
-  const reactionId = uuid();
-
-  await ddbClient.send(new PutCommand({
-    TableName: process.env.TABLE_NAME,
-    Item: {
-      PK: `SESSION#${sessionId}`,
-      SK: `REACTION#${timestamp.toString().padStart(10, '0')}#${userId}#${reactionId}`,
-      type,
-      timestamp,
-      userId,
-      createdAt: new Date().toISOString(),
-      GSI1PK: `SESSION#${sessionId}#REACTIONS`,
-      GSI1SK: `TIMESTAMP#${timestamp.toString().padStart(10, '0')}`,
-    },
-  }));
-
-  return { statusCode: 201, body: JSON.stringify({ reactionId }) };
-};
-```
-
-**Frontend Sync (Replay):**
-```tsx
-function ReplayWithReactions({ sessionId }: { sessionId: string }) {
-  const [currentTime, setCurrentTime] = useState(0);
-  const [reactions, setReactions] = useState([]);
-
-  // Fetch all reactions for session
-  useEffect(() => {
-    fetch(`/api/sessions/${sessionId}/reactions`)
-      .then(res => res.json())
-      .then(data => setReactions(data.reactions));
-  }, [sessionId]);
-
-  // Filter reactions to show based on current playback time
-  const visibleReactions = reactions.filter(r =>
-    r.timestamp <= currentTime * 1000 && // Convert seconds to ms
-    r.timestamp > (currentTime - 3) * 1000 // Show for 3 seconds
-  );
-
-  return (
-    <div>
-      <ReactPlayer
-        url={manifestUrl}
-        onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
-      />
-      <ReactionOverlay reactions={visibleReactions} />
-    </div>
-  );
-}
-```
-
----
-
-### 6. Participant Token Generation (RealTime Stages)
-
-**Lambda Handler:**
-```typescript
-// backend/src/handlers/create-stage-token.ts
-import { IVSRealTimeClient, CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
-
-const ivsRealTimeClient = new IVSRealTimeClient({});
-
-export const handler = async (event: APIGatewayProxyEvent) => {
-  const { sessionId } = event.pathParameters;
-  const userId = event.requestContext.authorizer.claims.sub;
-
-  // Get Stage ARN from DynamoDB (session record)
-  const session = await getSession(sessionId);
-
-  // Generate participant token
-  const command = new CreateParticipantTokenCommand({
-    stageArn: session.stageArn,
-    userId, // Unique identifier for participant
-    capabilities: ['PUBLISH', 'SUBSCRIBE'], // Or just ['SUBSCRIBE'] for viewers
-    duration: 720, // Token duration in minutes (default 720 = 12 hours)
-  });
-
-  const response = await ivsRealTimeClient.send(command);
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      token: response.participantToken.token,
-      expiresAt: response.participantToken.expirationTime,
-    }),
-  };
-};
-```
-
-**Frontend Usage (already have amazon-ivs-web-broadcast):**
-```tsx
-import { Stage, StrategyConfiguration, StageEvents } from 'amazon-ivs-web-broadcast';
-
-async function joinStage(token: string) {
-  const stage = new Stage(token, {
-    strategy: StrategyConfiguration.default(),
-  });
-
-  // Get local media
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-  stage.on(StageEvents.STAGE_CONNECTION_STATE_CHANGED, (state) => {
-    console.log('Stage connection state:', state);
-  });
-
-  stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, (participant) => {
-    console.log('Participant joined:', participant);
-  });
-
-  await stage.join();
-}
-```
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `@aws-sdk/client-transcribe-streaming` | Streaming transcription is for real-time microphone input, not completed S3 files | `@aws-sdk/client-transcribe` (batch) |
+| `@aws-sdk/client-bedrock` | Control-plane client for managing models; not needed for invocation | `@aws-sdk/client-bedrock-runtime` |
+| AWS Step Functions | Adds operational overhead (console, IAM, state machine definition). The two-Lambda EventBridge chain is simpler and sufficient for this linear pipeline. | EventBridge chained Lambda pattern |
+| SNS for Transcribe completion | EventBridge is already established throughout the codebase and more direct | EventBridge `aws.transcribe` rule |
+| Lambda Destinations for chaining | Less transparent than explicit EventBridge rules; harder to debug; less consistent with existing patterns | Explicit EventBridge rule with Lambda target |
+| `@aws-cdk/aws-transcribe-alpha` | Alpha stability package, not needed — all required Transcribe interaction is via SDK calls in Lambda, not CDK constructs | Direct SDK calls in Lambda handler |
 
 ---
 
 ## Version Compatibility
 
-| Package | Current Version | New/Changed | Compatible With | Notes |
-|---------|----------------|-------------|-----------------|-------|
-| `react-player` | — → ^2.16.0 | NEW | React 19.2.0 | ✓ No conflicts |
-| `@aws-sdk/client-s3` | — → ^3.1000.0 | NEW | Node.js 20.x | ✓ Matches other AWS SDK v3 packages |
-| `amazon-ivs-web-broadcast` | ^1.32.0 | NO CHANGE | — | ✓ Already supports RealTime Stages |
-| `aws-cdk-lib` | ^2.170.0 | NO CHANGE | — | ✓ Includes all needed IVS constructs |
-
-**No version conflicts identified.**
-
----
-
-## Summary for Roadmap
-
-**Required additions:**
-1. **Frontend:** `react-player@^2.16.0` for HLS replay playback
-2. **Backend:** `@aws-sdk/client-s3@^3` for presigned URLs (if not using CloudFront)
-3. **Infrastructure:** No new packages — use L1 constructs from existing `aws-cdk-lib`
-
-**Key integration points:**
-1. **Recording → S3:** `CfnRecordingConfiguration` (Channels), `CfnStorageConfiguration` (Stages)
-2. **Recording metadata:** EventBridge `IVS Recording State Change` → Lambda → DynamoDB
-3. **Replay playback:** `react-player` consuming HLS manifests from S3/CloudFront
-4. **Reactions:** Store in existing DynamoDB table with timestamp-based SK for replay sync
-5. **Participant tokens:** Generate via `CreateParticipantTokenCommand` in Lambda
-6. **Stage joining:** Use existing `amazon-ivs-web-broadcast` SDK (no new package)
-
-**No breaking changes. All additions integrate cleanly with v1.0 validated stack.**
+| Package | Version | Compatible With | Notes |
+|---------|---------|-----------------|-------|
+| `@aws-sdk/client-transcribe@^3.1000.0` | `3.916.0` (npm latest Mar 2026) | `@aws-sdk/client-dynamodb@^3.1000.0` | Same SDK v3 monorepo release line — no peer dependency conflicts |
+| `@aws-sdk/client-bedrock-runtime@^3.1000.0` | `3.1002.0` (npm latest Mar 2026) | `@aws-sdk/client-dynamodb@^3.1000.0` | Same SDK v3 monorepo release line — no peer dependency conflicts |
+| Both new clients | — | `aws-cdk-lib@^2.170.0` | CDK uses esbuild (NodejsFunction) to bundle SDK clients from `node_modules`; no CDK version conflict |
+| Both new clients | — | `Node.js 20.x` (Lambda runtime) | SDK v3 `^3.x` is fully compatible with Node.js 20.x |
 
 ---
 
 ## Sources
 
-### Official AWS Documentation (HIGH confidence)
-
-- [IVS Auto-Record to Amazon S3](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html) — Recording configuration, S3 structure
-- [IVS RealTime Stage Recording](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-create-stage.html) — Stage recording setup, storage config
-- [IVS EventBridge Integration](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/eventbridge.html) — Recording state change events
-- [AWS CDK CfnRecordingConfiguration](https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_ivs/CfnRecordingConfiguration.html) — CDK construct API
-- [IVS Participant Tokens](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-distribute-tokens.html) — Token generation API
-- [DynamoDB Streams Lambda Triggers](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.html) — Reaction sync pattern
-- [IVS Web Broadcast SDK Reference](https://aws.github.io/amazon-ivs-web-broadcast/docs/sdk-reference) — Version 1.32.0 API docs
-
-### npm Registry (MEDIUM confidence, verified 2026-03-02)
-
-- [react-player](https://www.npmjs.com/package/react-player) — Latest: 3.4.0 (recommend 2.16.0 for stability)
-- [amazon-ivs-web-broadcast](https://www.npmjs.com/package/amazon-ivs-web-broadcast) — Latest: 1.27.0-1.32.0
-- [@aws-cdk/aws-ivs-alpha](https://www.npmjs.com/package/@aws-cdk/aws-ivs-alpha) — Latest: 2.214.0-alpha.0 (NOT recommended)
-- [@aws-sdk/client-s3](https://www.npmjs.com/package/@aws-sdk/client-s3) — Latest: 3.1000.0+
-
-### Community Research (MEDIUM confidence)
-
-- [Understanding AWS IVS Real-Time Stage](https://medium.com/@singhkshitij221/understanding-aws-ivs-real-time-stage-how-it-actually-works-e56a7a0c5464) — RealTime architecture overview
-- [The best React video player libraries of 2026](https://blog.croct.com/post/best-react-video-libraries) — react-player vs alternatives
-- [DynamoDB Streams Trigger Lambda](https://oneuptime.com/blog/post/2026-02-12-trigger-lambda-dynamodb-streams/view) — Real-time sync patterns
+- [Amazon Transcribe StartTranscriptionJob API Reference](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_StartTranscriptionJob.html) — Required parameters, output bucket patterns, job name constraints (HIGH confidence)
+- [Amazon Transcribe EventBridge monitoring](https://docs.aws.amazon.com/transcribe/latest/dg/monitoring-events.html) — Event structure for `Transcribe Job State Change`, detail fields including `TranscriptionJobName` (HIGH confidence)
+- [Bedrock Runtime InvokeModel — Claude example](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-runtime_example_bedrock-runtime_InvokeModel_AnthropicClaude_section.html) — Complete TypeScript payload structure, `anthropic_version`, response parsing via `content[0].text` (HIGH confidence)
+- [Amazon Bedrock supported models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) — Model IDs and supported regions for Claude 3.5 Haiku (`anthropic.claude-3-5-haiku-20241022-v1:0`) in `us-east-1`, `us-east-2`, `us-west-2` (HIGH confidence)
+- [Simplified Bedrock model access](https://aws.amazon.com/blogs/security/simplified-amazon-bedrock-model-access/) — Auto-enablement of models as of Sept 2025; Anthropic FTU form requirement still applies (HIGH confidence)
+- [@aws-sdk/client-transcribe npm](https://www.npmjs.com/package/@aws-sdk/client-transcribe) — Latest version `3.916.0`, actively maintained (HIGH confidence)
+- [@aws-sdk/client-bedrock-runtime npm](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime) — Latest version `3.1002.0`, actively maintained (HIGH confidence)
+- [Amazon Transcribe pricing](https://aws.amazon.com/transcribe/pricing/) — $0.024/min standard batch, billed per second, 15-second minimum charge (HIGH confidence)
+- [Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) — Claude 3.5 Haiku ~$0.80/M input tokens, ~$4.00/M output tokens on-demand (MEDIUM confidence — verified from multiple sources, may change)
 
 ---
 
-*Stack research complete for v1.1. All recommendations verified against official AWS documentation and npm registry (March 2, 2026).*
+*Stack research for: v1.2 Activity Feed & Intelligence — Transcribe + Bedrock pipeline additions to VideoNowAndLater*
+*Researched: 2026-03-05*

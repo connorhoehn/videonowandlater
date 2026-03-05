@@ -1,1081 +1,780 @@
-# Architecture Integration Research
+# Architecture Research
 
-**Domain:** Live video platform with recording, reactions, and RealTime hangouts
-**Researched:** 2026-03-02
-**Confidence:** HIGH
+**Domain:** AWS IVS live-video platform — Activity Feed & Intelligence (v1.2)
+**Researched:** 2026-03-05
+**Confidence:** HIGH (based on direct codebase analysis)
 
-## Integration Overview
+---
 
-This research focuses on how **recording metadata**, **reaction events**, and **IVS RealTime Stage management** integrate with the existing VideoNowAndLater architecture. The platform currently supports one-to-many broadcasts via IVS Channels with pre-warmed resource pools, DynamoDB single-table design, and EventBridge-driven lifecycle management.
+## Existing Architecture Baseline
 
-### New Components Required
+The system is a single-table DynamoDB design with Lambda handlers, EventBridge-driven lifecycle
+events, and two API surfaces: REST (API Gateway + Cognito) and internal (EventBridge).
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    EXISTING ARCHITECTURE                     │
-├─────────────────────────────────────────────────────────────┤
-│  API Gateway + Lambda + Cognito (Auth/API Layer)           │
-│  DynamoDB Single Table + GSI1 (Data Layer)                 │
-│  IVS Channels + Chat Rooms + Pool Management                │
-│  EventBridge Rules (Stream/Recording State Changes)         │
-└─────────────────────────────────────────────────────────────┘
+### DynamoDB Access Patterns (Current)
 
-┌─────────────────────────────────────────────────────────────┐
-│                   NEW COMPONENTS (v1.1)                      │
-├─────────────────────────────────────────────────────────────┤
-│  NEW: IVS Recording Configurations (per-channel S3 output) │
-│  NEW: IVS RealTime Stages (hangout sessions)               │
-│  NEW: S3 Bucket (recordings + metadata storage)            │
-│  NEW: Reaction Storage (DynamoDB items with timestamps)     │
-│  NEW: GSI2 (time-range queries for replay sync)            │
-│  NEW: EventBridge Rules (Recording Start/End handlers)      │
-│  NEW: Lambda Functions (replay listing, reaction APIs)      │
-└─────────────────────────────────────────────────────────────┘
-```
+| PK | SK | Entity | GSI |
+|----|----|--------|-----|
+| `SESSION#{id}` | `METADATA` | Session record | GSI1PK=`STATUS#{status}`, GSI1SK=`createdAt` |
+| `RESOURCE#{arn}` | `METADATA` | Pool resource | GSI1PK=`STATUS#AVAILABLE#{type}` |
+| `REACTION#{sessionId}#{emojiType}#SHARD{n}` | `{time}#{reactionId}` | Reaction | GSI2PK=`REACTION#{sessionId}`, GSI2SK=padded time |
+| `CHAT#{sessionId}` | `{ts}#{messageId}` | Chat message | — |
 
-## Recording Metadata Integration
-
-### How IVS Recording Works
-
-AWS IVS Auto-Record generates recordings in S3 with a structured path format:
+### Session Domain Model (current fields, `backend/src/domain/session.ts`)
 
 ```
-/ivs/v1/<account_id>/<channel_id>/<year>/<month>/<day>/<hour>/<minute>/<recording_id>/
-├── events/
-│   ├── recording-started.json
-│   ├── recording-ended.json
-│   └── recording-failed.json
-└── media/
-    ├── hls/
-    │   ├── master.m3u8
-    │   └── [renditions]/
-    └── thumbnails/
+sessionId, userId, sessionType (BROADCAST|HANGOUT), status (creating|live|ending|ended),
+claimedResources { channel?, stage?, chatRoom },
+createdAt, startedAt, endedAt, version,
+recordingS3Path, recordingDuration, thumbnailUrl, recordingHlsUrl,
+recordingStatus (pending|processing|available|failed)
 ```
 
-Recording metadata JSON files include:
-- `channel_arn`: Which channel recorded
-- `recording_started_at` / `recording_ended_at`: Timestamps
-- `media.hls.duration_ms`: Total recording duration
-- `media.hls.path`: Relative path to HLS content
-- `media.hls.renditions[]`: Resolution, width, height per rendition
-- `media.thumbnails`: Thumbnail paths and metadata
+### Existing Lambda Handlers
 
-**Source:** [AWS IVS Auto-Record to S3 Documentation](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html)
+| Handler | Trigger | Responsibility |
+|---------|---------|---------------|
+| `create-session.ts` | POST /sessions | Claim pool resource, create session record |
+| `get-session.ts` | GET /sessions/{id} | Read session by ID |
+| `join-hangout.ts` | POST /sessions/{id}/join | Generate IVS RealTime token; transition to LIVE |
+| `end-session.ts` | POST /sessions/{id}/end | Transition session to ENDING |
+| `stream-started.ts` | EventBridge IVS Stream Start | Scan by channel ARN, transition to LIVE |
+| `stream-ended.ts` | EventBridge IVS Stream End | Transition to ENDING |
+| `recording-started.ts` | EventBridge IVS Recording Start | Update recordingStatus=processing |
+| `recording-ended.ts` | EventBridge IVS Recording End (broadcast+stage) | Transition to ENDED, set recording metadata, release pool |
+| `list-recordings.ts` | GET /recordings | Scan for ended/ending sessions, return sorted |
+| `create-reaction.ts` | POST /sessions/{id}/reactions | Persist sharded reaction, broadcast via IVS Chat |
+| `get-reactions.ts` | GET /sessions/{id}/reactions | Query GSI2 for time-ranged reactions |
+| `create-chat-token.ts` | POST /sessions/{id}/chat/token | Generate IVS Chat token |
+| `send-message.ts` | POST /sessions/{id}/chat/messages | Store message to DynamoDB |
+| `get-chat-history.ts` | GET /sessions/{id}/chat/messages | Query chat messages |
+| `replenish-pool.ts` | EventBridge schedule (5-min) | Top up IVS channel/stage/room pool |
+| `ivs-event-audit.ts` | EventBridge all aws.ivs | CloudWatch observability |
 
-### Integration Points
+---
 
-#### 1. Infrastructure Layer (CDK)
+## System Overview
 
-**New Stack Component: Recording Configuration**
-
-```typescript
-// infra/lib/stacks/session-stack.ts (MODIFY)
-
-// New: S3 bucket for recordings
-const recordingBucket = new s3.Bucket(this, 'RecordingBucket', {
-  bucketName: 'vnl-recordings',
-  removalPolicy: RemovalPolicy.RETAIN, // Keep recordings on stack destroy
-  lifecycleRules: [{
-    expiration: Duration.days(90), // Optional: auto-delete old recordings
-  }],
-});
-
-// New: IVS Recording Configuration
-const recordingConfig = new ivs.CfnRecordingConfiguration(this, 'RecordingConfig', {
-  destinationConfiguration: {
-    s3: {
-      bucketName: recordingBucket.bucketName,
-    },
-  },
-  thumbnailConfiguration: {
-    recordingMode: 'INTERVAL',
-    targetIntervalSeconds: 60, // Thumbnail every minute
-    storage: ['SEQUENTIAL', 'LATEST'],
-  },
-  recordingReconnectWindowSeconds: 60, // Merge fragmented streams within 60s
-  renditionSelection: 'ALL', // Record all resolutions
-});
-
-// Grant IVS write access to S3 bucket
-recordingBucket.addToResourcePolicy(new iam.PolicyStatement({
-  actions: ['s3:PutObject'],
-  resources: [`${recordingBucket.bucketArn}/*`],
-  principals: [new iam.ServicePrincipal('ivs.amazonaws.com')],
-}));
+```
++-----------------------------------------------------------------+
+|                     Frontend (React/Vite)                       |
+|  HomePage  |  BroadcastPage  |  HangoutPage  |  ReplayPage     |
++-----------------------------+-----------------------------------+
+                              | REST (API Gateway + Cognito auth)
++-----------------------------+-----------------------------------+
+|                    API Lambda Handlers                          |
+|  create-session  get-session  join-hangout  end-session         |
+|  list-recordings  [NEW] list-activity  [NEW] get-session+AI    |
+|  create-reaction  get-reactions  create-chat-token  send-msg    |
++--------+----------------------------+---------------------------+
+         | DynamoDB                   | AWS SDKs
++--------+----------+   +------------+--------------------+
+|  vnl-sessions      |   | IVS Channel | IVS RealTime Stage |
+|  GSI1 (status)     |   | IVS Chat   | Amazon Transcribe   |
+|  GSI2 (reactions)  |   | S3/CF      | Bedrock (Claude)    |
++-------------------+   +-----------------------------------------+
++----------------------------------------------------------------+
+|         Event-Driven Handlers (EventBridge targets)            |
+|  stream-started  stream-ended  recording-started               |
+|  recording-ended (MODIFY: +reaction summary)                   |
+|  [NEW] start-transcription  [NEW] store-transcript             |
++----------------------------------------------------------------+
 ```
 
-**Modified: Pool Replenishment (Associate Recording Config)**
+---
 
-```typescript
-// backend/src/handlers/replenish-pool.ts (MODIFY createChannel function)
+## Integration Points: What Changes and Where
 
-async function createChannel(tableName: string): Promise<void> {
-  const ivsClient = getIVSClient();
-  const docClient = getDocumentClient();
+### 1. Hangout Participant Tracking
 
-  const channelId = uuidv4();
+**Current state:** `backend/src/handlers/join-hangout.ts` generates a participant token and
+transitions the session to LIVE on first join. No participant data is persisted to DynamoDB.
 
-  const createChannelResponse = await ivsClient.send(
-    new CreateChannelCommand({
-      name: `vnl-channel-${channelId}`,
-      recordingConfigurationArn: process.env.RECORDING_CONFIG_ARN, // NEW
-      latencyMode: 'LOW',
-    })
-  );
+**Integration point:** `join-hangout.ts`, after line 65 — after `ivsRealTimeClient.send(command)`
+returns successfully, before the response is built.
 
-  // Store channel in pool with recording enabled flag
-  await docClient.send(new PutCommand({
-    TableName: tableName,
-    Item: {
-      PK: `POOL#${createChannelResponse.channel.arn}`,
-      SK: 'METADATA',
-      GSI1PK: 'STATUS#AVAILABLE',
-      GSI1SK: new Date().toISOString(),
-      resourceType: ResourceType.CHANNEL,
-      status: Status.AVAILABLE,
-      recordingEnabled: true, // NEW
-      createdAt: new Date().toISOString(),
-    },
-  }));
+**What to add:** Call a new `addHangoutParticipant()` repository function. Stores the participant
+join event as a separate DynamoDB item co-located under the session PK.
+
+**New DynamoDB item pattern:**
+
+```
+PK:            SESSION#{sessionId}
+SK:            PARTICIPANT#{userId}
+entityType:    PARTICIPANT
+sessionId:     string
+userId:        string
+participantId: string   (from response.participantToken.participantId)
+joinedAt:      ISO timestamp
+leftAt:        ISO timestamp | undefined  (nullable — set by EventBridge handler if added later)
+```
+
+Using `SESSION#{sessionId}` as PK with SK=`PARTICIPANT#{userId}` keeps participant items
+co-located with the session. A single `Query` on PK with `begins_with(SK, 'PARTICIPANT#')` fetches
+all participants. No new GSI needed.
+
+**Why not a list on the session METADATA item:** Adding participants to the session item creates
+write-contention — concurrent joins would all update the same versioned item. The existing
+`updateSessionStatus()` uses optimistic locking (`#version = :currentVersion`). A concurrent second
+participant join would cause a `ConditionalCheckFailedException`. Separate items with shared PK
+avoid this entirely.
+
+**Leave events (optional for v1.2):** IVS RealTime emits `IVS Participant Event` EventBridge events
+(participant.left, participant.disconnected). A handler can update the participant item with
+`leftAt`. This is deferred — participant count for the activity card can be derived from join items
+alone, and `leftAt` is nullable.
+
+---
+
+### 2. Reaction Summary Counts
+
+**Current state:** `backend/src/repositories/reaction-repository.ts` `getReactionCounts()` aggregates
+across 100 shards (100 parallel DynamoDB queries per emoji type, 5 types = 500 queries per call).
+This cost is unacceptable on every homepage load.
+
+**Integration point:** `backend/src/handlers/recording-ended.ts`, after `updateRecordingMetadata()`
+succeeds (around line 127).
+
+**When to compute:** At session end — the recording-ended event. The session is complete, no more
+reactions will arrive, and the cost is paid once rather than on every homepage request.
+
+**What to add in `recording-ended.ts`:** After updating recording metadata, call a new
+`computeAndStoreReactionSummary()` helper that:
+1. Calls `getReactionCounts()` for all 5 emoji types in parallel.
+2. Writes the result as `reactionSummary` map to the session METADATA item.
+
+**New session METADATA fields:**
+
+```
+reactionSummary: {
+  heart:     number,
+  fire:      number,
+  clap:      number,
+  laugh:     number,
+  surprised: number,
+  totalCount: number
 }
 ```
 
-#### 2. Data Layer (DynamoDB Schema Extension)
+Stored as a DynamoDB map attribute on `SESSION#{id} / METADATA`. A new `updateReactionSummary()`
+function is added to `backend/src/repositories/session-repository.ts` alongside the existing
+`updateRecordingMetadata()`.
 
-**Recording Metadata Storage**
+**Critical implementation note:** Wrap in try/catch, do NOT throw. Pool resource release is
+time-critical — it must always execute. Reaction summary computation is best-effort; a failure
+here should log and continue.
 
-Add recording metadata to Session items when recording completes:
+---
 
-```typescript
-// DynamoDB Session Item (EXTENDED)
-{
-  PK: "SESSION#<sessionId>",
-  SK: "METADATA",
-  GSI1PK: "STATUS#ENDED",
-  GSI1SK: "2026-03-02T14:30:00Z",
+### 3. Transcription Pipeline — Trigger
 
-  // Existing fields
-  sessionId: "abc123",
-  userId: "user-456",
-  sessionType: "BROADCAST",
-  status: "ended",
-  claimedResources: { channel: "arn:...", chatRoom: "arn:..." },
-  createdAt: "2026-03-02T14:00:00Z",
-  startedAt: "2026-03-02T14:05:00Z",
-  endedAt: "2026-03-02T14:30:00Z",
-  version: 3,
+**Current state:** `recording-ended.ts` fires when IVS emits a Recording End event. The EventBridge
+event payload includes `recording_s3_key_prefix` — the S3 path prefix where the recording landed.
+The handler already derives the HLS URL from this prefix.
 
-  // NEW: Recording metadata (added by recording-ended handler)
-  recording: {
-    s3Bucket: "vnl-recordings",
-    s3KeyPrefix: "ivs/v1/.../2026/3/2/14/5/recId123/",
-    durationMs: 1500000, // 25 minutes
-    playbackUrl: "https://vnl-recordings.s3.amazonaws.com/.../media/hls/master.m3u8",
-    thumbnailUrl: "https://vnl-recordings.s3.amazonaws.com/.../media/thumbnails/thumb0.jpg",
-    renditions: [
-      { resolution: "480p", width: 852, height: 480 },
-      { resolution: "720p", width: 1280, height: 720 }
-    ],
-    chatMessageCount: 42, // Computed from chat history
-    reactionCount: 18,    // Computed from reactions
-  }
+**Integration point:** Add `backend/src/handlers/start-transcription.ts` as a second Lambda target
+on the existing `RecordingEndRuleV2` EventBridge rule in `infra/lib/stacks/session-stack.ts`.
+
+**Why not S3 event notifications:** The Recording End EventBridge event from IVS is the
+authoritative "recording is complete" signal — it fires exactly once when all files are finalized.
+S3 events would fire multiple times (once per file: HLS segments, thumbnails, manifests) before the
+recording is assembled. Using the existing EventBridge rule avoids S3-trigger complexity and
+provides the session context (ARN lookup) already solved in `recording-ended.ts`.
+
+**What `start-transcription.ts` does:**
+1. Parse the resource ARN and determine broadcast vs stage (same logic as `recording-ended.ts`).
+2. Derive the MP4 source path from `recording_s3_key_prefix`. IVS records raw MP4 alongside HLS:
+   - Broadcast: `{prefix}/media/hls/` contains HLS; MP4 source is not directly provided.
+   - Fallback: Use the HLS master playlist URI with Transcribe's MediaFormat=m3u8. Amazon Transcribe
+     supports HLS as input format, so the existing HLS URL can be used directly. This avoids
+     guessing the MP4 path.
+3. Call `StartTranscriptionJobCommand` (AWS SDK `@aws-sdk/client-transcribe`).
+4. Use `jobName = transcript-{sessionId}-{Date.now()}` for uniqueness.
+5. Set output to the recordings S3 bucket under a `transcripts/` prefix.
+6. Update session: `transcriptStatus=processing`, `transcriptJobName={jobName}`.
+
+**New session METADATA fields for transcription:**
+
+```
+transcriptStatus:  'pending' | 'processing' | 'available' | 'failed'
+transcriptJobName: string   (for audit and re-fetch)
+transcriptText:    string   (inline for typical sessions; see storage note below)
+```
+
+**Storage consideration:** Transcripts for a 60-minute session are typically 20-60KB of plain text,
+well under DynamoDB's 400KB item limit. For sessions over 3 hours, consider storing only the S3 URI
+on the item and fetching on demand. For v1.2, storing inline is acceptable. Guard with a character
+limit (truncate at 250,000 characters if needed).
+
+---
+
+### 4. Transcript Storage — `store-transcript.ts`
+
+**Trigger:** Amazon Transcribe emits an EventBridge event when a job completes.
+- Source: `aws.transcribe`
+- Detail-type: `Transcribe Job State Change`
+- Filter: `detail.TranscriptionJobStatus: [COMPLETED, FAILED]`
+
+**New EventBridge rule needed in `session-stack.ts`:**
+```
+TranscribeJobCompleteRule:
+  source: ['aws.transcribe']
+  detail-type: ['Transcribe Job State Change']
+  detail.TranscriptionJobStatus: ['COMPLETED', 'FAILED']
+  target: store-transcript Lambda
+```
+
+**What `store-transcript.ts` does:**
+1. Parse `TranscriptionJobName` from the event (`transcript-{sessionId}-{timestamp}` by convention).
+2. Extract `sessionId` from the job name.
+3. If status is FAILED: update `transcriptStatus=failed`, set `aiSummaryStatus=failed`, return.
+4. If status is COMPLETED:
+   a. Call `GetTranscriptionJobCommand` to retrieve the transcript output S3 URI.
+   b. `S3.GetObject` to fetch transcript JSON.
+   c. Extract transcript text: `data.results.transcripts[0].transcript`.
+   d. Call `updateTranscriptFields()` on session-repository to store transcript + update status.
+   e. Call Bedrock to generate AI summary (see section 5).
+   f. Call `updateAiSummary()` on session-repository to store summary.
+
+---
+
+### 5. AI Summary Pipeline — Bedrock
+
+**Trigger:** Inline within `store-transcript.ts`, after transcript is stored.
+
+**Why inline rather than a separate Lambda/EventBridge step:** The transcript → summary dependency
+is linear and guaranteed. Bedrock `InvokeModelCommand` returns within 2-5 seconds for a
+summarization prompt. Keeping it in `store-transcript.ts` avoids an extra EventBridge rule and
+DynamoDB Streams infrastructure.
+
+**Failure isolation:** The Bedrock call is wrapped in its own try/catch. On failure:
+- Set `aiSummaryStatus=failed`, log error.
+- Do NOT throw. The transcript is already stored and valuable without the summary.
+
+**Model:** `anthropic.claude-3-haiku-20240307-v1:0` (Bedrock model ID). Haiku is fast (1-2s
+invocation), cheap, and sufficient for a 2-3 sentence summarization task. Sonnet/Opus are
+unnecessary for this prompt complexity.
+
+**Prompt structure:**
+```
+System: You are a video content summarizer. Summarize video call transcripts concisely.
+User: Summarize the following transcript in 2-3 sentences, friendly tone:
+{transcriptText}
+```
+
+**New session METADATA fields for AI summary:**
+
+```
+aiSummary:       string   (one paragraph, 2-3 sentences, ~100-200 words)
+aiSummaryStatus: 'pending' | 'processing' | 'available' | 'failed'
+aiModel:         string   (e.g., "anthropic.claude-3-haiku-20240307-v1:0" for audit)
+```
+
+**IAM required:** `store-transcript.ts` Lambda needs:
+- `bedrock:InvokeModel` on `arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-*`
+
+---
+
+### 6. Homepage API — New and Modified Endpoints
+
+**Current `GET /recordings`:** Returns all ended/ending sessions via a full-table Scan, sorted by
+`endedAt` descending. Defined in `backend/src/handlers/list-recordings.ts`. The `getRecentRecordings()`
+repository function in `session-repository.ts` already returns complete session objects, so new
+fields (`reactionSummary`, `aiSummary`, `transcriptStatus`) will flow through automatically once
+the pipeline populates them.
+
+**No breaking change to `/recordings`:** The `Recording` interface in
+`web/src/features/replay/RecordingFeed.tsx` (lines 8-17) is extended additively with optional
+fields. Existing callers are unaffected.
+
+**New `GET /activity` endpoint:**
+
+The homepage redesign adds an activity feed below the recording slider — a chronological list of
+all recent sessions (BROADCAST + HANGOUT), including sessions without available recordings (e.g.,
+in-progress, failed, or hangouts without a recording). The existing `/recordings` endpoint is
+insufficient because it filters by recordingStatus and only surfaces replay-ready content.
+
+```
+GET /activity
+Query params: ?limit=20&type=ALL|BROADCAST|HANGOUT  (optional)
+Response:     { items: ActivityItem[] }
+```
+
+This endpoint is the primary source for both the horizontal recording slider (broadcasts with
+`recordingStatus=available`) and the activity feed list (all sessions). The frontend differentiates
+rendering based on `sessionType` and `recordingStatus`.
+
+**Hangout activity cards:** Hangout sessions appear as activity cards with participant list,
+message count, and duration — not as recording tiles. The `/activity` endpoint serves both use
+cases from a single call.
+
+---
+
+## New Components Summary
+
+### New Lambda Functions
+
+| File | Trigger | Responsibility |
+|------|---------|---------------|
+| `backend/src/handlers/start-transcription.ts` | EventBridge `RecordingEndRuleV2` (2nd target) | Start Amazon Transcribe job |
+| `backend/src/handlers/store-transcript.ts` | EventBridge `aws.transcribe` Job State Change | Fetch transcript, store, invoke Bedrock |
+| `backend/src/handlers/list-activity.ts` | GET /activity | Unified activity feed (all session types, all new fields) |
+
+### Modified Lambda Functions
+
+| File | Change | Location |
+|------|--------|----------|
+| `backend/src/handlers/join-hangout.ts` | Add participant persistence after token generation | After line 65 |
+| `backend/src/handlers/recording-ended.ts` | Add reaction summary computation after metadata update | After line 127 |
+| `backend/src/handlers/list-recordings.ts` | No logic change — new fields appear automatically | — |
+
+### New Repository Functions (all in `backend/src/repositories/session-repository.ts`)
+
+| Function | Purpose |
+|----------|---------|
+| `addHangoutParticipant()` | Write PARTICIPANT item under SESSION# PK |
+| `getHangoutParticipants()` | Query PARTICIPANT items for a session |
+| `updateReactionSummary()` | Write `reactionSummary` map to session METADATA |
+| `updateTranscriptFields()` | Write `transcriptText`, `transcriptStatus`, `transcriptJobName` |
+| `updateAiSummary()` | Write `aiSummary`, `aiSummaryStatus`, `aiModel` |
+| `getRecentActivity()` | Scan all recent sessions (all types), sorted descending |
+
+### New DynamoDB Schema Additions
+
+All changes are to the existing `vnl-sessions` table. No new tables needed.
+
+**Session METADATA item — new fields:**
+
+```
+# Reaction summary (computed at session end)
+reactionSummary: Map {
+  heart:      Number,
+  fire:       Number,
+  clap:       Number,
+  laugh:      Number,
+  surprised:  Number,
+  totalCount: Number
 }
+
+# Transcription pipeline
+transcriptStatus:  String  ('pending' | 'processing' | 'available' | 'failed')
+transcriptJobName: String
+transcriptText:    String  (inline; guard at 250,000 chars for sessions > ~3 hrs)
+
+# AI summary
+aiSummary:       String
+aiSummaryStatus: String  ('pending' | 'processing' | 'available' | 'failed')
+aiModel:         String  (model ID for audit)
+
+# Denormalized participant count (written at session end for fast reads)
+participantCount: Number
 ```
 
-**New Handler: Recording Started**
-
-```typescript
-// backend/src/handlers/recording-started.ts (NEW)
-
-export const handler = async (
-  event: EventBridgeEvent<'IVS Recording State Change', RecordingStartDetail>
-): Promise<void> => {
-  const { channel_name, recording_s3_key_prefix } = event.detail;
-
-  // Find session by channel ARN
-  const session = await findSessionByChannel(tableName, channel_name);
-
-  // Store preliminary recording metadata
-  await updateSessionRecording(tableName, session.sessionId, {
-    s3KeyPrefix: recording_s3_key_prefix,
-    s3Bucket: event.detail.recording_s3_bucket_name,
-    status: 'RECORDING',
-  });
-};
-```
-
-**Modified Handler: Recording Ended**
-
-```typescript
-// backend/src/handlers/recording-ended.ts (MODIFY)
-
-export const handler = async (
-  event: EventBridgeEvent<'IVS Recording State Change', RecordingEndDetail>
-): Promise<void> => {
-  const {
-    channel_name,
-    recording_s3_key_prefix,
-    recording_duration_ms,
-  } = event.detail;
-
-  // Fetch recording-ended.json from S3
-  const metadata = await fetchRecordingMetadata(
-    event.detail.recording_s3_bucket_name,
-    `${recording_s3_key_prefix}/events/recording-ended.json`
-  );
-
-  // Count chat messages and reactions for this session
-  const [chatCount, reactionCount] = await Promise.all([
-    countChatMessages(tableName, session.sessionId),
-    countReactions(tableName, session.sessionId),
-  ]);
-
-  // Update session with full recording metadata
-  await updateSessionRecording(tableName, session.sessionId, {
-    s3KeyPrefix: recording_s3_key_prefix,
-    s3Bucket: event.detail.recording_s3_bucket_name,
-    durationMs: recording_duration_ms,
-    playbackUrl: constructPlaybackUrl(metadata),
-    thumbnailUrl: constructThumbnailUrl(metadata),
-    renditions: metadata.media.hls.renditions,
-    chatMessageCount: chatCount,
-    reactionCount: reactionCount,
-    status: 'COMPLETED',
-  });
-
-  // Existing: Transition session to ENDED, release pool resources
-  await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
-  await releasePoolResources(session);
-};
-```
-
-#### 3. API Layer (New Endpoints)
-
-**GET /sessions (List Replay Sessions)**
-
-```typescript
-// backend/src/handlers/list-sessions.ts (NEW)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const tableName = process.env.TABLE_NAME!;
-  const limit = parseInt(event.queryStringParameters?.limit || '20', 10);
-
-  // Query GSI1 for ENDED sessions sorted by endedAt
-  const result = await docClient.send(new QueryCommand({
-    TableName: tableName,
-    IndexName: 'GSI1',
-    KeyConditionExpression: 'GSI1PK = :status',
-    ExpressionAttributeValues: {
-      ':status': 'STATUS#ENDED',
-    },
-    ScanIndexForward: false, // Newest first
-    Limit: limit,
-  }));
-
-  const sessions = result.Items.filter(item => item.recording?.status === 'COMPLETED');
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ sessions }),
-  };
-};
-```
-
-**GET /sessions/{sessionId}/replay (Get Replay Metadata)**
-
-```typescript
-// backend/src/handlers/get-replay.ts (NEW)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const sessionId = event.pathParameters!.sessionId;
-  const session = await getSessionById(tableName, sessionId);
-
-  if (!session || !session.recording) {
-    return { statusCode: 404, body: JSON.stringify({ error: 'Recording not found' }) };
-  }
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      sessionId: session.sessionId,
-      playbackUrl: session.recording.playbackUrl,
-      thumbnailUrl: session.recording.thumbnailUrl,
-      durationMs: session.recording.durationMs,
-      startedAt: session.startedAt,
-      endedAt: session.endedAt,
-    }),
-  };
-};
-```
-
-### Recording State Flow
+**New PARTICIPANT item type:**
 
 ```
-Channel Creation → Recording Config Associated
-    ↓
-Broadcaster Starts Stream → IVS Stream Start Event
-    ↓
-Session Status: CREATING → LIVE (existing)
-    ↓
-IVS Recording Start Event → recording-started.json written to S3
-    ↓
-Store preliminary recording metadata in session (NEW)
-    ↓
-Stream Ends → IVS Stream End Event
-    ↓
-Session Status: LIVE → ENDING (existing)
-    ↓
-IVS Recording End Event (delayed by reconnectWindow) → recording-ended.json written
-    ↓
-Fetch recording metadata from S3 (NEW)
-Count chat messages and reactions (NEW)
-Update session with full recording metadata (NEW)
-    ↓
-Session Status: ENDING → ENDED (existing)
-Release pool resources (existing)
+PK:            SESSION#{sessionId}
+SK:            PARTICIPANT#{userId}
+entityType:    PARTICIPANT
+sessionId:     String
+userId:        String
+participantId: String    (IVS RealTime participant ID from token response)
+joinedAt:      ISO String
+leftAt:        ISO String | undefined  (nullable)
 ```
 
-## Reaction Events Integration
+No new GSI. Participants always accessed by PK=`SESSION#{id}`, SK beginning with `PARTICIPANT#`.
 
-### Reaction Storage Pattern
+**Message count on session (recommendation):** Store `messageCount` as an atomic counter on the
+session METADATA item, incremented by `send-message.ts` via `ADD messageCount :1`. This avoids
+a chat history scan on every activity card. If this adds unwanted scope to an early phase, defer
+to a later phase and show message count as N/A initially.
 
-Reactions are time-series events that need to be:
-1. Written in real-time during live streams
-2. Queried for replay synchronization by timestamp
-3. Aggregated for counts and statistics
+### New EventBridge Rules
 
-**DynamoDB Schema for Reactions**
+| Rule Name | Event Pattern | Target |
+|-----------|--------------|--------|
+| `TranscribeJobCompleteRule` | `source: aws.transcribe`, `detail.TranscriptionJobStatus: [COMPLETED, FAILED]` | `store-transcript.ts` |
 
-```typescript
-// New DynamoDB items for reactions
-{
-  PK: "SESSION#<sessionId>",
-  SK: "REACTION#<timestamp>#<reactionId>",
-  GSI1PK: "USER#<userId>",           // Find all reactions by user
-  GSI1SK: "<timestamp>",
-  GSI2PK: "SESSION#<sessionId>",     // NEW GSI for time-range queries
-  GSI2SK: "<sessionRelativeTimeMs>", // Milliseconds since session start
+Existing rules modified (in `infra/lib/stacks/session-stack.ts`):
+- `RecordingEndRuleV2`: add `start-transcription.ts` as a second target alongside `recording-ended.ts`.
 
-  reactionId: "uuid",
-  sessionId: "abc123",
-  userId: "user-456",
-  reactionType: "heart" | "fire" | "clap" | "laugh",
-  timestamp: "2026-03-02T14:10:30.500Z",
-  sessionRelativeTime: 330500, // 5m 30.5s into the stream
-}
-```
+### New API Gateway Endpoints (in `infra/lib/stacks/api-stack.ts`)
 
-**New GSI2 for Time-Range Queries**
+| Method | Path | Auth | Handler |
+|--------|------|------|---------|
+| GET | `/activity` | None (public) | `list-activity.ts` |
 
-```typescript
-// infra/lib/stacks/session-stack.ts (MODIFY)
+Existing endpoints: no breaking changes. New fields on `/recordings` responses appear addively.
 
-this.table.addGlobalSecondaryIndex({
-  indexName: 'GSI2',
-  partitionKey: {
-    name: 'GSI2PK',
-    type: dynamodb.AttributeType.STRING,
-  },
-  sortKey: {
-    name: 'GSI2SK',
-    type: dynamodb.AttributeType.NUMBER, // Numeric sort for time ranges
-  },
-  projectionType: dynamodb.ProjectionType.ALL,
-});
-```
+### New IAM Permissions
 
-**Source:** [DynamoDB time-series event patterns](https://aws.amazon.com/blogs/database/build-scalable-event-driven-architectures-with-amazon-dynamodb-and-aws-lambda/) and [GSI query patterns research](https://dynobase.dev/dynamodb-gsi/)
+| Lambda | Permission | Resource |
+|--------|-----------|---------|
+| `start-transcription.ts` | `transcribe:StartTranscriptionJob` | `*` |
+| `start-transcription.ts` | `s3:GetObject`, `s3:PutObject` | recordings bucket |
+| `store-transcript.ts` | `transcribe:GetTranscriptionJob` | `*` |
+| `store-transcript.ts` | `s3:GetObject` | recordings bucket (transcript output) |
+| `store-transcript.ts` | `bedrock:InvokeModel` | `arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-*` |
+| `store-transcript.ts` | `dynamodb:UpdateItem`, `dynamodb:GetItem` | vnl-sessions table |
+| `list-activity.ts` | `dynamodb:Scan` | vnl-sessions table |
+| `join-hangout.ts` (modified) | No new perms — already has DynamoDB read/write | — |
+| `recording-ended.ts` (modified) | No new perms — already has DynamoDB read/write | — |
 
-### Integration Points
+---
 
-#### 1. Live Reactions (During Broadcast)
+## Data Flows
 
-**POST /sessions/{sessionId}/reactions**
-
-```typescript
-// backend/src/handlers/create-reaction.ts (NEW)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const sessionId = event.pathParameters!.sessionId;
-  const userId = event.requestContext.authorizer!.claims.sub;
-  const { reactionType } = JSON.parse(event.body!);
-
-  // Get session to calculate relative time
-  const session = await getSessionById(tableName, sessionId);
-
-  if (!session || session.status !== SessionStatus.LIVE) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Session not live' }) };
-  }
-
-  const now = new Date().toISOString();
-  const sessionRelativeTime = calculateSessionRelativeTime(session.startedAt!, now);
-  const reactionId = uuidv4();
-
-  await docClient.send(new PutCommand({
-    TableName: tableName,
-    Item: {
-      PK: `SESSION#${sessionId}`,
-      SK: `REACTION#${now}#${reactionId}`,
-      GSI1PK: `USER#${userId}`,
-      GSI1SK: now,
-      GSI2PK: `SESSION#${sessionId}`,
-      GSI2SK: sessionRelativeTime, // Numeric sort key for time-range queries
-      reactionId,
-      sessionId,
-      userId,
-      reactionType,
-      timestamp: now,
-      sessionRelativeTime,
-    },
-  }));
-
-  return {
-    statusCode: 201,
-    body: JSON.stringify({ reactionId, sessionRelativeTime }),
-  };
-};
-```
-
-#### 2. Replay Reactions (During Playback)
-
-**POST /sessions/{sessionId}/replay-reactions**
-
-```typescript
-// backend/src/handlers/create-replay-reaction.ts (NEW)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const sessionId = event.pathParameters!.sessionId;
-  const userId = event.requestContext.authorizer!.claims.sub;
-  const { reactionType, videoTimestamp } = JSON.parse(event.body!);
-
-  // videoTimestamp is milliseconds into the replay video (e.g., user at 5m30s)
-
-  const session = await getSessionById(tableName, sessionId);
-
-  if (!session || session.status !== SessionStatus.ENDED) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Session not ended' }) };
-  }
-
-  const now = new Date().toISOString();
-  const reactionId = uuidv4();
-
-  await docClient.send(new PutCommand({
-    TableName: tableName,
-    Item: {
-      PK: `SESSION#${sessionId}`,
-      SK: `REACTION#${now}#${reactionId}`,
-      GSI1PK: `USER#${userId}`,
-      GSI1SK: now,
-      GSI2PK: `SESSION#${sessionId}`,
-      GSI2SK: videoTimestamp, // Use video timestamp for sync
-      reactionId,
-      sessionId,
-      userId,
-      reactionType,
-      timestamp: now,
-      sessionRelativeTime: videoTimestamp,
-      isReplayReaction: true, // Flag to distinguish from live reactions
-    },
-  }));
-
-  return {
-    statusCode: 201,
-    body: JSON.stringify({ reactionId }),
-  };
-};
-```
-
-#### 3. Query Reactions for Replay Sync
-
-**GET /sessions/{sessionId}/reactions?startTime=0&endTime=60000**
-
-```typescript
-// backend/src/handlers/get-reactions.ts (NEW)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const sessionId = event.pathParameters!.sessionId;
-  const startTime = parseInt(event.queryStringParameters?.startTime || '0', 10);
-  const endTime = parseInt(event.queryStringParameters?.endTime || '999999999', 10);
-
-  // Query GSI2 for reactions within time range
-  const result = await docClient.send(new QueryCommand({
-    TableName: tableName,
-    IndexName: 'GSI2',
-    KeyConditionExpression: 'GSI2PK = :session AND GSI2SK BETWEEN :start AND :end',
-    ExpressionAttributeValues: {
-      ':session': `SESSION#${sessionId}`,
-      ':start': startTime,
-      ':end': endTime,
-    },
-  }));
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ reactions: result.Items }),
-  };
-};
-```
-
-### Reaction Data Flow
+### Hangout Participant Tracking
 
 ```
-Live Stream:
-User clicks reaction → POST /sessions/{id}/reactions
-    ↓
-Calculate sessionRelativeTime from session.startedAt
-    ↓
-Store reaction with GSI2SK = sessionRelativeTime
-    ↓
-Frontend receives reaction → Display in real-time overlay
-
-Replay:
-User plays video → Video player at 5m30s (330000ms)
-    ↓
-Frontend polls: GET /sessions/{id}/reactions?startTime=330000&endTime=360000
-    ↓
-Query GSI2 for reactions in 30s window
-    ↓
-Display reactions synchronized to video timeline
+User clicks "Hangout" -> Homepage creates session
+    |
+    v
+POST /sessions/{id}/join
+    |
+    v
+join-hangout.ts:
+  1. Validate session (existing)
+  2. CreateParticipantTokenCommand -> IVS RealTime (existing)
+  3. updateSessionStatus LIVE (existing, first join only)
+  4. addHangoutParticipant() -> DynamoDB       [NEW]
+     PK=SESSION#{id}, SK=PARTICIPANT#{userId}
+  5. Return token + participantId
 ```
 
-**Source:** [Live streaming reactions architecture patterns](https://www.hellointerview.com/learn/system-design/problem-breakdowns/fb-live-comments)
-
-### Chat Message Pattern (Already Implemented)
-
-Chat messages already use `sessionRelativeTime` field (see `backend/src/domain/chat-message.ts`). The same GSI2 pattern should be added to chat messages for efficient replay queries:
-
-```typescript
-// MODIFY: backend/src/handlers/send-message.ts
-
-// Add GSI2 attributes to chat message items
-{
-  PK: "SESSION#<sessionId>",
-  SK: "CHAT#<timestamp>#<messageId>",
-  GSI1PK: "USER#<senderId>",
-  GSI1SK: "<timestamp>",
-  GSI2PK: "SESSION#<sessionId>", // NEW
-  GSI2SK: sessionRelativeTime,   // NEW (already calculated)
-  // ... rest of chat message fields
-}
-```
-
-## IVS RealTime Stage Integration
-
-### How IVS RealTime Stages Work
-
-IVS RealTime Stages enable multi-participant WebRTC sessions (hangouts). Key differences from IVS Channels:
-
-| Feature | IVS Channel (Broadcast) | IVS RealTime Stage (Hangout) |
-|---------|------------------------|------------------------------|
-| Participants | 1 broadcaster, N viewers | Up to 12 publishers, unlimited viewers |
-| Protocol | RTMPS ingest, HLS playback | WebRTC (bidirectional) |
-| Latency | 2-5 seconds | Sub-second |
-| Recording | Channel-level recording config | Individual participant recording or composite |
-| Resource pool | Pre-warmed channels | Pre-warmed stages |
-
-**Source:** [IVS RealTime Stage Creation Documentation](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-create-stage.html)
-
-### Integration Points
-
-#### 1. Infrastructure Layer (Pool Management)
-
-**Stage Pool with Recording**
-
-```typescript
-// infra/lib/stacks/session-stack.ts (MODIFY replenish pool environment)
-
-environment: {
-  TABLE_NAME: this.table.tableName,
-  MIN_CHANNELS: '3',
-  MIN_STAGES: '2',
-  MIN_ROOMS: '5',
-  STORAGE_CONFIG_ARN: storageConfig.attrArn, // NEW: For stage recording
-}
-```
-
-**Storage Configuration for Stage Recording**
-
-```typescript
-// infra/lib/stacks/session-stack.ts (NEW)
-
-const storageConfig = new ivs.CfnStorageConfiguration(this, 'StageStorageConfig', {
-  s3: {
-    bucketName: recordingBucket.bucketName,
-  },
-});
-```
-
-**Modified: Create Stage with Recording**
-
-```typescript
-// backend/src/handlers/replenish-pool.ts (MODIFY createStage function)
-
-async function createStage(tableName: string): Promise<void> {
-  const ivsRealTimeClient = getIVSRealTimeClient();
-  const docClient = getDocumentClient();
-
-  const stageId = uuidv4();
-
-  const createStageResponse = await ivsRealTimeClient.send(
-    new CreateStageCommand({
-      name: `vnl-stage-${stageId}`,
-      // NEW: Enable individual participant recording
-      autoParticipantRecordingConfiguration: {
-        storageConfigurationArn: process.env.STORAGE_CONFIG_ARN,
-        mediaTypes: ['AUDIO_VIDEO'],
-      },
-    })
-  );
-
-  await docClient.send(new PutCommand({
-    TableName: tableName,
-    Item: {
-      PK: `POOL#${createStageResponse.stage.arn}`,
-      SK: 'METADATA',
-      GSI1PK: 'STATUS#AVAILABLE',
-      GSI1SK: new Date().toISOString(),
-      resourceType: ResourceType.STAGE,
-      status: Status.AVAILABLE,
-      recordingEnabled: true, // NEW
-      createdAt: new Date().toISOString(),
-    },
-  }));
-}
-```
-
-#### 2. Session Creation (Hangout vs Broadcast)
-
-**Modified: Create Session Handler**
-
-```typescript
-// backend/src/handlers/create-session.ts (MODIFY)
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const userId = event.requestContext.authorizer!.claims.sub;
-  const { sessionType } = JSON.parse(event.body!); // NEW: 'BROADCAST' or 'HANGOUT'
-
-  if (sessionType === SessionType.HANGOUT) {
-    // Claim stage from pool
-    const stage = await claimPoolResource(tableName, ResourceType.STAGE);
-    const chatRoom = await claimPoolResource(tableName, ResourceType.ROOM);
-
-    const session = {
-      sessionId: uuidv4(),
-      userId,
-      sessionType: SessionType.HANGOUT,
-      status: SessionStatus.CREATING,
-      claimedResources: {
-        stage: stage.arn, // Stage ARN instead of channel
-        chatRoom: chatRoom.arn,
-      },
-      createdAt: new Date().toISOString(),
-      version: 1,
-    };
-
-    await createSession(tableName, session);
-
-    return {
-      statusCode: 201,
-      body: JSON.stringify({
-        sessionId: session.sessionId,
-        sessionType: 'HANGOUT',
-      }),
-    };
-  } else {
-    // Existing broadcast logic (claim channel + room)
-    // ...
-  }
-};
-```
-
-#### 3. Participant Token Generation
-
-**POST /sessions/{sessionId}/participant-token**
-
-```typescript
-// backend/src/handlers/create-participant-token.ts (NEW)
-
-import { CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const sessionId = event.pathParameters!.sessionId;
-  const userId = event.requestContext.authorizer!.claims.sub;
-  const username = event.requestContext.authorizer!.claims['cognito:username'];
-
-  const session = await getSessionById(tableName, sessionId);
-
-  if (!session || session.sessionType !== SessionType.HANGOUT) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Not a hangout session' }) };
-  }
-
-  const ivsRealTimeClient = getIVSRealTimeClient();
-
-  const tokenResponse = await ivsRealTimeClient.send(
-    new CreateParticipantTokenCommand({
-      stageArn: session.claimedResources.stage,
-      userId,
-      attributes: {
-        username,
-      },
-      capabilities: ['PUBLISH', 'SUBSCRIBE'], // Full participant (not just viewer)
-      duration: 3600, // 1 hour
-    })
-  );
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      token: tokenResponse.participantToken.token,
-      participantId: tokenResponse.participantToken.participantId,
-    }),
-  };
-};
-```
-
-#### 4. Stage Lifecycle Management
-
-**Hangout Session Flow**
+### Reaction Summary
 
 ```
-User creates hangout → Claim stage from pool
-    ↓
-Generate participant tokens for host and guests
-    ↓
-Participants join stage via WebRTC (IVS Web Broadcast SDK)
-    ↓
-Stage records individual participant streams to S3
-    ↓
-Host ends hangout → Participants disconnect
-    ↓
-IVS Recording End events (one per participant) → EventBridge
-    ↓
-Aggregate participant recordings metadata
-    ↓
-Session Status: CREATING → LIVE → ENDING → ENDED
-Release stage + chat room back to pool
+IVS emits Recording End event
+    |
+    v
+EventBridge -> recording-ended.ts (existing, unmodified flow up to pool release)
+    |
+    v
+updateSessionStatus ENDED (existing)
+    |
+    v
+updateRecordingMetadata (existing)
+    |
+    v
+computeAndStoreReactionSummary() [NEW, best-effort]
+  getReactionCounts() x 5 emoji types (parallel, ~500 DynamoDB queries)
+  updateReactionSummary() -> session METADATA
+    |
+    v
+releasePoolResources (existing — always runs, even if summary fails)
 ```
 
-**EventBridge Rule for Stage Recording Events**
-
-```typescript
-// infra/lib/stacks/session-stack.ts (NEW)
-
-// Lambda function for stage-recording-ended events
-const stageRecordingEndedFn = new nodejs.NodejsFunction(this, 'StageRecordingEnded', {
-  runtime: lambda.Runtime.NODEJS_20_X,
-  handler: 'handler',
-  entry: path.join(__dirname, '../../../backend/src/handlers/stage-recording-ended.ts'),
-  timeout: Duration.seconds(30),
-  environment: {
-    TABLE_NAME: this.table.tableName,
-  },
-});
-
-this.table.grantReadWriteData(stageRecordingEndedFn);
-
-// EventBridge rule for IVS RealTime Recording End events
-new events.Rule(this, 'StageRecordingEndRule', {
-  eventPattern: {
-    source: ['aws.ivs'],
-    detailType: ['IVS Recording State Change'],
-    detail: {
-      recording_status: ['Recording End'],
-      // Filter for stage recordings (not channel recordings)
-      stage_arn: [{ exists: true }],
-    },
-  },
-  targets: [new targets.LambdaFunction(stageRecordingEndedFn)],
-  description: 'Handle stage participant recording completion',
-});
-```
-
-**Handler: Stage Recording Ended**
-
-```typescript
-// backend/src/handlers/stage-recording-ended.ts (NEW)
-
-export const handler = async (
-  event: EventBridgeEvent<'IVS Recording State Change', StageRecordingEndDetail>
-): Promise<void> => {
-  const { stage_arn, participant_id, recording_s3_key_prefix } = event.detail;
-
-  // Find session by stage ARN
-  const session = await findSessionByStage(tableName, stage_arn);
-
-  // Store participant recording metadata
-  await addParticipantRecording(tableName, session.sessionId, {
-    participantId: participant_id,
-    s3KeyPrefix: recording_s3_key_prefix,
-    s3Bucket: event.detail.recording_s3_bucket_name,
-    durationMs: event.detail.recording_duration_ms,
-  });
-
-  // Check if all participants have finished recording
-  const allParticipantsRecorded = await checkAllParticipantsRecorded(session);
-
-  if (allParticipantsRecorded) {
-    // Transition session to ENDED
-    await updateSessionStatus(tableName, session.sessionId, SessionStatus.ENDED, 'endedAt');
-    await releasePoolResources(session);
-  }
-};
-```
-
-### Stage Session Data Model
-
-```typescript
-// Session with stage recordings (multiple participants)
-{
-  PK: "SESSION#<sessionId>",
-  SK: "METADATA",
-
-  sessionId: "hangout-123",
-  userId: "host-user",
-  sessionType: "HANGOUT",
-  status: "ended",
-  claimedResources: {
-    stage: "arn:aws:ivs:...:stage/...",
-    chatRoom: "arn:aws:ivschat:...:room/...",
-  },
-
-  // NEW: Array of participant recordings
-  participantRecordings: [
-    {
-      participantId: "participant-1",
-      userId: "host-user",
-      s3Bucket: "vnl-recordings",
-      s3KeyPrefix: "ivs/v1/.../stage/.../participant-1/",
-      durationMs: 1800000,
-      playbackUrl: "https://.../.../media/hls/master.m3u8",
-    },
-    {
-      participantId: "participant-2",
-      userId: "guest-user",
-      s3Bucket: "vnl-recordings",
-      s3KeyPrefix: "ivs/v1/.../stage/.../participant-2/",
-      durationMs: 1750000,
-      playbackUrl: "https://.../.../media/hls/master.m3u8",
-    },
-  ],
-
-  // Composite view for replay (requires frontend to sync multiple streams)
-  recording: {
-    type: "MULTI_PARTICIPANT",
-    totalParticipants: 2,
-    longestDurationMs: 1800000,
-    chatMessageCount: 28,
-    reactionCount: 9,
-  }
-}
-```
-
-## Component Boundaries & Communication
-
-### Modified Components
-
-| Component | What Changes | Why |
-|-----------|-------------|-----|
-| **SessionStack (CDK)** | Add S3 bucket, recording config, storage config, GSI2 | Recording output, reaction queries |
-| **replenish-pool.ts** | Associate recording config with channels/stages | Enable auto-recording |
-| **create-session.ts** | Support sessionType: HANGOUT, claim stage | Multi-participant sessions |
-| **recording-ended.ts** | Fetch S3 metadata, count messages/reactions | Build replay metadata |
-| **send-message.ts** | Add GSI2PK/GSI2SK | Enable time-range queries |
-| **Session domain** | Add recording metadata, participantRecordings | Store playback info |
-
-### New Components
-
-| Component | Responsibility | Dependencies |
-|-----------|---------------|--------------|
-| **recording-started.ts** | Handle Recording Start events, store preliminary metadata | Session repo, S3 client |
-| **stage-recording-ended.ts** | Handle stage participant recordings, aggregate metadata | Session repo, S3 client |
-| **create-reaction.ts** | Store reactions with sessionRelativeTime | Session repo |
-| **create-replay-reaction.ts** | Store replay-time reactions | Session repo |
-| **get-reactions.ts** | Query reactions by time range (GSI2) | DynamoDB GSI2 |
-| **list-sessions.ts** | Query ENDED sessions for home feed | DynamoDB GSI1 |
-| **get-replay.ts** | Return replay metadata (playback URL, duration) | Session repo |
-| **create-participant-token.ts** | Generate IVS RealTime participant tokens | IVS RealTime client |
-
-### Data Flow Summary
-
-#### Recording Flow
+### Transcription + AI Summary Pipeline
 
 ```
-IVS Recording Start Event
-    ↓
-recording-started.ts → Store preliminary metadata
-    ↓
-IVS Recording End Event (delayed by reconnectWindow)
-    ↓
-recording-ended.ts → Fetch S3 metadata → Count messages/reactions → Update session
-    ↓
-Session available for replay via list-sessions.ts
+IVS emits Recording End event
+    |
+    +-> EventBridge target 1: recording-ended.ts (existing, unchanged)
+    |
+    +-> EventBridge target 2: start-transcription.ts [NEW]
+            |
+            v
+        StartTranscriptionJobCommand -> Amazon Transcribe
+        (uses HLS URL as input; jobName=transcript-{sessionId}-{ts})
+        updateTranscriptFields(transcriptStatus=processing, transcriptJobName)
+            |
+            | (async: Transcribe job takes 30s - 5 min)
+            v
+        Amazon Transcribe emits EventBridge: TranscribeJobStateChange
+            |
+            v
+        EventBridge -> store-transcript.ts [NEW]
+            |
+            v
+        GetTranscriptionJobCommand -> get transcript S3 URI
+        S3.GetObject -> fetch transcript JSON
+        extract transcriptText
+        updateTranscriptFields(transcriptText, transcriptStatus=available) -> session METADATA
+            |
+            v [same function, after transcript stored]
+        InvokeModelCommand -> Bedrock Claude Haiku
+        prompt: "Summarize in 2-3 sentences: {transcriptText}"
+        updateAiSummary(aiSummary, aiSummaryStatus=available) -> session METADATA
 ```
 
-#### Reaction Flow (Live)
+### Homepage Activity Feed
 
 ```
-User clicks reaction in live stream
-    ↓
-POST /sessions/{id}/reactions
-    ↓
-Calculate sessionRelativeTime (ms since session.startedAt)
-    ↓
-Store reaction with GSI2SK = sessionRelativeTime
-    ↓
-Frontend displays reaction overlay
+User opens HomePage
+    |
+    v
+GET /activity  [NEW endpoint]
+    |
+    v
+list-activity.ts -> getRecentActivity() -> DynamoDB Scan
+  FilterExpression: begins_with(PK, 'SESSION#') AND SK = 'METADATA'
+  Sort: by endedAt or createdAt descending
+  Returns: all session fields including reactionSummary, aiSummary, participantCount
+    |
+    v
+Frontend:
+  - Broadcast sessions w/ recordingStatus=available -> horizontal slider (HLS replay)
+  - All sessions -> activity feed list below slider
+  - HANGOUT sessions -> activity card with participants, messageCount, duration
+  - BROADCAST sessions -> recording card with thumbnail, AI summary, reaction counts
 ```
 
-#### Reaction Flow (Replay)
+---
+
+## Recommended Project Structure Additions
 
 ```
-User plays replay video at 5m30s
-    ↓
-GET /sessions/{id}/reactions?startTime=330000&endTime=360000
-    ↓
-Query GSI2: GSI2PK = SESSION#{id}, GSI2SK BETWEEN 330000 AND 360000
-    ↓
-Return reactions + chat messages in time range
-    ↓
-Frontend displays synchronized to video timeline
+backend/src/
+  handlers/
+    join-hangout.ts            # MODIFY: add participant persistence after token
+    recording-ended.ts         # MODIFY: add reaction summary after metadata update
+    start-transcription.ts     # NEW: trigger Transcribe job on recording end
+    store-transcript.ts        # NEW: receive transcript + call Bedrock
+    list-activity.ts           # NEW: unified activity feed endpoint
+  repositories/
+    session-repository.ts      # MODIFY: addHangoutParticipant, getHangoutParticipants,
+                               #         updateReactionSummary, updateTranscriptFields,
+                               #         updateAiSummary, getRecentActivity
+  domain/
+    session.ts                 # MODIFY: extend Session interface with new fields
+  lib/
+    transcribe-client.ts       # NEW: shared Transcribe SDK client (follows ivs-clients.ts)
+    bedrock-client.ts          # NEW: shared Bedrock SDK client
+
+infra/lib/stacks/
+  session-stack.ts             # MODIFY: add start-transcription as 2nd target on
+                               #         RecordingEndRuleV2; add TranscribeJobCompleteRule
+  api-stack.ts                 # MODIFY: GET /activity + list-activity handler
+
+web/src/
+  features/replay/
+    RecordingFeed.tsx          # MODIFY: extend Recording interface; render AI summary
+                               #         + reaction counts
+    ReplayViewer.tsx           # MODIFY: display aiSummary + reactionSummary in info panel
+  pages/
+    HomePage.tsx               # MODIFY: split feed into horizontal slider + activity feed
 ```
 
-#### Hangout Flow
+---
+
+## Build Order: Dependency-Justified Phases
+
+Dependencies determine ordering. Participant tracking and reaction summary are independent of the
+AI pipeline. The AI pipeline depends on recordings. The homepage depends on all data being present
+but can render progressively with empty states.
 
 ```
-User creates hangout session
-    ↓
-create-session.ts → Claim stage from pool
-    ↓
-POST /sessions/{id}/participant-token → Generate participant tokens
-    ↓
-Participants join via IVS Web Broadcast SDK (WebRTC)
-    ↓
-Individual participant recordings to S3
-    ↓
-IVS Recording End events (one per participant)
-    ↓
-stage-recording-ended.ts → Aggregate participant recordings
-    ↓
-Session available for replay with multi-stream playback
+Phase 1: Participant Tracking
+  Rationale: No external dependencies. Only touches join-hangout.ts and session-repository.ts.
+  Deliverables:
+  - Modify join-hangout.ts: persist PARTICIPANT item after token generation
+  - Add addHangoutParticipant() to session-repository.ts
+  - Add getHangoutParticipants() to session-repository.ts
+  - Extend Session/domain types for participantCount
+  Unblocks: Hangout activity card participant display
+
+Phase 2: Reaction Summary at Session End
+  Rationale: Depends only on existing reaction data and recording-ended.ts hook.
+  Deliverables:
+  - Modify recording-ended.ts: call computeAndStoreReactionSummary() post-metadata
+  - Add updateReactionSummary() to session-repository.ts
+  - Extend Session domain with reactionSummary field
+  Unblocks: Reaction counts on recording cards
+
+Phase 3: Transcription Pipeline
+  Rationale: Depends on recordings being available (natural consequence of Phase 2 work
+  in recording-ended.ts). Both can be done in same pass through session-stack.ts CDK changes.
+  Deliverables:
+  - New start-transcription.ts Lambda
+  - New TranscribeJobCompleteRule EventBridge rule in session-stack.ts
+  - Wire start-transcription as 2nd target on RecordingEndRuleV2
+  - New store-transcript.ts Lambda (without Bedrock initially)
+  - Add updateTranscriptFields() to session-repository.ts
+  - IAM: transcribe:StartTranscriptionJob, s3 access
+  Unblocks: AI summary (Phase 4)
+
+Phase 4: AI Summary
+  Rationale: Depends directly on transcript pipeline (Phase 3). Extends store-transcript.ts.
+  Deliverables:
+  - Extend store-transcript.ts: call Bedrock after storing transcript
+  - Add updateAiSummary() to session-repository.ts
+  - New bedrock-client.ts shared client
+  - IAM: bedrock:InvokeModel
+  - Extend Session domain with aiSummary, aiSummaryStatus, aiModel
+  Unblocks: Summary display on cards and replay page
+
+Phase 5: Homepage Redesign + Activity Feed API
+  Rationale: Depends on Phases 1-4 for full data richness; can build with empty states earlier.
+  Deliverables:
+  - New list-activity.ts Lambda
+  - GET /activity endpoint in api-stack.ts
+  - Add getRecentActivity() to session-repository.ts
+  - Extend Recording interface in RecordingFeed.tsx
+  - Homepage layout: horizontal recording slider + activity feed below
+  - Activity card component for hangouts
+  - Replay page: display aiSummary + reactionSummary in info panel
 ```
 
-## Build Order & Dependencies
+Phases 2 and 3 share the `session-stack.ts` CDK file and can be done in the same CDK pass.
+Phase 5 frontend can begin while Phases 3-4 are running — build the layout with empty/loading
+states for AI and reaction fields; content appears as the pipeline delivers it to session records.
 
-### Phase 1: Recording Foundation
-**Dependencies:** None (extends existing architecture)
-**Build order:**
-1. CDK: Add S3 bucket, recording configuration, storage configuration
-2. CDK: Add recording-started and recording-ended EventBridge rules
-3. Backend: `recording-started.ts` handler (store preliminary metadata)
-4. Backend: Modify `recording-ended.ts` to fetch S3 metadata
-5. Backend: Extend Session domain with recording metadata
-6. Backend: `list-sessions.ts` (query ENDED sessions)
-7. Backend: `get-replay.ts` (return playback URL, duration)
-8. Frontend: Home feed (list replays)
-9. Frontend: Replay viewer (HLS player with recording URL)
+---
 
-**Why this order:** Recording is foundational. Must work before reactions/chat can sync to replay timeline.
+## Architectural Patterns
 
-### Phase 2: Reactions (Live + Replay)
-**Dependencies:** Phase 1 (needs sessionRelativeTime from recording)
-**Build order:**
-1. CDK: Add GSI2 to DynamoDB table
-2. Backend: `create-reaction.ts` (live reactions with sessionRelativeTime)
-3. Backend: `get-reactions.ts` (query reactions by time range)
-4. Backend: Modify `send-message.ts` to add GSI2 attributes
-5. Backend: `create-replay-reaction.ts` (reactions during replay)
-6. Frontend: Live reaction UI (click heart/fire/etc.)
-7. Frontend: Replay reaction overlay (synchronized to video timeline)
+### Pattern 1: Fan-Out via Multiple EventBridge Targets
 
-**Why this order:** GSI2 must exist before reactions can be stored with time-range query keys. Live reactions before replay reactions (simpler, validates pattern).
+The existing `RecordingEndRuleV2` in `session-stack.ts` has one target. CDK supports multiple
+Lambda targets on the same rule. Adding `start-transcription.ts` as a second target fires both
+`recording-ended.ts` and `start-transcription.ts` in parallel from the same IVS event.
 
-### Phase 3: RealTime Hangouts
-**Dependencies:** Phase 1 (recording), Phase 2 (chat/reactions work for hangouts too)
-**Build order:**
-1. CDK: Add IVS RealTime storage configuration
-2. Backend: Modify `replenish-pool.ts` to create stages with recording
-3. Backend: Modify `create-session.ts` to support sessionType: HANGOUT
-4. Backend: `create-participant-token.ts` (generate IVS RealTime tokens)
-5. Backend: `stage-recording-ended.ts` (handle participant recordings)
-6. Backend: Extend Session domain with participantRecordings
-7. Frontend: Hangout creation UI
-8. Frontend: Participant video grid (IVS Web Broadcast SDK integration)
-9. Frontend: Multi-stream replay viewer (sync multiple participant streams)
+**When to use:** When two functions both need the same event, are fully independent, and have no
+shared write paths.
 
-**Why this order:** Hangouts depend on recording infrastructure (Phase 1) and reactions/chat (Phase 2) to provide full feature parity. Participant token generation must work before frontend can join stages.
+**Trade-off:** Both functions must be idempotent. EventBridge retries independently for each
+target on failure, so a failed transcription job does not block recording metadata storage.
 
-## Scaling Considerations
+### Pattern 2: Linear Async Chain for Sequentially Dependent Steps
 
-| Scale | Adjustments |
-|-------|-------------|
-| **0-1k users** | Current architecture sufficient. Single-table DynamoDB, GSI queries handle load. |
-| **1k-10k users** | Add DynamoDB Stream → Lambda → EventBridge for fan-out if multiple consumers need recording events. Monitor GSI2 hot partition (reactions concentrated on popular sessions). |
-| **10k-100k users** | Consider S3 CloudFront distribution for recording playback. Add read replicas via DynamoDB Global Tables if multi-region. Cache recording metadata in ElastiCache/CloudFront. |
-| **100k+ users** | Partition reactions by time bucket (e.g., GSI2PK = SESSION#{id}#{hour}) to avoid hot partitions. Consider Kinesis Data Streams for real-time reaction aggregation. Separate DynamoDB tables for hot data (active sessions) vs cold data (historical replays). |
+The transcript -> AI summary dependency is linear. Rather than emitting a custom EventBridge event
+after storing the transcript (which requires a custom event bus and additional rule), calling
+Bedrock directly inside `store-transcript.ts` is simpler and sufficient.
 
-**First bottleneck:** GSI2 hot partition if a single session has millions of reactions. Solution: Partition by time bucket or move real-time reactions to Kinesis.
+**When to use:** When Step B always follows Step A, and failure of B must not invalidate A.
 
-**Second bottleneck:** S3 GetObject requests for popular recordings. Solution: CloudFront CDN distribution.
+**Implementation:** Try/catch around the Bedrock call. On failure, set `aiSummaryStatus=failed`,
+log, and return. The transcript is stored and usable even without the summary.
+
+### Pattern 3: Compute-Once, Read-Many for Aggregates
+
+Reaction counts across 100 shards require 500 DynamoDB queries to compute. Computing at session-end
+converts a 500-query per-page-load into a single attribute access on the session item. This is the
+correct pattern for any aggregate that: (a) stops changing at a well-defined point, and (b) is read
+frequently.
+
+### Pattern 4: Co-locate Related Items on Shared PK
+
+Hangout participants are stored as `SESSION#{id} / PARTICIPANT#{userId}` items. All participants
+for a session are fetched with a single `Query` on PK — no GSI needed. Session METADATA
+(`SESSION#{id} / METADATA`) is fetched separately with `GetItem`.
+
+**When to use:** When child entities always belong to a parent and are always accessed through
+that parent. Avoids GSI for simple parent-child relationships.
+
+---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Polling Recording Metadata from S3
+### Anti-Pattern 1: Triggering Transcription from S3 Events
 
-**What people do:** Poll S3 for `recording-ended.json` after stream ends to detect completion.
+**What people do:** Wire S3 event notifications to fire when IVS writes recording files, then
+trigger Transcribe from there.
 
-**Why it's wrong:** EventBridge Recording End events are authoritative and include metadata. Polling S3 adds latency, costs, and complexity.
+**Why it's wrong:** IVS recordings are multi-file (HLS segments, thumbnails, manifest files). S3
+events fire multiple times before the recording is assembled. The EventBridge `Recording End` event
+from IVS is the authoritative "recording is complete" signal — it fires once when all files are
+finalized.
 
-**Do this instead:** Subscribe to EventBridge `IVS Recording State Change` events with `recording_status: ['Recording End']`. Fetch metadata file from S3 only once in the handler.
+**Do this instead:** Use the existing `RecordingEndRuleV2` as the sole trigger for
+`start-transcription.ts`.
 
-### Anti-Pattern 2: Scanning DynamoDB for All Reactions
+### Anti-Pattern 2: Computing Reaction Counts on Every Homepage Load
 
-**What people do:** Use Scan operation to retrieve all reactions for a session during replay.
+**What people do:** Call `getReactionCounts()` inside `list-recordings.ts` or `list-activity.ts`
+for each session returned.
 
-**Why it's wrong:** Scan is expensive, slow, and doesn't scale. Replay UI needs reactions in time order anyway.
+**Why it's wrong:** 5 emoji types x 100 shards = 500 DynamoDB queries per session. With 20 sessions
+on the homepage, that is 10,000 DynamoDB queries per page load.
 
-**Do this instead:** Query GSI2 with `GSI2PK = SESSION#{id}` and `GSI2SK BETWEEN startTime AND endTime` to fetch reactions for the current video playback window (e.g., next 30 seconds).
+**Do this instead:** Compute once at session end, store as `reactionSummary` map on the session
+item. Homepage reads the pre-computed value in a single attribute access.
 
-### Anti-Pattern 3: Storing Recording URLs in Session at Creation Time
+### Anti-Pattern 3: Storing Participants as a List on the Session METADATA Item
 
-**What people do:** Store `playbackUrl` when session is created, assuming it will be available after stream ends.
+**What people do:** Add `participants: string[]` to the session item and use
+`list_append` to push userId on join.
 
-**Why it's wrong:** Recording URL doesn't exist until recording completes. IVS generates unique S3 paths per recording. Storing incorrect URLs breaks replay.
+**Why it's wrong:** Even though `list_append` itself does not conflict, the existing
+`updateSessionStatus()` function uses an optimistic lock (`#version = :currentVersion`). Any
+concurrent update to the session item will increment `version`, causing the next join to fail its
+version check. Two participants joining within the same second will conflict.
 
-**Do this instead:** Store recording metadata (S3 key prefix, playback URL) only after receiving the Recording End event and fetching `recording-ended.json` from S3.
+**Do this instead:** Write each participant as a separate item with PK=`SESSION#{id}`,
+SK=`PARTICIPANT#{userId}`. No version conflicts, and items are naturally idempotent on re-join.
 
-### Anti-Pattern 4: Using Channel ARN as Session Identifier
+### Anti-Pattern 4: Blocking Pool Release on Reaction Summary Computation
 
-**What people do:** Use IVS channel ARN directly as session ID to avoid lookups.
+**What people do:** Make `recording-ended.ts` await the full reaction count computation before
+releasing pool resources.
 
-**Why it's wrong:** Channels are pooled resources, reused across multiple sessions. Multiple sessions can use the same channel over time. ARN-as-ID breaks replay history.
+**Why it's wrong:** Pool resource release is time-critical — released channels and stages become
+available for new sessions immediately. Blocking for 2-5 seconds on 500 DynamoDB queries delays
+pool replenishment unnecessarily.
 
-**Do this instead:** Generate unique session IDs (UUID) and store `claimedResources.channel` separately. Use Scan/Query to find session by channel ARN when needed (e.g., in EventBridge handlers).
+**Do this instead:** Wrap reaction summary computation in try/catch (best-effort, non-blocking),
+and ensure pool release always runs in the `finally` block or sequentially after the try/catch.
 
-### Anti-Pattern 5: Single GSI Sort Key for All Event Types
+### Anti-Pattern 5: Using a Separate DynamoDB Table for AI/Transcript Data
 
-**What people do:** Use `GSI2SK = timestamp` for reactions, chat messages, and other events.
+**What people do:** Create a new `vnl-transcripts` table or `vnl-ai-summaries` table to store
+AI pipeline results.
 
-**Why it's wrong:** Queries return mixed event types, requiring filtering in application code. Can't efficiently query just reactions or just messages.
+**Why it's wrong:** This requires cross-table joins (not natively supported in DynamoDB), complicates
+IAM, and adds CDK infrastructure. All AI/transcript fields fit on the session item (< 400KB),
+and the access pattern is always "get everything about a session."
 
-**Do this instead:** Prefix sort keys by type: `GSI2SK = REACTION#{sessionRelativeTime}` vs `CHAT#{sessionRelativeTime}`. Query with `begins_with` to filter by event type at the database level.
+**Do this instead:** Add fields directly to the `SESSION#{id} / METADATA` item in the existing
+`vnl-sessions` table.
+
+---
+
+## Scaling Considerations
+
+| Scale | Architecture Adjustment |
+|-------|------------------------|
+| Current (< 1K sessions) | Scan-based queries for activity feed are acceptable; no GSI optimization needed |
+| 1K-10K sessions | `getRecentActivity()` scan becomes expensive; add GSI3: PK=`ENTITY#SESSION`, SK=`{endedAt}` for efficient time-ordered session queries |
+| 10K+ sessions | Transcribe costs scale linearly with audio hours; add session duration guard (skip transcription for sessions under 30s or over 4 hours) |
+| High hangout concurrency | Separate PARTICIPANT items are already concurrency-safe; no hot-partition risk |
+
+---
+
+## Integration Points Reference (Quick Lookup)
+
+| Task | File | Function/Location | Type |
+|------|------|-------------------|------|
+| Persist participant join | `backend/src/handlers/join-hangout.ts` | After `ivsRealTimeClient.send()`, line ~65 | Modify |
+| Participant repo fn | `backend/src/repositories/session-repository.ts` | New `addHangoutParticipant()` | Add |
+| Compute reaction summary | `backend/src/handlers/recording-ended.ts` | After `updateRecordingMetadata()`, line ~127 | Modify |
+| Store reaction summary | `backend/src/repositories/session-repository.ts` | New `updateReactionSummary()` | Add |
+| Trigger Transcribe | `backend/src/handlers/start-transcription.ts` | New handler | New file |
+| Wire 2nd EB target | `infra/lib/stacks/session-stack.ts` | Add target to `RecordingEndRuleV2` | Modify |
+| Transcribe complete rule | `infra/lib/stacks/session-stack.ts` | New `TranscribeJobCompleteRule` | Modify |
+| Store transcript + Bedrock | `backend/src/handlers/store-transcript.ts` | New handler | New file |
+| Transcript repo fns | `backend/src/repositories/session-repository.ts` | New `updateTranscriptFields()`, `updateAiSummary()` | Add |
+| Activity feed endpoint | `backend/src/handlers/list-activity.ts` | New handler | New file |
+| Wire /activity | `infra/lib/stacks/api-stack.ts` | Add GET /activity resource + handler | Modify |
+| Activity repo fn | `backend/src/repositories/session-repository.ts` | New `getRecentActivity()` | Add |
+| Extend domain model | `backend/src/domain/session.ts` | Add new fields to Session interface | Modify |
+| Homepage layout | `web/src/pages/HomePage.tsx` | Split into slider + activity feed | Modify |
+| Extend recording card | `web/src/features/replay/RecordingFeed.tsx` | Extend Recording interface, add AI/reaction display | Modify |
+| Replay info panel | `web/src/features/replay/ReplayViewer.tsx` | Display aiSummary + reactionSummary | Modify |
+
+---
 
 ## Sources
 
-### High Confidence (Official AWS Documentation)
-- [IVS Auto-Record to Amazon S3](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html)
-- [IVS Individual Participant Recording](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/rt-individual-participant-recording.html)
-- [IVS RealTime Stage Creation](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/getting-started-create-stage.html)
-- [Using EventBridge with IVS](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/eventbridge.html)
-- [Using Global Secondary Indexes in DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html)
-
-### Medium Confidence (Community Patterns & Best Practices)
-- [DynamoDB Global Secondary Index Guide](https://dynobase.dev/dynamodb-gsi/)
-- [Build Scalable Event-Driven Architectures with DynamoDB and Lambda](https://aws.amazon.com/blogs/database/build-scalable-event-driven-architectures-with-amazon-dynamodb-and-aws-lambda/)
-- [Live Streaming Chat Architecture](https://www.vdocipher.com/blog/live-streaming-chat/)
-- [Design Facebook's Live Comments System](https://www.hellointerview.com/learn/system-design/problem-breakdowns/fb-live-comments)
-- [Master Date Range Queries in DynamoDB](https://openillumi.com/en/en-dynamodb-date-range-query-gsi-design/)
+- Codebase direct analysis: `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`, `web/src/` (HIGH confidence — read directly)
+- Amazon Transcribe EventBridge events: source `aws.transcribe`, detail-type `Transcribe Job State Change` (HIGH confidence — official AWS documentation)
+- Amazon Transcribe HLS input support: Transcribe accepts `.m3u8` as `MediaFormat` input (MEDIUM confidence — requires verification against current Transcribe docs before implementation)
+- AWS Bedrock Claude model IDs: `anthropic.claude-3-haiku-20240307-v1:0` (MEDIUM confidence — model availability should be verified in the target deployment region before CDK wiring)
+- DynamoDB single-table design: co-located items on shared PK for parent-child relationships (HIGH confidence — established AWS pattern)
+- IVS recording S3 structure: `{prefix}/media/hls/master.m3u8` confirmed from existing `recording-ended.ts` (HIGH confidence — read from live code)
 
 ---
-*Architecture integration research for: VideoNowAndLater v1.1 Milestone*
-*Researched: 2026-03-02*
-*Confidence: HIGH — Based on official AWS documentation and existing codebase patterns*
+
+*Architecture research for: VideoNowAndLater v1.2 Activity Feed & Intelligence*
+*Researched: 2026-03-05*

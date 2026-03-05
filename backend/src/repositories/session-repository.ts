@@ -215,10 +215,14 @@ export async function getRecentRecordings(
 
   const result = await docClient.send(new ScanCommand({
     TableName: tableName,
-    FilterExpression: 'recordingStatus = :available AND begins_with(PK, :pk)',
+    FilterExpression: '#status = :ended AND begins_with(PK, :pk) AND recordingStatus = :available',
+    ExpressionAttributeNames: {
+      '#status': 'status',
+    },
     ExpressionAttributeValues: {
-      ':available': 'available',
+      ':ended': 'ended',
       ':pk': 'SESSION#',
+      ':available': 'available',
     },
   }));
 
@@ -226,18 +230,17 @@ export async function getRecentRecordings(
     return [];
   }
 
-  // Extract session fields (remove DynamoDB keys) and filter sessions with endedAt
+  // Extract session fields (remove DynamoDB keys)
   const sessions = result.Items
-    .filter(item => item.endedAt !== undefined)
     .map(item => {
       const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
       return session as Session;
     });
 
-  // Sort descending by endedAt (most recent first)
+  // Sort descending by endedAt (most recent first), fall back to createdAt
   sessions.sort((a, b) => {
-    const aTime = new Date(a.endedAt!).getTime();
-    const bTime = new Date(b.endedAt!).getTime();
+    const aTime = new Date(a.endedAt ?? a.createdAt).getTime();
+    const bTime = new Date(b.endedAt ?? b.createdAt).getTime();
     return bTime - aTime;
   });
 

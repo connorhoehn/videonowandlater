@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 15-01-PLAN.md (Fix getSession() Recording Fields)
-last_updated: "2026-03-05T04:04:39.108Z"
+stopped_at: Completed 15-02-PLAN.md (Hangout Integration Fixes - LIVE transition, userId attribute, RecordingFeed routing)
+last_updated: "2026-03-05T04:04:53.577Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
   total_phases: 12
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 27
-  completed_plans: 26
+  completed_plans: 27
   percent: 100
 ---
 
@@ -89,6 +89,7 @@ Progress: [████████████] 100%
 | Phase 12 P01 | 2 | 1 tasks | 1 files |
 | Phase 12-hangout-creation-ui P01 | 5 | 2 tasks | 1 files |
 | Phase 15 P01 | 1 | 2 tasks | 2 files |
+| Phase 15 P02 | 4 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,7 @@ Recent decisions affecting current work:
 - [Phase 14]: Hangout userId uses cognito:username claim not sub (UUID) — consistent with create-chat-token.ts and create-session.ts identity chain
 - [Phase 15]: GetSessionResponse is a distinct interface from CreateSessionResponse — recording fields only exist post-creation
 - [Phase 15]: claimedResources, recordingS3Path, version excluded per SESS-04 security boundary
+- [Phase 15]: Wrap updateSessionStatus in try/catch for idempotency — second participant joining already-LIVE session is expected not an error
 
 ### Pending Todos
 
@@ -181,8 +183,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T04:04:36.134Z
-Stopped at: Completed 15-01-PLAN.md (Fix getSession() Recording Fields)
+Last session: 2026-03-05T04:04:53.575Z
+Stopped at: Completed 15-02-PLAN.md (Hangout Integration Fixes - LIVE transition, userId attribute, RecordingFeed routing)
 Resume file: None
 
 ---

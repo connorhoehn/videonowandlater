@@ -36,9 +36,10 @@ export function useReplayPlayer(recordingHlsUrl: string | undefined) {
       setIsPlaying(false);
     });
 
-    // SYNC_TIME_UPDATE event for chat synchronization (future use in Plan 06-03)
-    player.addEventListener(window.IVSPlayer.PlayerEventType.SYNC_TIME_UPDATE, (time: number) => {
-      setSyncTime(time);
+    // SYNC_TIME_UPDATE fires with UTC epoch ms; convert to relative ms using player.getPosition()
+    // so syncTime matches sessionRelativeTime (ms since stream start) for chat/reaction sync
+    player.addEventListener(window.IVSPlayer.PlayerEventType.SYNC_TIME_UPDATE, () => {
+      setSyncTime(player.getPosition() * 1000);
     });
 
     // Load HLS URL

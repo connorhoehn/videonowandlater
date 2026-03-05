@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../../../../backend/src/domain/chat-message';
 import { useSynchronizedChat } from './useSynchronizedChat';
-
-const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';
+import { getConfig } from '../../config/aws-config';
 
 interface ReplayChatProps {
   sessionId: string;
@@ -22,9 +21,11 @@ export function ReplayChat({ sessionId, currentSyncTime, authToken }: ReplayChat
   // Fetch all chat messages on mount
   useEffect(() => {
     const fetchMessages = async () => {
+      if (!authToken) return;
       try {
+        const apiBaseUrl = getConfig()?.apiUrl || '';
         const response = await fetch(
-          `${API_BASE_URL}/sessions/${sessionId}/chat/messages`,
+          `${apiBaseUrl}/sessions/${sessionId}/chat/messages`,
           {
             method: 'GET',
             headers: {
@@ -50,7 +51,7 @@ export function ReplayChat({ sessionId, currentSyncTime, authToken }: ReplayChat
     };
 
     fetchMessages();
-  }, [sessionId]);
+  }, [sessionId, authToken]);
 
   // Get synchronized messages based on current playback position
   const visibleMessages = useSynchronizedChat(allMessages, currentSyncTime);

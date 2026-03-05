@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { useReplayPlayer } from './useReplayPlayer';
@@ -42,18 +43,26 @@ export function ReplayViewer() {
   const [error, setError] = useState<string | null>(null);
   const [allReactions, setAllReactions] = useState<Reaction[]>([]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
-  const authToken = localStorage.getItem('token') || '';
+  const [authToken, setAuthToken] = useState('');
+
+  useEffect(() => {
+    fetchAuthSession().then(session => {
+      setAuthToken(session.tokens?.idToken?.toString() || '');
+    });
+  }, []);
 
   // Fetch session metadata
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !authToken) return;
 
     const fetchSession = async () => {
       const config = getConfig();
       const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
       try {
-        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`);
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -75,21 +84,23 @@ export function ReplayViewer() {
     };
 
     fetchSession();
-  }, [sessionId]);
+  }, [sessionId, authToken]);
 
   // IVS Player hook
   const { videoRef, syncTime } = useReplayPlayer(session?.recordingHlsUrl);
 
   // Fetch reactions on mount
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !authToken) return;
 
     const fetchReactions = async () => {
       const config = getConfig();
       const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
       try {
-        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/reactions`);
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/reactions`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
         if (response.ok) {
           const data = await response.json();
           setAllReactions(data.reactions || []);
@@ -100,7 +111,7 @@ export function ReplayViewer() {
     };
 
     fetchReactions();
-  }, [sessionId]);
+  }, [sessionId, authToken]);
 
   // Filter reactions by syncTime
   const visibleReactions = useReactionSync(allReactions, syncTime);

@@ -121,7 +121,7 @@ export class ApiStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
 
-    props.sessionsTable.grantReadData(startBroadcastHandler);
+    props.sessionsTable.grantReadWriteData(startBroadcastHandler);
 
     sessionStartResource.addMethod('POST', new apigateway.LambdaIntegration(startBroadcastHandler), {
       authorizer,

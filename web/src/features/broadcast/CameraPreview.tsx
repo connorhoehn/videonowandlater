@@ -5,18 +5,18 @@
 import type { RefObject } from 'react';
 
 interface CameraPreviewProps {
-  videoRef: RefObject<HTMLVideoElement | null>;
+  videoRef: RefObject<HTMLCanvasElement | null>;
 }
 
 export function CameraPreview({ videoRef }: CameraPreviewProps) {
   return (
     <div className="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-lg">
-      <video
+      {/* The IVS Broadcast SDK writes into this canvas element.
+          Canvas does not support object-fit, so we size it absolutely to fill
+          the container and let the SDK handle scaling internally. */}
+      <canvas
         ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full"
       />
     </div>
   );

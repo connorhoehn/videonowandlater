@@ -34,10 +34,8 @@ export async function claimNextAvailableResource(
     TableName: tableName,
     IndexName: 'GSI1',
     KeyConditionExpression: 'GSI1PK = :status',
-    FilterExpression: 'resourceType = :type',
     ExpressionAttributeValues: {
-      ':status': 'STATUS#AVAILABLE',
-      ':type': resourceType,
+      ':status': `STATUS#AVAILABLE#${resourceType}`,
     },
     Limit: 1,
     ScanIndexForward: true,  // FIFO: oldest first (GSI1SK = createdAt)
@@ -140,7 +138,7 @@ export async function releasePoolResource(
     },
     ExpressionAttributeValues: {
       ':available': Status.AVAILABLE,
-      ':gsi': 'STATUS#AVAILABLE',
+      ':gsi': `STATUS#AVAILABLE#${resourceType}`,
       ':null': null,
       ':inc': 1,
     },

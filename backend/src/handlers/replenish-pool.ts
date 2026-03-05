@@ -93,10 +93,8 @@ async function countAvailableResources(tableName: string, resourceType: Resource
         TableName: tableName,
         IndexName: 'GSI1',
         KeyConditionExpression: 'GSI1PK = :status',
-        FilterExpression: 'resourceType = :type',
         ExpressionAttributeValues: {
-          ':status': 'STATUS#AVAILABLE',
-          ':type': resourceType,
+          ':status': `STATUS#AVAILABLE#${resourceType}`,
         },
         Select: 'COUNT',
       })
@@ -141,7 +139,7 @@ async function createChannel(tableName: string, recordingConfigArn: string): Pro
         Item: {
           PK: `POOL#CHANNEL#${resourceId}`,
           SK: 'METADATA',
-          GSI1PK: 'STATUS#AVAILABLE',
+          GSI1PK: `STATUS#AVAILABLE#${ResourceType.CHANNEL}`,
           GSI1SK: new Date().toISOString(),
           entityType: 'POOL_ITEM',
           resourceType: ResourceType.CHANNEL,
@@ -177,10 +175,6 @@ async function createStage(tableName: string, recordingConfigArn: string): Promi
     const response = await ivsRealTimeClient.send(
       new CreateStageCommand({
         name: `vnl-pool-${uuidv4()}`,
-        autoParticipantRecordingConfiguration: {
-          storageConfigurationArn: recordingConfigArn,
-          mediaTypes: ['AUDIO_VIDEO'],
-        },
       })
     );
 
@@ -199,7 +193,7 @@ async function createStage(tableName: string, recordingConfigArn: string): Promi
         Item: {
           PK: `POOL#STAGE#${resourceId}`,
           SK: 'METADATA',
-          GSI1PK: 'STATUS#AVAILABLE',
+          GSI1PK: `STATUS#AVAILABLE#${ResourceType.STAGE}`,
           GSI1SK: new Date().toISOString(),
           entityType: 'POOL_ITEM',
           resourceType: ResourceType.STAGE,
@@ -254,7 +248,7 @@ async function createRoom(tableName: string): Promise<void> {
         Item: {
           PK: `POOL#ROOM#${resourceId}`,
           SK: 'METADATA',
-          GSI1PK: 'STATUS#AVAILABLE',
+          GSI1PK: `STATUS#AVAILABLE#${ResourceType.ROOM}`,
           GSI1SK: new Date().toISOString(),
           entityType: 'POOL_ITEM',
           resourceType: ResourceType.ROOM,

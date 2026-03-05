@@ -20,7 +20,7 @@ export const handler = async (
   event: EventBridgeEvent<'IVS Stream State Change', StreamStartDetail>
 ): Promise<void> => {
   const tableName = process.env.TABLE_NAME!;
-  const channelArn = event.detail.channel_name; // IVS uses channel_name for ARN
+  const channelArn = event.detail.channel_arn;
 
   console.log('Stream Start event received for channel:', channelArn);
 

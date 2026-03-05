@@ -1,7 +1,6 @@
 import React from 'react';
 import { ChatRoom } from 'amazon-ivs-chat-messaging';
-
-const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';
+import { getConfig } from '../../config/aws-config';
 
 interface UseChatRoomProps {
   sessionId: string;
@@ -18,14 +17,29 @@ export const useChatRoom = ({ sessionId, authToken }: UseChatRoomProps): UseChat
   const [connectionState, setConnectionState] = React.useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [error, setError] = React.useState<string | null>(null);
 
-  // Create tokenProvider callback that fetches from backend
+  // Store the latest authToken in a ref so the tokenProvider closure (which is
+  // captured once by ChatRoom) always uses the current value, even after the
+  // Cognito session resolves and authToken changes from '' to a real JWT.
+  const authTokenRef = React.useRef(authToken);
+  React.useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
+
+  const sessionIdRef = React.useRef(sessionId);
+  React.useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // tokenProvider is defined once; it reads from refs so it always has current values.
   const tokenProvider = React.useCallback(async () => {
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/chat/token`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+    const apiBaseUrl = getConfig()?.apiUrl || '';
+    const response = await fetch(`${apiBaseUrl}/sessions/${sessionIdRef.current}/chat/token`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authTokenRef.current}` },
     });
     const data = await response.json();
-    return data.token;
-  }, [sessionId, authToken]);
+    return data;
+  }, []); // no deps — reads via refs
 
   // Initialize ChatRoom instance ONCE using useState with initializer
   const [room] = React.useState(() => new ChatRoom({

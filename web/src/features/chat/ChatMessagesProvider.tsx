@@ -1,8 +1,7 @@
 import React from 'react';
 import type { ChatMessage } from 'amazon-ivs-chat-messaging';
 import { useChatRoomContext } from './ChatRoomProvider';
-
-const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';
+import { getConfig } from '../../config/aws-config';
 
 interface ChatMessagesContextValue {
   messages: ChatMessage[];
@@ -34,14 +33,22 @@ export const ChatMessagesProvider: React.FC<ChatMessagesProviderProps> = ({
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(true);
 
-  // Load history on mount
+  // Load history once authToken is available — guard avoids an unauthorized
+  // request that fires before Cognito resolves.
   React.useEffect(() => {
+    if (!authToken) return;
+
     const loadHistory = async () => {
       try {
+        const apiBaseUrl = getConfig()?.apiUrl || '';
         const response = await fetch(
-          `${API_BASE_URL}/sessions/${sessionId}/chat/messages?limit=50`,
+          `${apiBaseUrl}/sessions/${sessionId}/chat/messages?limit=50`,
           { headers: { Authorization: `Bearer ${authToken}` } }
         );
+        if (!response.ok) {
+          console.error('Failed to load chat history:', response.status, response.statusText);
+          return;
+        }
         const data = await response.json();
         setMessages(data.messages || []);
       } catch (error) {
@@ -59,7 +66,7 @@ export const ChatMessagesProvider: React.FC<ChatMessagesProviderProps> = ({
     const unsubscribeMessage = room.addListener('message', (message: ChatMessage) => {
       setMessages((prev) => [...prev, message]); // Append to end
       // Persist message to backend for history
-      fetch(`${API_BASE_URL}/sessions/${sessionId}/chat/messages`, {
+      fetch(`${getConfig()?.apiUrl || ''}/sessions/${sessionId}/chat/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

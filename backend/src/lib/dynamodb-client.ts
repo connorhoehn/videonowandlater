@@ -15,7 +15,9 @@ let docClient: DynamoDBDocumentClient | null = null;
 export function getDocumentClient(): DynamoDBDocumentClient {
   if (!docClient) {
     const client = new DynamoDBClient({});
-    docClient = DynamoDBDocumentClient.from(client);
+    docClient = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true },
+    });
   }
   return docClient;
 }

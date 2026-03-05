@@ -1,7 +1,6 @@
 import React from 'react';
 import { SendMessageRequest } from 'amazon-ivs-chat-messaging';
-import { useChatRoom } from './useChatRoom';
-import { ChatRoomProvider } from './ChatRoomProvider';
+import { useChatRoomContext } from './ChatRoomProvider';
 import { ChatMessagesProvider, useChatMessagesContext } from './ChatMessagesProvider';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -14,6 +13,7 @@ interface ChatPanelProps {
   authToken: string;
   isMobile: boolean;
   isOpen: boolean;
+  connectionState: 'disconnected' | 'connecting' | 'connected';
   onClose?: () => void;
 }
 
@@ -87,20 +87,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   authToken,
   isMobile,
   isOpen,
+  connectionState,
   onClose,
 }) => {
-  const { room, connectionState } = useChatRoom({ sessionId, authToken });
+  const room = useChatRoomContext();
 
   const handleSendMessage = async (content: string) => {
     try {
       await room.sendMessage(new SendMessageRequest(content));
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Show error toast (optional for v1)
     }
   };
 
-  // Mobile overlay classes
   const overlayClasses = isMobile
     ? `fixed inset-0 z-50 bg-white transform transition-transform ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
@@ -108,18 +107,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     : 'w-full h-full';
 
   return (
-    <ChatRoomProvider value={room}>
-      <ChatMessagesProvider sessionId={sessionId} authToken={authToken}>
-        <div className={overlayClasses}>
-          <ChatPanelContent
-            sessionOwnerId={sessionOwnerId}
-            connectionState={connectionState}
-            onSendMessage={handleSendMessage}
-            isMobile={isMobile}
-            onClose={onClose}
-          />
-        </div>
-      </ChatMessagesProvider>
-    </ChatRoomProvider>
+    <ChatMessagesProvider sessionId={sessionId} authToken={authToken}>
+      <div className={overlayClasses}>
+        <ChatPanelContent
+          sessionOwnerId={sessionOwnerId}
+          connectionState={connectionState}
+          onSendMessage={handleSendMessage}
+          isMobile={isMobile}
+          onClose={onClose}
+        />
+      </div>
+    </ChatMessagesProvider>
   );
 };

@@ -14,7 +14,7 @@ jq '{
   userPoolId: ."VNL-Auth".UserPoolId,
   userPoolClientId: ."VNL-Auth".UserPoolClientId,
   region: ."VNL-Auth".CognitoRegion,
-  apiUrl: ."VNL-Api".ApiUrl
+  apiUrl: (."VNL-Api".ApiUrl | rtrimstr("/"))
 }' cdk-outputs.json > web/public/aws-config.json
 
 echo "Deploy complete. Frontend config written to web/public/aws-config.json"

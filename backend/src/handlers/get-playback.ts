@@ -10,7 +10,7 @@ import { getDocumentClient } from '../lib/dynamodb-client';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
-  const sessionId = event.pathParameters?.id;
+  const sessionId = event.pathParameters?.sessionId;
 
   if (!sessionId) {
     return {

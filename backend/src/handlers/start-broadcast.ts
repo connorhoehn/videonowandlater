@@ -7,11 +7,14 @@ import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResul
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { SessionStatus } from '../domain/session';
+import { updateSessionStatus } from '../repositories/session-repository';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
   const userId = event.requestContext.authorizer?.claims?.['cognito:username'];
-  const sessionId = event.pathParameters?.id;
+  const sessionId = event.pathParameters?.sessionId;
+  const body = event.body ? JSON.parse(event.body) : {};
+  const goLive = body.goLive === true;
 
   // Auth check
   if (!userId) {
@@ -72,16 +75,25 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
-  // Check status
-  if (session.status !== SessionStatus.CREATING) {
+  // Check status — allow CREATING or LIVE (re-fetching credentials is safe)
+  if (session.status !== SessionStatus.CREATING && session.status !== SessionStatus.LIVE) {
     return {
       statusCode: 400,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'Session already started or ended' }),
+      body: JSON.stringify({ error: 'Session already ended' }),
     };
+  }
+
+  // If broadcaster is explicitly going live and session is still CREATING, transition now
+  if (goLive && session.status === SessionStatus.CREATING) {
+    try {
+      await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
+    } catch (err: any) {
+      console.warn('Could not transition session to LIVE (may already be LIVE):', err.message);
+    }
   }
 
   // Extract resourceId from channel ARN

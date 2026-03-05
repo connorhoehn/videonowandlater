@@ -5,8 +5,7 @@
 
 import { useCallback, useState } from 'react';
 import type { EmojiType } from './ReactionPicker';
-
-const API_BASE_URL = (window as any).APP_CONFIG?.apiBaseUrl || '';
+import { getConfig } from '../../config/aws-config';
 
 interface SendReactionResponse {
   reactionId: string;
@@ -29,7 +28,8 @@ export function useReactionSender(sessionId: string, authToken: string) {
           body.reactionType = reactionType;
         }
 
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/reactions`, {
+        const apiBaseUrl = getConfig()?.apiUrl || '';
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/reactions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

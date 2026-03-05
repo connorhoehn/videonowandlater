@@ -12,6 +12,7 @@ export interface Recording {
   userId: string;
   endedAt?: string;
   sessionType?: 'BROADCAST' | 'HANGOUT';
+  recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
 }
 
 interface RecordingFeedProps {
@@ -69,12 +70,13 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
         const destination = isHangout
           ? `/hangout/${recording.sessionId}`
           : `/replay/${recording.sessionId}`;
+        const isAvailable = !recording.recordingStatus || recording.recordingStatus === 'available';
 
         return (
           <div
             key={recording.sessionId}
-            onClick={() => navigate(destination)}
-            className="group cursor-pointer"
+            onClick={() => isAvailable && navigate(destination)}
+            className={`group ${isAvailable ? 'cursor-pointer' : 'cursor-default opacity-75'}`}
           >
             {/* Thumbnail container */}
             <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
@@ -105,6 +107,23 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
                     d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
+              </div>
+            )}
+
+            {/* Recording status overlay */}
+            {recording.recordingStatus === 'processing' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <span className="text-white text-sm font-medium">Processing...</span>
+              </div>
+            )}
+            {recording.recordingStatus === 'failed' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <span className="text-red-400 text-sm font-medium">Processing failed</span>
+              </div>
+            )}
+            {(!recording.recordingStatus || recording.recordingStatus === 'pending') && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <span className="text-white text-sm font-medium">Awaiting recording...</span>
               </div>
             )}
 

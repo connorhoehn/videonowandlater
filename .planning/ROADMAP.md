@@ -240,7 +240,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
 | 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete    | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete    | 2026-03-04 |
-| 15. Replay & Hangout Integration Fixes | v1.1 | 0/2 | Pending    | - |
+| 15. Replay & Hangout Integration Fixes | 1/2 | In Progress|  | - |
 
 ---
 *Roadmap created: 2026-03-02*

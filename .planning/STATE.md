@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Replay, Reactions & Hangouts
 status: completed
-stopped_at: Completed 14-01-PLAN.md (Data Quality & Hangout Identity - recordingStatus filter + cognito:username fix)
-last_updated: "2026-03-04T00:00:00.000Z"
+stopped_at: Completed 15-01-PLAN.md (Fix getSession() Recording Fields)
+last_updated: "2026-03-05T04:04:39.108Z"
 last_activity: 2026-03-03 — Completed 09-03-PLAN.md (Presence Simulation & CLI Documentation)
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 23
-  completed_plans: 23
+  total_phases: 12
+  completed_phases: 11
+  total_plans: 27
+  completed_plans: 26
   percent: 100
 ---
 
@@ -88,6 +88,7 @@ Progress: [████████████] 100%
 | Phase 11 P01 | 3 | 2 tasks | 3 files |
 | Phase 12 P01 | 2 | 1 tasks | 1 files |
 | Phase 12-hangout-creation-ui P01 | 5 | 2 tasks | 1 files |
+| Phase 15 P01 | 1 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,8 @@ Recent decisions affecting current work:
 - [Phase 13]: Auth fixes were partially applied in working tree before plan execution; idempotent task approach handled gracefully
 - [Phase 14]: FilterExpression uses begins_with(PK, :pk) AND recordingStatus = :available for home feed — consistent with single-table DynamoDB pattern
 - [Phase 14]: Hangout userId uses cognito:username claim not sub (UUID) — consistent with create-chat-token.ts and create-session.ts identity chain
+- [Phase 15]: GetSessionResponse is a distinct interface from CreateSessionResponse — recording fields only exist post-creation
+- [Phase 15]: claimedResources, recordingS3Path, version excluded per SESS-04 security boundary
 
 ### Pending Todos
 
@@ -178,8 +181,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T22:25:59.082Z
-Stopped at: Completed 12-01-PLAN.md (Hangout Creation UI - Start Hangout button on HomePage)
+Last session: 2026-03-05T04:04:36.134Z
+Stopped at: Completed 15-01-PLAN.md (Fix getSession() Recording Fields)
 Resume file: None
 
 ---

@@ -8,7 +8,7 @@ import type { ChatMessage } from '../../../../backend/src/domain/chat-message';
  * which messages should be visible at the current playback position.
  *
  * @param allMessages - Full chat history for the session
- * @param currentSyncTime - Current video playback time from IVS Player (UTC milliseconds)
+ * @param currentSyncTime - Elapsed playback milliseconds from player.getPosition() * 1000
  * @returns Filtered array of messages that should be visible at current playback position
  */
 export function useSynchronizedChat(

@@ -10,7 +10,7 @@ import type { Reaction } from '../../../../backend/src/domain/reaction';
  * Pattern reused from Phase 6 useSynchronizedChat for consistent sync behavior.
  *
  * @param allReactions - Full reaction history for the session
- * @param currentSyncTime - Current video playback time from IVS Player (UTC milliseconds)
+ * @param currentSyncTime - Elapsed playback milliseconds from player.getPosition() * 1000
  * @returns Filtered array of reactions that should be visible at current playback position
  */
 export function useReactionSync(

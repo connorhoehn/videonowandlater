@@ -16,6 +16,7 @@ jest.mock('../../lib/ivs-clients');
 
 const mockGetSessionById = sessionRepository.getSessionById as jest.MockedFunction<typeof sessionRepository.getSessionById>;
 const mockGetIVSRealTimeClient = ivsClients.getIVSRealTimeClient as jest.MockedFunction<typeof ivsClients.getIVSRealTimeClient>;
+const mockUpdateSessionStatus = sessionRepository.updateSessionStatus as jest.MockedFunction<typeof sessionRepository.updateSessionStatus>;
 
 describe('join-hangout handler', () => {
   const TABLE_NAME = 'test-table';
@@ -33,6 +34,7 @@ describe('join-hangout handler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUpdateSessionStatus.mockResolvedValue(undefined);
   });
 
   function createEvent(overrides?: Partial<APIGatewayProxyEvent>): APIGatewayProxyEvent {
@@ -131,11 +133,17 @@ describe('join-hangout handler', () => {
           userId: USER_ID,
           duration: 43200, // 12 hours
           capabilities: ['PUBLISH', 'SUBSCRIBE'],
-          attributes: { username: USERNAME },
+          attributes: { username: USERNAME, userId: USERNAME },
         }),
       })
     );
     expect(result.statusCode).toBe(200);
+    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+      TABLE_NAME,
+      SESSION_ID,
+      SessionStatus.LIVE,
+      'startedAt'
+    );
   });
 
   test('Handler returns token structure: {token, participantId, expirationTime}', async () => {

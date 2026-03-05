@@ -301,7 +301,7 @@ export class ApiStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
 
-    props.sessionsTable.grantReadData(joinHangoutHandler);
+    props.sessionsTable.grantReadWriteData(joinHangoutHandler);
 
     // Grant IVS RealTime CreateParticipantToken permission
     joinHangoutHandler.addToRolePolicy(

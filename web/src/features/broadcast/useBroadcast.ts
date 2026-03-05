@@ -14,13 +14,24 @@ interface UseBroadcastOptions {
 
 export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastOptions) {
   const [client, setClient] = useState<any>(null);
+  // clientRef mirrors the client state so the useEffect cleanup always has a
+  // current reference (state closures in cleanup capture the value at mount time).
+  const clientRef = useRef<any>(null);
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const previewRef = useRef<HTMLVideoElement | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
-  // Initialize client on mount
+  // Initialize client — guard against empty authToken to prevent double-init flicker
   useEffect(() => {
+    if (!authToken) return;
+
+    let cancelled = false;
+
     const initClient = async () => {
       try {
         setIsLoading(true);
@@ -35,28 +46,34 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
 
         const { ingestEndpoint } = await response.json();
 
+        if (cancelled) return;
+
         const broadcastClient = IVSBroadcastClient.create({
           streamConfig: BASIC_FULL_HD_LANDSCAPE,
           ingestEndpoint,
         });
 
+        clientRef.current = broadcastClient;
         setClient(broadcastClient);
 
         if (previewRef.current) {
           broadcastClient.attachPreview(previewRef.current as any);
         }
       } catch (err: any) {
-        setError(err.message);
+        if (!cancelled) setError(err.message);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     initClient();
 
     return () => {
-      if (client) {
-        client.stopBroadcast();
+      cancelled = true;
+      // Use ref so we reliably reach the client even if state hasn't flushed yet
+      if (clientRef.current) {
+        try { clientRef.current.stopBroadcast(); } catch {}
+        clientRef.current = null;
       }
     };
   }, [sessionId, apiBaseUrl, authToken]);
@@ -71,11 +88,16 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
       setIsLoading(true);
       setError(null);
 
-      // Get camera and microphone
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: true,
       });
+
+      localStreamRef.current = stream;
+
+      // Remove devices if already registered (prevents AddDeviceNameExistsError on retry)
+      try { client.removeVideoInputDevice('camera1'); } catch {}
+      try { client.removeAudioInputDevice('mic1'); } catch {}
 
       client.addVideoInputDevice(stream, 'camera1', { index: 0 });
 
@@ -85,10 +107,10 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
         client.addAudioInputDevice(micStream, 'mic1');
       }
 
-      // Fetch stream key from API
       const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/start`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goLive: true }),
       });
 
       if (!response.ok) {
@@ -99,6 +121,8 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
 
       await client.startBroadcast(streamKey);
       setIsLive(true);
+      setIsMuted(false);
+      setIsCameraOn(true);
     } catch (err: any) {
       setError(`Failed to start broadcast: ${err.message}`);
     } finally {
@@ -107,22 +131,87 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
   };
 
   const stopBroadcast = async () => {
-    if (client) {
-      try {
-        await client.stopBroadcast();
-        setIsLive(false);
-      } catch (err: any) {
-        setError(`Failed to stop broadcast: ${err.message}`);
+    console.log('[stopBroadcast] initiated', { sessionId });
+    if (!client) {
+      console.warn('[stopBroadcast] no client instance');
+      return;
+    }
+    try {
+      // Stop screen share if active
+      if (isScreenSharing) {
+        await stopScreenShare();
+      }
+      await client.stopBroadcast();
+      console.log('[stopBroadcast] SDK stopBroadcast complete');
+      // Release camera/mic
+      localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+      setIsLive(false);
+      setIsMuted(false);
+      setIsCameraOn(true);
+      setIsScreenSharing(false);
+      console.log('[stopBroadcast] done — session will transition to ended via IVS EventBridge (may take several minutes)');
+    } catch (err: any) {
+      console.error('[stopBroadcast] error:', err);
+      setError(`Failed to stop broadcast: ${err.message}`);
+    }
+  };
+
+  const toggleMute = () => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.enabled = isMuted; // flip: if currently muted, re-enable
+    setIsMuted(m => !m);
+  };
+
+  const toggleCamera = () => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.enabled = !isCameraOn; // flip
+    setIsCameraOn(c => !c);
+  };
+
+  const startScreenShare = async () => {
+    if (!client || !isLive) return;
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      try { client.removeVideoInputDevice('screen1'); } catch {}
+      client.addVideoInputDevice(screenStream, 'screen1', { index: 1 });
+      setIsScreenSharing(true);
+      // Auto-stop when user ends share via browser UI
+      screenStream.getVideoTracks()[0].onended = () => {
+        stopScreenShare();
+      };
+    } catch (err: any) {
+      if (err.name !== 'NotAllowedError') {
+        setError(`Screen share failed: ${err.message}`);
       }
     }
+  };
+
+  const stopScreenShare = async () => {
+    if (!client) return;
+    try { client.removeVideoInputDevice('screen1'); } catch {}
+    setIsScreenSharing(false);
   };
 
   return {
     previewRef,
     startBroadcast,
     stopBroadcast,
+    toggleMute,
+    toggleCamera,
+    startScreenShare,
+    stopScreenShare,
     isLive,
     isLoading,
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
     error,
   };
 }

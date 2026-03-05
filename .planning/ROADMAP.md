@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 Gap Closure** - Phases 1-4.2 (shipped 2026-03-02)
-- 🚧 **v1.1 Replay, Reactions & Hangouts** - Phases 5-9 (in progress)
+- ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
+- 🚧 **v1.2 Activity Feed & Intelligence** - Phases 16-20 (in progress)
 
 ## Phases
 
@@ -14,17 +15,10 @@ Milestone completed. See MILESTONES.md for details.
 
 </details>
 
-### 🚧 v1.1 Replay, Reactions & Hangouts (In Progress)
+<details>
+<summary>✅ v1.1 Replay, Reactions & Hangouts (Phases 5-15) - SHIPPED 2026-03-05</summary>
 
 **Milestone Goal:** Transform live sessions into persistent, discoverable content with reactions, and expand interaction models from one-to-many broadcasts to small-group hangouts.
-
-- [x] **Phase 5: Recording Foundation** - Auto-record all sessions to S3 with metadata tracking (completed 2026-03-03)
-- [x] **Phase 6: Replay Viewer** - Home feed and video playback with synchronized chat (completed 2026-03-03)
-- [x] **Phase 7: Reactions & Chat Sync** - Live and replay reactions with timeline synchronization (completed 2026-03-03)
-- [x] **Phase 8: RealTime Hangouts** - Small-group multi-participant video sessions (completed 2026-03-03)
-- [ ] **Phase 9: Developer CLI v1.1** - Test media streaming and data seeding tools
-
-## Phase Details
 
 ### Phase 5: Recording Foundation
 **Goal**: All broadcast and hangout sessions automatically record to S3 with complete metadata tracking
@@ -40,7 +34,7 @@ Milestone completed. See MILESTONES.md for details.
 
 Plans:
 - [x] 05-01-PLAN.md — Recording Infrastructure & Domain (2 tasks, 2 commits, 5 min)
-- [ ] 05-02-PLAN.md — Recording Lifecycle Handlers
+- [x] 05-02-PLAN.md — Recording Lifecycle Handlers
 
 ### Phase 6: Replay Viewer
 **Goal**: Users can discover recently streamed videos and watch replays with full chat history
@@ -73,10 +67,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Reaction Domain & DynamoDB Infrastructure (3 tasks, backend foundation)
-- [ ] 07-02-PLAN.md — Live Reactions Backend (4 tasks, IVS SendEvent integration)
-- [ ] 07-03-PLAN.md — Live Reactions Frontend (4 tasks, Motion animations)
-- [ ] 07-04-PLAN.md — Replay Reactions (4 tasks, timeline & sync)
+- [x] 07-01-PLAN.md — Reaction Domain & DynamoDB Infrastructure (3 tasks, backend foundation)
+- [x] 07-02-PLAN.md — Live Reactions Backend (4 tasks, IVS SendEvent integration)
+- [x] 07-03-PLAN.md — Live Reactions Frontend (4 tasks, Motion animations)
+- [x] 07-04-PLAN.md — Replay Reactions (4 tasks, timeline & sync)
 
 ### Phase 8: RealTime Hangouts
 **Goal**: Users can create and join small-group video hangouts with up to 5 participants, fully recorded for replay
@@ -94,9 +88,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Participant Token Generation & Session Repository
-- [ ] 08-02-PLAN.md — Multi-Participant Hangout UI with Video Grid & Chat
-- [ ] 08-03-PLAN.md — Hangout Recording Integration & Home Feed
+- [x] 08-01-PLAN.md — Participant Token Generation & Session Repository
+- [x] 08-02-PLAN.md — Multi-Participant Hangout UI with Video Grid & Chat
+- [x] 08-03-PLAN.md — Hangout Recording Integration & Home Feed
 
 ### Phase 9: Developer CLI v1.1
 **Goal**: Developers can stream test media files, seed sample data, and simulate activity for testing
@@ -115,10 +109,28 @@ Plans:
 - [x] 09-02-PLAN.md — Hangout Streaming & Data Seeding (WHIP protocol, session/chat/reaction seeding) (3 tasks, 4 commits, 13 min)
 - [x] 09-03-PLAN.md — Presence Simulation & Documentation (IVS Chat events, CLI docs) (3 tasks, 5 commits, 2 min)
 
+### Phase 09.1: TypeScript Build Fixes
+**Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
+**Depends on**: Phase 9
+**Requirements**: HANG-05, HANG-06, HANG-07, HANG-08, HANG-09, HANG-10, HANG-11, REACT-01, REACT-07
+**Success Criteria** (what must be TRUE):
+  1. Phase 8 hangout UI compiles without TypeScript errors (useHangout.ts, useActiveSpeaker.ts)
+  2. Phase 7 reaction components compile without type errors (ReplayViewer.tsx EmojiType import)
+  3. Phase 5 test suite passes without mock signature errors (stream-started.test.ts)
+  4. `npm run build` completes successfully in both backend and web directories
+  5. Hangout UI functions correctly at runtime (multi-participant video, active speaker detection)
+  6. All 6 backend handler test suites exit code 0 (no real AWS calls in unit tests)
+**Plans**: 4 plans
+
+Plans:
+- [x] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors (useHangout.ts, useActiveSpeaker.ts)
+- [x] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests (reaction.ts, ReplayViewer.tsx, stream-started.test.ts)
+- [x] 09.1-03-PLAN.md — Fix Jest ESM infrastructure (NODE_OPTIONS=--experimental-vm-modules for AWS SDK v3 compatibility)
+- [x] 09.1-04-PLAN.md — Add AWS SDK jest.mock to 6 handler test files (eliminate real DynamoDB/IVS calls)
+
 ### Phase 10: Integration Wiring Fixes
 **Goal**: Fix three broken cross-phase wiring issues identified by milestone audit to restore synchronized chat replay, fix hangout participant display, and eliminate duplicate EventBridge invocations
 **Depends on**: Phase 09.1
-**Gap Closure**: Closes REPLAY-06, REPLAY-07, HANG-01, REC-05 gaps from v1.1 audit
 **Requirements**: REPLAY-06, REPLAY-07, HANG-01
 **Success Criteria** (what must be TRUE):
   1. Replay viewer shows chat messages synchronized to video playback (ReplayChat.tsx fetches correct API path)
@@ -127,13 +139,12 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — ReplayChat path+auth fix and join-hangout userId fix (REPLAY-06, REPLAY-07, HANG-01)
-- [ ] 10-02-PLAN.md — Remove legacy RecordingEndRule from session-stack.ts (EventBridge dedup)
+- [x] 10-01-PLAN.md — ReplayChat path+auth fix and join-hangout userId fix (REPLAY-06, REPLAY-07, HANG-01)
+- [x] 10-02-PLAN.md — Remove legacy RecordingEndRule from session-stack.ts (EventBridge dedup)
 
 ### Phase 11: Hangout Recording Lifecycle Fix
 **Goal**: Fix Stage ARN detection in recording-ended handler so hangout composite recordings get metadata written and appear in the home feed alongside broadcasts
 **Depends on**: Phase 10
-**Gap Closure**: Closes HANG-14, HANG-15, HANG-16 gaps from v1.1 audit
 **Requirements**: HANG-14, HANG-15, HANG-16
 **Success Criteria** (what must be TRUE):
   1. IVS RealTime Stage Recording End EventBridge event is correctly parsed (correct field used for ARN)
@@ -142,12 +153,11 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 11-01-PLAN.md — Fix Stage ARN detection, EventBridge rule, S3 paths, and recording-ended tests (HANG-14, HANG-15, HANG-16)
+- [x] 11-01-PLAN.md — Fix Stage ARN detection, EventBridge rule, S3 paths, and recording-ended tests (HANG-14, HANG-15, HANG-16)
 
 ### Phase 12: Hangout Creation UI
 **Goal**: Users can create a hangout session directly from the home page without knowing a direct URL
 **Depends on**: Phase 11
-**Gap Closure**: Closes HANG-02 gap from v1.1 audit
 **Requirements**: HANG-02
 **Success Criteria** (what must be TRUE):
   1. HomePage has a "Start Hangout" button alongside the existing "Go Live" broadcast button
@@ -155,12 +165,11 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 12-01-PLAN.md — Add Start Hangout button and handleCreateHangout handler to HomePage.tsx (HANG-02)
+- [x] 12-01-PLAN.md — Add Start Hangout button and handleCreateHangout handler to HomePage.tsx (HANG-02)
 
 ### Phase 13: Replay Viewer Integration Fixes
 **Goal**: Fix auth headers and time-domain mismatch in the replay viewer so video loads, chat messages display, and chat/reaction timelines synchronize correctly with playback position
 **Depends on**: Phase 12
-**Gap Closure**: Closes REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09 gaps from v1.1 audit
 **Requirements**: REPLAY-04, REPLAY-06, REPLAY-07, REPLAY-09, REACT-09
 **Success Criteria** (what must be TRUE):
   1. Replay viewer loads session and begins playing HLS video (GET /sessions/:id includes Authorization header)
@@ -176,7 +185,6 @@ Plans:
 ### Phase 14: Data Quality & Hangout Identity Polish
 **Goal**: Home feed shows only playable recordings, and hangout participants display their real Cognito username in chat
 **Depends on**: Phase 13
-**Gap Closure**: Closes REPLAY-01, HANG-13 gaps from v1.1 audit
 **Requirements**: REPLAY-01, HANG-13
 **Success Criteria** (what must be TRUE):
   1. Home feed contains only recordings with recordingStatus='available' — no "Awaiting recording..." permanent stubs
@@ -189,7 +197,6 @@ Plans:
 ### Phase 15: Replay & Hangout Integration Fixes
 **Goal**: Fix get-session to expose recording fields for replay viewer, transition HANGOUT sessions to LIVE for chat persistence, and correct hangout recording navigation
 **Depends on**: Phase 14
-**Gap Closure**: Closes REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09, HANG-11, HANG-12, HANG-15 gaps from v1.1 audit
 **Requirements**: REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09, HANG-11, HANG-12, HANG-15
 **Success Criteria** (what must be TRUE):
   1. Replay viewer loads HLS video (get-session returns recordingHlsUrl, recordingDuration, userId, createdAt, endedAt, recordingStatus)
@@ -202,46 +209,131 @@ Plans:
 - [x] 15-01-PLAN.md — Extend getSession() with recording fields and add get-session.test.ts (REPLAY-04, REPLAY-05, REPLAY-07, REPLAY-09)
 - [x] 15-02-PLAN.md — Fix join-hangout LIVE transition, userId attribute, IAM grant, and RecordingFeed navigation (HANG-11, HANG-12, HANG-15)
 
-### Phase 09.1: TypeScript Build Fixes
-**Goal**: Fix TypeScript compilation errors and test failures to enable clean builds
-**Depends on**: Phase 9
-**Gap Closure**: Addresses tech debt from v1.1 milestone audit
-**Requirements**: HANG-05, HANG-06, HANG-07, HANG-08, HANG-09, HANG-10, HANG-11, REACT-01, REACT-07
+</details>
+
+### 🚧 v1.2 Activity Feed & Intelligence (In Progress)
+
+**Milestone Goal:** Surface richer session context on the homepage — hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed — and add an automated transcription and AI summary pipeline to every recording.
+
+- [ ] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services
+- [ ] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
+- [ ] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint
+- [ ] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events
+- [ ] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries
+
+## Phase Details
+
+### Phase 16: Hangout Participant Tracking
+**Goal**: Each hangout participant join is durably recorded in DynamoDB so activity cards can display who was in a session
+**Depends on**: Phase 15
+**Requirements**: PTCP-01, PTCP-02, PTCP-03
 **Success Criteria** (what must be TRUE):
-  1. Phase 8 hangout UI compiles without TypeScript errors (useHangout.ts, useActiveSpeaker.ts)
-  2. Phase 7 reaction components compile without type errors (ReplayViewer.tsx EmojiType import)
-  3. Phase 5 test suite passes without mock signature errors (stream-started.test.ts)
-  4. `npm run build` completes successfully in both backend and web directories
-  5. Hangout UI functions correctly at runtime (multi-participant video, active speaker detection)
-  6. All 6 backend handler test suites exit code 0 (no real AWS calls in unit tests)
-**Plans**: 4 plans
+  1. When a user joins a hangout, a PARTICIPANT item is written to DynamoDB with their userId, displayName, and joinedAt timestamp
+  2. After a hangout session ends, the session record includes a participantCount field reflecting the total number of unique participants
+  3. Given a session ID, the participant list is retrievable via a repository function (used by GET /activity in Phase 18)
+  4. Two participants joining within the same second do not cause a ConditionalCheckFailedException — each participant is stored as a separate item, not appended to the version-locked session METADATA item
+**Plans**: TBD
 
 Plans:
-- [x] 09.1-01-PLAN.md — Fix Phase 8 Hangout TypeScript Errors (useHangout.ts, useActiveSpeaker.ts)
-- [x] 09.1-02-PLAN.md — Fix Phase 7 Reaction Type Mismatch & Phase 5 Tests (reaction.ts, ReplayViewer.tsx, stream-started.test.ts)
-- [x] 09.1-03-PLAN.md — Fix Jest ESM infrastructure (NODE_OPTIONS=--experimental-vm-modules for AWS SDK v3 compatibility)
-- [ ] 09.1-04-PLAN.md — Add AWS SDK jest.mock to 6 handler test files (eliminate real DynamoDB/IVS calls)
+- [ ] 16-01: Add participant tracking to join-hangout.ts and session-repository.ts
+
+### Phase 17: Reaction Summary at Session End
+**Goal**: Per-emoji reaction counts are pre-computed and stored on the session record when a session ends, so the homepage never needs to aggregate counts at read time
+**Depends on**: Phase 16
+**Requirements**: RSUMM-01
+**Success Criteria** (what must be TRUE):
+  1. After a broadcast or hangout session ends, the session record in DynamoDB contains a reactionSummary map with per-type counts (e.g., { heart: 42, fire: 17, clap: 8 })
+  2. Pool release always completes even when reaction aggregation fails — reaction summary computation is wrapped in try/catch and never gates pool resource availability
+  3. Sessions with no reactions store an empty reactionSummary map (not undefined) so downstream consumers can always read the field without null checks
+**Plans**: TBD
+
+Plans:
+- [ ] 17-01: Add computeAndStoreReactionSummary to recording-ended.ts and session-repository.ts
+
+### Phase 18: Homepage Redesign & Activity Feed
+**Goal**: The homepage is redesigned with a two-zone layout — a horizontal scrollable recording slider and an activity feed below it — and a GET /activity API endpoint returns all session types with full activity metadata
+**Depends on**: Phase 17
+**Requirements**: RSUMM-02, RSUMM-03, ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05, ACTV-06
+**Success Criteria** (what must be TRUE):
+  1. The homepage displays broadcast recordings in a horizontal slider with 3-4 cards visible and peek-scrolling to the next — hangout sessions do not appear in this slider
+  2. Below the slider, a unified activity feed lists all recent sessions (broadcasts and hangouts) in reverse chronological order
+  3. Broadcast entries in the activity feed show title, duration, reaction summary counts by emoji type, and a relative timestamp ("2 hours ago")
+  4. Hangout entries in the activity feed show participant list, message count, duration, and a relative timestamp
+  5. Reaction summary counts (per emoji type) are visible on recording cards in the slider
+  6. Reaction summary counts are displayed in the replay info panel when viewing a recording
+  7. GET /activity returns recent sessions with all activity metadata in a single API call — the frontend does not aggregate counts at read time
+**Plans**: TBD
+
+Plans:
+- [ ] 18-01: GET /activity endpoint — list-activity.ts Lambda and CDK wiring
+- [ ] 18-02: Homepage layout redesign — horizontal recording slider with scroll-snap
+- [ ] 18-03: Activity feed — broadcast and hangout activity cards with reaction counts and participant data
+
+**Pre-plan decisions required:**
+- messageCount tracking approach: (a) atomic ADD counter in send-message.ts, (b) count chat items at session end in recording-ended.ts, or (c) show N/A initially. Decide before writing 18-01.
+- GET /activity auth posture: public (matching GET /recordings) or authenticated. Decide before writing 18-01.
+
+### Phase 19: Transcription Pipeline
+**Goal**: When a recording becomes available in S3, a transcription job is automatically started and the resulting transcript is stored on the session record
+**Depends on**: Phase 18
+**Requirements**: TRNS-01, TRNS-02, TRNS-03, TRNS-04
+**Success Criteria** (what must be TRUE):
+  1. Within seconds of a recording completing, a Transcribe job is automatically started with no manual intervention
+  2. The Transcribe job name encodes the session ID (format: vnl-{sessionId}-{epochMs}) so job completion events can be correlated to sessions without additional DynamoDB reads
+  3. When a Transcribe job completes successfully, the transcript text is stored on the session record in DynamoDB
+  4. When a Transcribe job fails, a transcriptStatus field on the session record is set to "failed" and no other session data is affected — pool release and recording metadata are unaffected
+**Plans**: TBD
+
+Plans:
+- [ ] 19-01: Resolve HLS/MediaConvert input format question (research-phase required — see notes)
+- [ ] 19-02: start-transcription.ts Lambda, TranscribeJobCompleteRule EventBridge rule, CDK IAM wiring
+- [ ] 19-03: store-transcript.ts Lambda — transcript fetch and DynamoDB write
+
+**CRITICAL: Research-phase required before plan-phase.** The HLS/MediaConvert conflict (whether Amazon Transcribe accepts IVS HLS M3U8 directly) must be resolved before writing the Phase 19 implementation plan. Default assumption per SUMMARY.md: MediaConvert conversion is required before Transcribe. If true, scope expands to include a MediaConvert job Lambda, MediaConvertCompleteRule EventBridge rule, and MediaConvert IAM role. Run `/gsd:research phase-19` before `/gsd:plan-phase 19`.
+
+### Phase 20: AI Summary Pipeline
+**Goal**: Every session with a stored transcript automatically receives an AI-generated one-paragraph summary via Bedrock/Claude, displayed on recording cards and the replay info panel
+**Depends on**: Phase 19
+**Requirements**: AI-01, AI-02, AI-03, AI-04, AI-05
+**Success Criteria** (what must be TRUE):
+  1. After a transcript is stored, an AI-generated one-paragraph summary is automatically produced and stored on the session record with no manual intervention
+  2. Recording cards on the homepage display a 2-line truncated AI summary (or "Summary coming soon" placeholder while the pipeline is still running)
+  3. The full AI summary is displayed in the replay info panel when viewing a recording
+  4. If Bedrock fails, the transcript that was already stored is preserved — the failure sets aiSummaryStatus to "failed" but does not overwrite or lose the transcriptText field
+  5. "Summary coming soon" placeholder is shown on cards for sessions where the pipeline has not yet completed, rather than a blank or broken state
+**Plans**: TBD
+
+Plans:
+- [ ] 20-01: Bedrock client, store-transcript.ts AI extension, and CDK IAM wiring
+- [ ] 20-02: AI summary display on recording cards and replay info panel
+
+**Manual prerequisite:** Anthropic models require a one-time First Time Use (FTU) form in the Bedrock console before InvokeModel succeeds. This cannot be automated via CDK. Document as a pre-deployment step in plan 20-01. Confirm model availability in deployment region and whether the FTU form is still required at implementation time.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 5 → 6 → 7 → 8 → 9 → 09.1
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Recording Foundation | v1.1 | 2/2 | Complete   | 2026-03-03 |
-| 6. Replay Viewer | v1.1 | 3/3 | Complete    | 2026-03-03 |
-| 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete    | 2026-03-03 |
-| 8. RealTime Hangouts | v1.1 | 3/3 | Complete    | 2026-03-03 |
-| 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete    | 2026-03-03 |
-| 09.1. TypeScript Build Fixes | 4/4 | Complete    | 2026-03-03 | - |
-| 10. Integration Wiring Fixes | 2/2 | Complete    | 2026-03-04 | - |
-| 11. Hangout Recording Lifecycle Fix | 1/1 | Complete    | 2026-03-04 | - |
-| 12. Hangout Creation UI | 1/1 | Complete   | 2026-03-04 | - |
-| 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete    | 2026-03-04 |
-| 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete    | 2026-03-04 |
-| 15. Replay & Hangout Integration Fixes | 2/2 | Complete   | 2026-03-05 | - |
+| 5. Recording Foundation | v1.1 | 2/2 | Complete | 2026-03-03 |
+| 6. Replay Viewer | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete | 2026-03-03 |
+| 8. RealTime Hangouts | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 09.1. TypeScript Build Fixes | v1.1 | 4/4 | Complete | 2026-03-03 |
+| 10. Integration Wiring Fixes | v1.1 | 2/2 | Complete | 2026-03-04 |
+| 11. Hangout Recording Lifecycle Fix | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 12. Hangout Creation UI | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
+| 16. Hangout Participant Tracking | v1.2 | 0/1 | Not started | - |
+| 17. Reaction Summary at Session End | v1.2 | 0/1 | Not started | - |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Not started | - |
+| 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |
+| 20. AI Summary Pipeline | v1.2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-04*
+*Last updated: 2026-03-05 — v1.2 phases 16-20 added*

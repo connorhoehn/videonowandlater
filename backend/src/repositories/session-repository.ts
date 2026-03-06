@@ -468,6 +468,65 @@ export async function updateParticipantCount(
 }
 
 /**
+ * Update transcript status and metadata on a session record
+ * Used by transcription pipeline to track MediaConvert and Transcribe job progress
+ * Atomically updates transcript-related fields without affecting other session data
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param status Transcript lifecycle status: 'processing' | 'available' | 'failed'
+ * @param s3Path Optional S3 path where transcript JSON is stored (format: s3://bucket/sessionId/transcript.json)
+ * @param plainText Optional plain text transcript for display (extracted from Transcribe JSON output)
+ */
+export async function updateTranscriptStatus(
+  tableName: string,
+  sessionId: string,
+  status: 'processing' | 'available' | 'failed',
+  s3Path?: string,
+  plainText?: string
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  // Build dynamic update expression for provided fields only
+  const updateParts: string[] = ['#transcriptStatus = :status', '#version = #version + :inc'];
+  const expressionAttributeNames: Record<string, string> = {
+    '#transcriptStatus': 'transcriptStatus',
+    '#version': 'version',
+  };
+  const expressionAttributeValues: Record<string, any> = {
+    ':status': status,
+    ':inc': 1,
+  };
+
+  if (s3Path !== undefined) {
+    updateParts.push('#transcriptS3Path = :s3Path');
+    expressionAttributeNames['#transcriptS3Path'] = 'transcriptS3Path';
+    expressionAttributeValues[':s3Path'] = s3Path;
+  }
+
+  if (plainText !== undefined) {
+    updateParts.push('#transcript = :plainText');
+    expressionAttributeNames['#transcript'] = 'transcript';
+    expressionAttributeValues[':plainText'] = plainText;
+  }
+
+  const updateExpression = `SET ${updateParts.join(', ')}`;
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: updateExpression,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
+  }));
+
+  console.log('Transcript status updated:', { sessionId, status, s3Path });
+}
+
+/**
  * Get recent activity (both broadcasts and hangouts)
  * Returns all ended sessions with full metadata in reverse chronological order
  *

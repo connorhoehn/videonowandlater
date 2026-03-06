@@ -1,5 +1,14 @@
 # Milestones
 
+## v1.2 Activity Feed & Intelligence (Shipped: 2026-03-06)
+
+**Phases completed:** 19 phases, 50 plans, 48 tasks
+
+**Key accomplishments:**
+- (none recorded)
+
+---
+
 ## v1.1 Replay, Reactions & Hangouts (Shipped: 2026-03-05)
 
 **Phases completed:** 15 phases (5–15 + decimal fixes), 27 plans

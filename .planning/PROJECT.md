@@ -8,16 +8,22 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Current Milestone: v1.2 Activity Feed & Intelligence
+## Latest Milestone: v1.2 Activity Feed & Intelligence (SHIPPED 2026-03-06)
 
-**Goal:** Surface richer session context on the homepage (hangout activity cards, reaction summary counts, horizontal recording slider + activity feed), and add an automated transcription + AI summary pipeline to every recording.
+**Accomplished:** Surface richer session context on the homepage (hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed), and add an automated transcription and AI summary pipeline to every recording.
 
-**Target features:**
-- Homepage redesign: horizontal recording slider (3-4 visible, scrollable) + activity feed below
-- Hangout activity cards: participants, message count, duration — no longer shows as "pending" recording tile
-- Reaction summary counts displayed on recording cards and replay info panel
-- Transcription pipeline: recording lands in S3 → Lambda → Amazon Transcribe → transcript stored on recording
-- AI summary: transcript → Bedrock/Claude → one-paragraph summary stored + displayed on cards and replay page
+**Delivered:**
+- ✅ Homepage redesign: horizontal recording slider (3-4 visible, scrollable) + activity feed below
+- ✅ Hangout activity cards: participants, message count, duration with relative timestamps
+- ✅ Reaction summary counts (per emoji type) displayed on recording cards and replay info panel
+- ✅ Transcription pipeline: automatic S3 recording → Amazon Transcribe → transcript stored on session
+- ✅ AI summary pipeline: transcript → Bedrock/Claude Sonnet → one-paragraph summary on every recording
+- ✅ Video uploads: users can upload pre-recorded videos (MOV/MP4) with automatic adaptive bitrate encoding
+- ✅ Secure sharing: private broadcasts with ES384 JWT tokens for granular access control
+
+## Current Milestone: v1.3 Secure Sharing
+
+**Goal:** [To be defined in next planning phase]
 
 ## Requirements
 
@@ -46,18 +52,19 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-**v1.2 Milestone (Activity Feed & Intelligence):**
+**v1.3 Milestone (Secure Sharing):**
 
-- [ ] Homepage redesigned: horizontal recording slider (3–4 visible, scrollable) for replay-able broadcasts
-- [ ] Homepage activity feed below slider: recent hangouts + broadcasts as list/card items
-- [ ] Hangout sessions tracked with participant list (join/leave events persisted to DynamoDB)
-- [ ] Hangout activity cards on homepage: participants, message count, duration, timestamp
-- [ ] Reaction summary counts (per type) stored on session record after session ends
-- [ ] Reaction summary counts displayed on recording cards and replay info panel
-- [ ] Transcription pipeline: S3 recording event → Lambda → Amazon Transcribe job started
-- [ ] Transcribe job completion → transcript stored on recording record in DynamoDB
-- [ ] AI summary pipeline: transcript → Bedrock/Claude → one-paragraph summary generated
-- [ ] AI summary stored on recording record and displayed on recording cards + replay page
+- [ ] [To be defined after v1.2 launch]
+
+### Just Validated (v1.2)
+
+- ✓ Homepage redesigned with horizontal recording slider and activity feed — Phase 18
+- ✓ Hangout activity cards with participant list and message counts — Phase 16-18
+- ✓ Reaction summary counts stored and displayed on recordings — Phase 17-18
+- ✓ Transcription pipeline: automatic Transcribe integration for all recordings — Phase 19
+- ✓ AI summary pipeline: Bedrock/Claude generates one-paragraph summaries — Phase 20
+- ✓ Video upload support: multipart uploads with automatic MediaConvert processing — Phase 21
+- ✓ Private broadcasts with ES384 JWT token access control — Phase 22
 
 ### Out of Scope
 
@@ -107,10 +114,13 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ## Current State
 
-**Latest milestone:** v1.1 Replay, Reactions & Hangouts (shipped 2026-03-05, 15 phases, 27 plans)
-**Current milestone:** v1.2 Activity Feed & Intelligence (started 2026-03-05)
-**Codebase:** ~6,000 LOC TypeScript (frontend + backend + CDK)
-**Status:** Defining requirements for v1.2.
+**Shipped milestones:**
+- v1.0 Gap Closure (4 phases, 11 plans) — shipped 2026-03-02
+- v1.1 Replay, Reactions & Hangouts (15 phases, 27 plans) — shipped 2026-03-05
+- v1.2 Activity Feed & Intelligence (7 phases, 19 plans) — shipped 2026-03-06
+
+**Codebase:** ~6,500 LOC TypeScript (frontend + backend + CDK), 343/343 backend tests passing
+**Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-05 after starting v1.2 milestone*
+*Last updated: 2026-03-06 after completing v1.2 milestone (22 phases total, 63 plans executed)*

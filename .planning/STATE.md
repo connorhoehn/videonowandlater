@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Video Uploads (Phase 21) + Live Broadcast with Secure Viewer Links (Phase 22)
-status: Completed Phase 21 Plan 06 (EventBridge Transcription Trigger). Added explicit event publication to on-mediaconvert-complete handler to trigger Phase 19 transcription pipeline when uploaded video encoding completes. Non-blocking error handling, comprehensive tests (16 tests). Phase 21 → Phase 19 coupling now explicit and defensive.
-stopped_at: Completed 21-06-PLAN.md (EventBridge transcription trigger for upload completion)
-last_updated: "2026-03-06T01:52:15Z"
-last_activity: 2026-03-06 — Completed 21-06-PLAN.md (EventBridge transcription trigger for upload completion)
+milestone: v1.2
+milestone_name: Activity Feed & Intelligence
+status: completed
+stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering, private channel pool infrastructure, IVS playback key wiring)
+last_updated: "2026-03-06T01:55:17.671Z"
+last_activity: 2026-03-06 — Completed 21-06-PLAN.md (EventBridge transcription trigger)
 progress:
-  total_phases: 22
-  completed_phases: 21
-  total_plans: 54
-  completed_plans: 52
+  total_phases: 19
+  completed_phases: 19
+  total_plans: 50
+  completed_plans: 50
   percent: 96
 ---
 

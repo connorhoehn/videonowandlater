@@ -421,6 +421,9 @@ export class SessionStack extends Stack {
     // Grant MediaConvert job role S3 read access to recordings bucket (for HLS master.m3u8)
     this.recordingsBucket.grantRead(mediaConvertRole);
 
+    // Grant MediaConvert job role S3 write access to recordings bucket (for HLS output)
+    this.recordingsBucket.grantWrite(mediaConvertRole);
+
     // Grant MediaConvert job role S3 write access to transcription bucket (for MP4 output)
     transcriptionBucket.grantWrite(mediaConvertRole);
 

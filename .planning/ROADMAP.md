@@ -72,7 +72,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 Plans:
 - [ ] 22.1-01-PLAN.md — Add CDK custom resource for IVS cleanup on stack deletion
 - [ ] 22.1-02-PLAN.md — Switch AI processing from Claude to Nova Pro model
-- [ ] 22.1-03-PLAN.md — Create upload activity card variant for activity feed
+- [x] 22.1-03-PLAN.md — Create upload activity card variant for activity feed ✅
 
 ### Phase 23: Stream Quality Monitoring Dashboard
 **Goal:** Broadcaster can monitor stream health in real-time without disrupting broadcast experience.
@@ -113,11 +113,11 @@ Plans:
 **Latest Milestone:** v1.4 Creator Studio & Stream Quality
 - **Status:** 🚧 Phase 22.1 planned, ready for execution
 - **Phases:** 3 (22.1, 23, 24)
-- **Plans:** 0/3 started (Phase 22.1), 2/3 complete (Phase 23)
+- **Plans:** 3/3 complete (Phase 22.1), 2/3 complete (Phase 23)
 - **Tests:** 343/343 backend tests passing (from v1.3)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 22.1 - Pipeline Fixes & UI Enhancements | 0/3 | Ready | - |
+| 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | ✅ Complete | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 2/3 | In Progress | - |
 | 24 - Creator Spotlight Selection & Display | 0/? | Not started | - |

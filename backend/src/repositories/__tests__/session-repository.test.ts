@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateSessionAiSummary } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary } from '../session-repository';
 import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
@@ -671,6 +671,117 @@ describe('session-repository', () => {
 
       // aiSummary should NOT be in the values (not touched)
       expect(Object.keys(updates)).not.toContain(':aiSummary');
+    });
+  });
+
+  describe('updateTranscriptStatus', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('updates only transcriptStatus field when no s3Path or plainText provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateTranscriptStatus(tableName, 'session-123', 'processing');
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-123',
+              SK: 'METADATA',
+            },
+            UpdateExpression: 'SET #transcriptStatus = :status, #version = #version + :inc',
+            ExpressionAttributeNames: expect.objectContaining({
+              '#transcriptStatus': 'transcriptStatus',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':status': 'processing',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('updates transcriptStatus and s3Path when both provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const s3Path = 's3://transcription-bucket/session-456/transcript.json';
+      await updateTranscriptStatus(tableName, 'session-456', 'available', s3Path);
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-456',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('#transcriptStatus'),
+            ExpressionAttributeNames: expect.objectContaining({
+              '#transcriptStatus': 'transcriptStatus',
+              '#transcriptS3Path': 'transcriptS3Path',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':status': 'available',
+              ':s3Path': s3Path,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('updates all three fields (status, s3Path, plainText) when provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const s3Path = 's3://transcription-bucket/session-789/transcript.json';
+      const plainText = 'This is the transcript text';
+      await updateTranscriptStatus(tableName, 'session-789', 'available', s3Path, plainText);
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-789',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('#transcriptStatus'),
+            ExpressionAttributeNames: expect.objectContaining({
+              '#transcriptStatus': 'transcriptStatus',
+              '#transcriptS3Path': 'transcriptS3Path',
+              '#transcript': 'transcript',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':status': 'available',
+              ':s3Path': s3Path,
+              ':plainText': plainText,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('sets transcriptStatus to failed without s3Path', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateTranscriptStatus(tableName, 'session-fail', 'failed');
+
+      const call = mockSend.mock.calls[0][0];
+      const updates = call.input.ExpressionAttributeValues;
+
+      // transcriptStatus should be 'failed'
+      expect(updates[':status']).toBe('failed');
+
+      // s3Path and plainText should NOT be in the values (not touched)
+      expect(Object.keys(updates)).not.toContain(':s3Path');
+      expect(Object.keys(updates)).not.toContain(':plainText');
     });
   });
 });

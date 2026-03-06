@@ -262,12 +262,13 @@ Plans:
   5. Reaction summary counts (per emoji type) are visible on recording cards in the slider
   6. Reaction summary counts are displayed in the replay info panel when viewing a recording
   7. GET /activity returns recent sessions with all activity metadata in a single API call — the frontend does not aggregate counts at read time
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03)
 - [x] 18-02-PLAN.md — Homepage layout redesign, activity feed, recording slider (ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05)
 - [x] 18-03-PLAN.md — ReplayViewer reaction summary display (RSUMM-03)
+- [ ] 18-04-PLAN.md — Gap closure: create 5 missing frontend activity component test files
 
 ### Phase 19: Transcription Pipeline
 **Goal**: When a recording becomes available in S3, a transcription job is automatically started and the resulting transcript is stored on the session record
@@ -323,7 +324,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
 | 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
-| 18. Homepage Redesign & Activity Feed | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 3/4 | Gap Closure | 2026-03-06 |
 | 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | - |
 | 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | - |
 
@@ -352,4 +353,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-06 — Phase 21 planned (4 plans: domain models, upload handlers, MediaConvert integration, frontend upload UI)*
+*Last updated: 2026-03-06 — Phase 18 gap closure plan added (18-04: missing frontend test files)*

@@ -320,9 +320,9 @@ Plans:
 - [x] 21-01-PLAN.md — Backend domain models and repository functions (UPLOAD-01, UPLOAD-02, UPLOAD-03)
 - [x] 21-02-PLAN.md — Upload handlers: init, chunk URLs, multipart completion (UPLOAD-04, UPLOAD-05, UPLOAD-06)
 - [x] 21-05-PLAN.md — API Gateway wiring and Lambda integration (gap closure)
-- [ ] 21-03-PLAN.md — MediaConvert integration, CDK infrastructure, EventBridge wiring (UPLOAD-07, UPLOAD-08, UPLOAD-09)
+- [x] 21-06-PLAN.md — EventBridge transcription trigger for upload completion (UPLOAD-09, gap closure)
+- [ ] 21-03-PLAN.md — MediaConvert integration, CDK infrastructure, EventBridge wiring (UPLOAD-07, UPLOAD-08)
 - [ ] 21-04-PLAN.md — Frontend upload UI, HomePage integration, integration tests (UPLOAD-10, UPLOAD-11, UPLOAD-12)
-- [ ] 21-06-PLAN.md — Frontend upload UI refinements and additional integration tests
 
 </details>
 
@@ -374,7 +374,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 18. Homepage Redesign & Activity Feed | v1.2 | 3/4 | In Progress | 2026-03-06 |
 | 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
 | 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
-| 21. Video Uploads | v1.2 | 3/6 | In Progress | 2026-03-06 |
+| 21. Video Uploads | v1.2 | 4/6 | In Progress | 2026-03-06 |
 | 22. Live Broadcast with Secure Viewer Links | v1.3 | 4/4 | Complete | 2026-03-06 |
 
 ---

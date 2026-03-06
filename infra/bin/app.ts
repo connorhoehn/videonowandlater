@@ -15,5 +15,7 @@ new ApiStack(app, 'VNL-Api', {
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
   sessionsTable: sessionStack.table,
+  recordingsBucket: sessionStack.recordingsBucket,
+  mediaConvertTopic: sessionStack.mediaConvertTopic,
 });
 new MonitoringStack(app, 'VNL-Monitoring', { env });

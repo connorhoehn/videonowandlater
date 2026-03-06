@@ -5,6 +5,8 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -12,6 +14,8 @@ export interface ApiStackProps extends StackProps {
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   sessionsTable: dynamodb.ITable;
+  recordingsBucket?: s3.IBucket;
+  mediaConvertTopic?: sns.ITopic;
 }
 
 export class ApiStack extends Stack {
@@ -366,6 +370,83 @@ export class ApiStack extends Stack {
 
     // No authorizer - public endpoint for activity feed discovery
     activity.addMethod('GET', new apigateway.LambdaIntegration(listActivityHandler));
+
+    // Phase 21: Upload handlers - wire upload endpoints
+    const uploadResource = api.root.addResource('upload');
+
+    // POST /upload/init
+    const initUploadFunction = new NodejsFunction(this, 'InitUploadFunction', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/init-upload.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        RECORDINGS_BUCKET: props.recordingsBucket?.bucketName || '',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantReadWrite(initUploadFunction);
+    }
+    props.sessionsTable.grantReadWriteData(initUploadFunction);
+
+    const uploadInitResource = uploadResource.addResource('init');
+    uploadInitResource.addMethod('POST', new apigateway.LambdaIntegration(initUploadFunction), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /upload/part-url
+    const getPartPresignedUrlFunction = new NodejsFunction(this, 'GetPartPresignedUrlFunction', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-part-presigned-url.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        RECORDINGS_BUCKET: props.recordingsBucket?.bucketName || '',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantReadWrite(getPartPresignedUrlFunction);
+    }
+    props.sessionsTable.grantReadWriteData(getPartPresignedUrlFunction);
+
+    const uploadPartUrlResource = uploadResource.addResource('part-url');
+    uploadPartUrlResource.addMethod('POST', new apigateway.LambdaIntegration(getPartPresignedUrlFunction), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /upload/complete
+    const completeUploadFunction = new NodejsFunction(this, 'CompleteUploadFunction', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/complete-upload.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        RECORDINGS_BUCKET: props.recordingsBucket?.bucketName || '',
+        MEDIACONVERT_TOPIC_ARN: props.mediaConvertTopic?.topicArn || '',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantReadWrite(completeUploadFunction);
+    }
+    props.sessionsTable.grantReadWriteData(completeUploadFunction);
+
+    if (props.mediaConvertTopic) {
+      props.mediaConvertTopic.grantPublish(completeUploadFunction);
+    }
+
+    const uploadCompleteResource = uploadResource.addResource('complete');
+    uploadCompleteResource.addMethod('POST', new apigateway.LambdaIntegration(completeUploadFunction), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
 
     // Phase 22: Wire IVS_PLAYBACK_PRIVATE_KEY to handlers that need it
     // This is read from environment variable during CDK synthesis

@@ -27,6 +27,8 @@ export class SessionStack extends Stack {
   public readonly table: dynamodb.Table;
   public readonly recordingStartRule: events.Rule;
   public readonly recordingEndRule: events.Rule;
+  public readonly recordingsBucket!: s3.Bucket;
+  public readonly mediaConvertTopic!: sns.Topic;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -87,7 +89,7 @@ export class SessionStack extends Stack {
     // ============================================================
 
     // S3 bucket for session recordings
-    const recordingsBucket = new s3.Bucket(this, 'RecordingsBucket', {
+    this.recordingsBucket = new s3.Bucket(this, 'RecordingsBucket', {
       bucketName: `vnl-recordings-${this.stackName.toLowerCase()}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -120,7 +122,7 @@ export class SessionStack extends Stack {
     // CloudFront distribution for secure recording playback
     const distribution = new cloudfront.Distribution(this, 'RecordingsDistribution', {
       defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(recordingsBucket),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(this.recordingsBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         responseHeadersPolicy: recordingsCorsPolicy,
@@ -129,10 +131,10 @@ export class SessionStack extends Stack {
     });
 
     // Grant CloudFront access to S3 bucket
-    recordingsBucket.addToResourcePolicy(
+    this.recordingsBucket.addToResourcePolicy(
       new iam.PolicyStatement({
         actions: ['s3:GetObject'],
-        resources: [`${recordingsBucket.bucketArn}/*`],
+        resources: [`${this.recordingsBucket.bucketArn}/*`],
         principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
         conditions: {
           StringEquals: {
@@ -146,7 +148,7 @@ export class SessionStack extends Stack {
     const recordingConfiguration = new ivs.CfnRecordingConfiguration(this, 'RecordingConfiguration', {
       destinationConfiguration: {
         s3: {
-          bucketName: recordingsBucket.bucketName,
+          bucketName: this.recordingsBucket.bucketName,
         },
       },
       thumbnailConfiguration: {
@@ -392,9 +394,9 @@ export class SessionStack extends Stack {
     recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
 
     // Grant S3 read access to Lambda functions for recording metadata
-    recordingsBucket.grantRead(streamStartedFn);
-    recordingsBucket.grantRead(recordingEndedFn);
-    recordingsBucket.grantRead(recordingStartedFn);
+    this.recordingsBucket.grantRead(streamStartedFn);
+    this.recordingsBucket.grantRead(recordingEndedFn);
+    this.recordingsBucket.grantRead(recordingStartedFn);
 
     // ============================================================
     // Transcription Pipeline Infrastructure (Phase 19)
@@ -408,7 +410,7 @@ export class SessionStack extends Stack {
     });
 
     // Grant MediaConvert job role S3 read access to recordings bucket (for HLS master.m3u8)
-    recordingsBucket.grantRead(mediaConvertRole);
+    this.recordingsBucket.grantRead(mediaConvertRole);
 
     // Grant MediaConvert job role S3 write access to transcription bucket (for MP4 output)
     transcriptionBucket.grantWrite(mediaConvertRole);
@@ -420,7 +422,7 @@ export class SessionStack extends Stack {
     }));
 
     // Grant recording-ended handler S3 read access to recordings bucket (for HLS master.m3u8)
-    recordingsBucket.grantRead(recordingEndedFn);
+    this.recordingsBucket.grantRead(recordingEndedFn);
 
     // Grant recording-ended handler S3 write access to transcription bucket (MediaConvert outputs MP4 there)
     transcriptionBucket.grantWrite(recordingEndedFn);
@@ -613,7 +615,7 @@ export class SessionStack extends Stack {
     // ============================================================
 
     // SNS topic for upload completion notifications
-    const mediaConvertTopic = new sns.Topic(this, 'MediaConvertTopic', {
+    this.mediaConvertTopic = new sns.Topic(this, 'MediaConvertTopic', {
       displayName: 'MediaConvert Job Submission Topic',
       topicName: 'vnl-mediaconvert-jobs',
     });
@@ -626,7 +628,7 @@ export class SessionStack extends Stack {
       timeout: Duration.seconds(60),
       environment: {
         TABLE_NAME: this.table.tableName,
-        RECORDINGS_BUCKET: recordingsBucket.bucketName,
+        RECORDINGS_BUCKET: this.recordingsBucket.bucketName,
         MEDIACONVERT_ROLE_ARN: mediaConvertRole.roleArn,
         AWS_ACCOUNT_ID: this.account,
       },
@@ -643,7 +645,7 @@ export class SessionStack extends Stack {
     }));
 
     // Subscribe start-mediaconvert Lambda to SNS topic
-    mediaConvertTopic.addSubscription(new sns_subscriptions.LambdaSubscription(startMediaConvertFunction));
+    this.mediaConvertTopic.addSubscription(new sns_subscriptions.LambdaSubscription(startMediaConvertFunction));
 
     // Lambda function for on-mediaconvert-complete (EventBridge-triggered)
     const onMediaConvertCompleteFunction = new nodejs.NodejsFunction(this, 'OnMediaConvertComplete', {
@@ -653,7 +655,7 @@ export class SessionStack extends Stack {
       timeout: Duration.seconds(30),
       environment: {
         TABLE_NAME: this.table.tableName,
-        RECORDINGS_BUCKET: recordingsBucket.bucketName,
+        RECORDINGS_BUCKET: this.recordingsBucket.bucketName,
         EVENT_BUS_NAME: 'default',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
@@ -686,7 +688,7 @@ export class SessionStack extends Stack {
     });
 
     // S3 lifecycle rule for orphaned multipart uploads (clean up after 24 hours)
-    recordingsBucket.addLifecycleRule({
+    this.recordingsBucket.addLifecycleRule({
       id: 'AbortIncompleteMultipartUploads',
       abortIncompleteMultipartUploadAfter: Duration.days(1),
       prefix: 'uploads/',
@@ -694,7 +696,7 @@ export class SessionStack extends Stack {
 
     // Export environment variables for API handlers
     new CfnOutput(this, 'MediaConvertTopicArn', {
-      value: mediaConvertTopic.topicArn,
+      value: this.mediaConvertTopic.topicArn,
       description: 'SNS Topic ARN for MediaConvert job submissions',
     });
 

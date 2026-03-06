@@ -371,7 +371,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 18. Homepage Redesign & Activity Feed | v1.2 | 3/4 | In Progress | 2026-03-06 |
 | 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
-| 20. AI Summary Pipeline | v1.2 | 2/2 | Complete | 2026-03-06 |
+| 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
 | 21. Video Uploads | v1.2 | 2/4 | In Progress | 2026-03-06 |
 | 22. Live Broadcast with Secure Viewer Links | v1.3 | 3/4 | In Progress | 2026-03-06 |
 

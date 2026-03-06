@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Live Broadcast with Secure Links
-status: in-progress
-stopped_at: Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
-last_updated: "2026-03-06T01:50:24Z"
-last_activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token handler with ES384 JWT signing, 8 new tests)
+milestone: v1.2
+milestone_name: Activity Feed & Intelligence
+status: Implemented POST /sessions/{sessionId}/playback-token endpoint with ES384 JWT signing for private broadcast playback. Handler validates private sessions, extracts channel ARNs, generates time-limited tokens (24-hour default), and constructs playback URLs with token parameters. Comprehensive unit test coverage (8 tests) for token generation, defaults, and all error cases. Added jsonwebtoken dependency. All 331 backend tests passing.
+stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering, private channel pool infrastructure, IVS playback key wiring)
+last_updated: "2026-03-06T01:39:12.895Z"
+last_activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
 progress:
-  total_phases: 22
-  completed_phases: 22
-  total_plans: 48
-  completed_plans: 46
-  percent: 96
+  total_phases: 19
+  completed_phases: 17
+  total_plans: 50
+  completed_plans: 47
+  percent: 98
 ---
 
 # Project State

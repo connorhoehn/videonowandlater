@@ -16,12 +16,14 @@ import { ReplayReactionPicker } from './ReplayReactionPicker';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
 import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
+import { SessionAuditLog } from '../activity/SessionAuditLog';
 import { SummaryDisplay } from './SummaryDisplay';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
 
 interface Session {
   sessionId: string;
   userId: string;
+  sessionType?: 'BROADCAST' | 'HANGOUT';
   recordingHlsUrl?: string;
   recordingDuration?: number; // milliseconds
   createdAt: string;
@@ -29,6 +31,10 @@ interface Session {
   reactionSummary?: Record<string, number>;
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  mediaConvertJobName?: string;
 }
 
 /**
@@ -338,6 +344,9 @@ export function ReplayViewer() {
                     className="text-gray-800"
                   />
                 </div>
+
+                {/* Processing Timeline Audit Log */}
+                <SessionAuditLog session={session} compact={false} />
 
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <h3 className="text-xs font-semibold text-gray-600 uppercase mb-2">Reactions</h3>

@@ -55,16 +55,26 @@ function buildAuditLog(session: ActivitySession): AuditEvent[] {
     }
   }
 
-  // MediaConvert processing (transcoding for playback)
-  // This is inferred from convertStatus or presence of recordingHlsUrl
+  // MediaConvert processing (transcoding for transcription)
   if (session.recordingStatus === 'available') {
-    // If recording is available, mediaconvert must have been submitted
-    if (session.recordingHlsUrl) {
+    // Check convertStatus if available, otherwise infer from mediaConvertJobName
+    if (session.convertStatus === 'available') {
       events.push({
         title: 'MediaConvert complete',
         status: 'completed',
       });
-    } else {
+    } else if (session.convertStatus === 'processing') {
+      events.push({
+        title: 'MediaConvert processing',
+        status: 'processing',
+      });
+    } else if (session.convertStatus === 'failed') {
+      events.push({
+        title: 'MediaConvert failed',
+        status: 'failed',
+      });
+    } else if (session.convertStatus === 'pending' || session.mediaConvertJobName) {
+      // If we have convertStatus=pending or a mediaConvertJobName, job was submitted
       events.push({
         title: 'MediaConvert submitted',
         status: 'processing',

@@ -23,6 +23,8 @@ export interface ActivitySession {
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  mediaConvertJobName?: string;
 }
 
 interface RecordingSliderProps {

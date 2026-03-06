@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: completed
-stopped_at: Completed 21-01-PLAN.md (Backend domain models - SessionType.UPLOAD, 3 repository functions for upload session lifecycle)
-last_updated: "2026-03-06T01:01:11.045Z"
-last_activity: 2026-03-06 — Completed 21-01-PLAN.md (SessionType.UPLOAD, createUploadSession, updateUploadProgress, updateConvertStatus)
+stopped_at: Completed 21-02-PLAN.md (Upload Lambda handlers - init-upload, get-part-presigned-url, complete-upload with S3 multipart orchestration)
+last_updated: "2026-03-06T01:03:26.000Z"
+last_activity: 2026-03-06 — Completed 21-02-PLAN.md (3 Lambda handlers, 32 new tests, S3 multipart + SNS integration)
 progress:
-  total_phases: 18
-  completed_phases: 16
-  total_plans: 41
-  completed_plans: 37
-  percent: 98
+  total_phases: 21
+  completed_phases: 20
+  total_plans: 42
+  completed_plans: 38
+  percent: 90
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 21 of 21 (Video Uploads Support) -- IN PROGRESS
-Plan: 01 of 02 (Backend Domain Models & Repository Functions) -- COMPLETE
-Status: Plan 21-01 complete. Extended Session domain with UPLOAD type and three repository functions for upload session lifecycle. Moving to 21-02 (S3 multipart upload handler).
-Last activity: 2026-03-06 — Completed 21-01-PLAN.md (SessionType.UPLOAD, createUploadSession, updateUploadProgress, updateConvertStatus)
+Plan: 02 of 04 (Upload Lambda Handlers) -- COMPLETE
+Status: Plans 21-01 and 21-02 complete. Session domain extended with UPLOAD type and repository functions. Three Lambda handlers implemented (init-upload, get-part-presigned-url, complete-upload) with 32 unit tests. Next: 21-03 (MediaConvert job submission).
+Last activity: 2026-03-06 — Completed 21-02-PLAN.md (POST /upload/init, POST /upload/part-url, POST /upload/complete handlers)
 
-Progress: [████████████░] 98% (41/42 plans complete)
+Progress: [██████████████░░░░] 90% (38/42 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (v1.2 + v1.3 start)
-- Average duration: 3.2 min
-- Total execution time: 66 min
+- Total plans completed: 13 (v1.2 completion + Phase 21 start)
+- Average duration: 3.5 min
+- Total execution time: 72 min (including plan 21 phases)
 
 **By Phase:**
 
@@ -48,6 +48,7 @@ Progress: [████████████░] 98% (41/42 plans complete)
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 2 | 2 | 4.5 min |
 | 20 | 2 | 2 | 4.5 min |
+| 21 | 4 | 2 | 4 min (so far) |
 | 21 | 2 | 1 | 12 min (so far) |
 
 *Updated after each plan completion*

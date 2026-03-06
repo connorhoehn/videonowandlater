@@ -5,6 +5,7 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { updateTranscriptStatus } from '../repositories/session-repository';
 
 interface TranscribeJobDetail {
@@ -35,13 +36,13 @@ export const handler = async (
   console.log('Transcribe job event received:', { jobName, status: detail.TranscriptionJobStatus });
 
   // Parse sessionId from job name (format: vnl-{sessionId}-{epochMs})
-  const jobNameParts = jobName.split('-');
-  if (jobNameParts.length < 3 || jobNameParts[0] !== 'vnl') {
+  const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
+  if (!jobNameMatch) {
     console.warn('Cannot parse sessionId from job name:', jobName);
     return;
   }
 
-  const sessionId = jobNameParts[1];
+  const sessionId = jobNameMatch[1];
 
   if (detail.TranscriptionJobStatus === 'FAILED') {
     console.warn('Transcribe job failed for session:', {
@@ -77,13 +78,38 @@ export const handler = async (
 
     if (!plainText) {
       console.warn('Transcript text is empty for session:', sessionId);
+      const s3Uri = `s3://${transcriptionBucket}/${transcriptJsonPath}`;
       await updateTranscriptStatus(
         tableName,
         sessionId,
         'available',
-        `s3://${transcriptionBucket}/${transcriptJsonPath}`,
+        s3Uri,
         ''
       );
+
+      // Emit "Transcript Stored" event for Phase 20 (AI Summary Pipeline) even with empty text
+      try {
+        const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: 'transcription-pipeline',
+                DetailType: 'Transcript Stored',
+                Detail: JSON.stringify({
+                  sessionId,
+                  transcriptS3Uri: s3Uri,
+                  timestamp: new Date().toISOString(),
+                }),
+              },
+            ],
+          })
+        );
+        console.log('Transcript Stored event emitted for session:', sessionId);
+      } catch (eventError: any) {
+        console.error('Failed to emit Transcript Stored event:', eventError.message);
+        // Non-blocking: transcript is already stored, don't throw or prevent completion
+      }
       return;
     }
 
@@ -98,6 +124,30 @@ export const handler = async (
     await updateTranscriptStatus(tableName, sessionId, 'available', s3Uri, plainText);
 
     console.log('Transcript stored for session:', { sessionId, s3Uri });
+
+    // Emit "Transcript Stored" event for Phase 20 (AI Summary Pipeline)
+    try {
+      const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+      await eventBridgeClient.send(
+        new PutEventsCommand({
+          Entries: [
+            {
+              Source: 'transcription-pipeline',
+              DetailType: 'Transcript Stored',
+              Detail: JSON.stringify({
+                sessionId,
+                transcriptS3Uri: s3Uri,
+                timestamp: new Date().toISOString(),
+              }),
+            },
+          ],
+        })
+      );
+      console.log('Transcript Stored event emitted for session:', sessionId);
+    } catch (eventError: any) {
+      console.error('Failed to emit Transcript Stored event:', eventError.message);
+      // Non-blocking: transcript is already stored, don't throw or prevent completion
+    }
   } catch (error: any) {
     console.error('Failed to fetch or store transcript:', error.message);
     try {

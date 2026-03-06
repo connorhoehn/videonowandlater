@@ -51,7 +51,7 @@ The transcribe-completed handler now emits an EventBridge event with DetailType=
     2. When transcript is empty (line 90-112)
   - Event wrapped in try/catch for non-blocking semantics
   - Event includes sessionId, transcriptS3Uri, and timestamp in Detail
-  - Source: 'transcription-pipeline' (matches Phase 20's EventBridge rule)
+  - Source: 'custom.vnl' (matches Phase 20's EventBridge rule)
   - DetailType: 'Transcript Stored'
 - **Files modified:**
   - backend/src/handlers/transcribe-completed.ts
@@ -77,6 +77,19 @@ The transcribe-completed handler now emits an EventBridge event with DetailType=
 - **All 9 tests passing** ✓
 
 ## Deviations from Plan
+
+### Critical Bug Fix: EventBridge Event Source
+
+**3. [CRITICAL BLOCKER] Fixed EventBridge event source from 'transcription-pipeline' to 'custom.vnl'**
+- **Found during:** Final validation against Phase 20 requirements
+- **Issue:** The original plan specified using Source: 'transcription-pipeline' for emitted events, but Phase 20-01-PLAN.md shows the EventBridge rule expects Source: 'custom.vnl' (line 144: `source: ['custom.vnl']`). This mismatch would prevent Phase 20's store-summary Lambda from being triggered.
+- **Impact:** This was a critical gap that would have broken the entire Phase 19→Phase 20 pipeline integration.
+- **Fix:** Updated both event emission locations in transcribe-completed.ts to use Source: 'custom.vnl' instead of 'transcription-pipeline'.
+- **Files modified:**
+  - backend/src/handlers/transcribe-completed.ts (2 locations updated: lines 97 and 135)
+  - backend/src/handlers/__tests__/transcribe-completed.test.ts (test updated to verify Source field)
+- **Verification:** All 305 backend tests pass ✓
+- **Commits:** (included in main task commit)
 
 ### Auto-fixed Issues
 
@@ -139,7 +152,7 @@ The transcribe-completed handler now emits an EventBridge event with DetailType=
 
 - [x] EventBridge "Transcript Stored" event emitted after line 98 (updateTranscriptStatus succeeds)
 - [x] Event DetailType = "Transcript Stored" (matches Phase 20's EventBridge rule)
-- [x] Event Source = "transcription-pipeline"
+- [x] Event Source = "custom.vnl"
 - [x] Event Detail includes sessionId (for Phase 20 correlation)
 - [x] Event Detail includes transcriptS3Uri (for Phase 20 to fetch transcript)
 - [x] Event emission does not block handler (try/catch, transcript already stored)
@@ -151,7 +164,7 @@ The transcribe-completed handler now emits an EventBridge event with DetailType=
 
 The EventBridge rule in session-stack.ts (from Phase 20) is now connected:
 ```
-Source: 'transcription-pipeline'
+Source: 'custom.vnl'
 DetailType: 'Transcript Stored'
 → Triggers store-summary Lambda
 ```

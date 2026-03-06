@@ -218,7 +218,7 @@ Plans:
 - [x] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services (completed 2026-03-06)
 - [x] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
 - [x] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint (completed 2026-03-06)
-- [ ] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events
+- [x] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events (completed 2026-03-06)
 - [ ] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries
 
 ## Phase Details
@@ -324,7 +324,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 18. Homepage Redesign & Activity Feed | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
-| 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
+| 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | - |
 | 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
 
 | 21. Video Uploads | v1.2 | 4/4 | Planned | - |

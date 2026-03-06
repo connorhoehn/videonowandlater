@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
-status: executing
-stopped_at: Completed 20-02-PLAN.md (frontend AI summary display pipeline)
-last_updated: "2026-03-06T00:58:00.000Z"
-last_activity: 2026-03-06 — Completed 20-02-PLAN.md (SummaryDisplay component, activity card integration, replay viewer integration, 21 tests passing)
+status: completed
+stopped_at: Completed 20-02-PLAN.md (AI summary frontend - SummaryDisplay component, activity card integration, replay viewer integration)
+last_updated: "2026-03-06T00:59:27.158Z"
+last_activity: 2026-03-06 — Completed 21-01-PLAN.md (SessionType.UPLOAD, createUploadSession, updateUploadProgress, updateConvertStatus)
 progress:
-  total_phases: 20
-  completed_phases: 20
-  total_plans: 40
-  completed_plans: 40
-  percent: 100
+  total_phases: 18
+  completed_phases: 16
+  total_plans: 41
+  completed_plans: 37
+  percent: 98
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 20 of 20 (AI Summary Pipeline) -- COMPLETE
-Plan: 02 of 02 (Frontend Summary Display) -- COMPLETE
-Status: Plan 20-02 complete. All 20 phases and 40 plans complete. v1.2 milestone finished.
-Last activity: 2026-03-06 — Completed 20-02-PLAN.md (SummaryDisplay component, activity cards, replay viewer integration)
+Phase: 21 of 21 (Video Uploads Support) -- IN PROGRESS
+Plan: 01 of 02 (Backend Domain Models & Repository Functions) -- COMPLETE
+Status: Plan 21-01 complete. Extended Session domain with UPLOAD type and three repository functions for upload session lifecycle. Moving to 21-02 (S3 multipart upload handler).
+Last activity: 2026-03-06 — Completed 21-01-PLAN.md (SessionType.UPLOAD, createUploadSession, updateUploadProgress, updateConvertStatus)
 
-Progress: [████████████] 100% (40/40 plans complete) ✓ PROJECT COMPLETE
+Progress: [████████████░] 98% (41/42 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (v1.2)
-- Average duration: 3.0 min
-- Total execution time: 54 min
+- Total plans completed: 11 (v1.2 + v1.3 start)
+- Average duration: 3.2 min
+- Total execution time: 66 min
 
 **By Phase:**
 
@@ -48,6 +48,7 @@ Progress: [████████████] 100% (40/40 plans complete) ✓
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 2 | 2 | 4.5 min |
 | 20 | 2 | 2 | 4.5 min |
+| 21 | 2 | 1 | 12 min (so far) |
 
 *Updated after each plan completion*
 

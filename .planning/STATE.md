@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Video Uploads (Phase 21) + Live Broadcast with Secure Viewer Links (Phase 22)
-status: Completed Phase 21 Plan 05 (API Gateway integration for upload handlers). Three upload endpoints wired into API Gateway with Lambda function definitions, Cognito authorization, and IAM permissions. CloudFormation outputs added. All 339 backend tests passing. Upload API accessible from frontend.
-stopped_at: Completed 21-05-PLAN.md (API Gateway integration for upload handlers)
-last_updated: "2026-03-06T01:57:27Z"
-last_activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway integration for three upload endpoints)
+status: Completed Phase 21 Plan 06 (EventBridge Transcription Trigger). Added explicit event publication to on-mediaconvert-complete handler to trigger Phase 19 transcription pipeline when uploaded video encoding completes. Non-blocking error handling, comprehensive tests (16 tests). Phase 21 → Phase 19 coupling now explicit and defensive.
+stopped_at: Completed 21-06-PLAN.md (EventBridge transcription trigger for upload completion)
+last_updated: "2026-03-06T01:52:15Z"
+last_activity: 2026-03-06 — Completed 21-06-PLAN.md (EventBridge transcription trigger for upload completion)
 progress:
   total_phases: 22
   completed_phases: 21
   total_plans: 54
-  completed_plans: 51
-  percent: 94
+  completed_plans: 52
+  percent: 96
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 21 of 22 (Video Uploads) -- IN PROGRESS
-Plan: 05 of 05 (API Gateway Integration) -- COMPLETE
-Status: API Gateway integration complete. Three upload endpoints (init, part-url, complete) wired into API Gateway with Lambda function definitions, Cognito authorization, and IAM permissions. CloudFormation outputs for debugging. Ready for frontend integration.
-Last activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway integration for upload handlers)
+Phase: 21 of 22 (Video Uploads) -- COMPLETE
+Plan: 06 of 06 (EventBridge Transcription Trigger) -- COMPLETE
+Status: Phase 21 complete. Upload pipeline now defensively triggers Phase 19 transcription via explicit EventBridge events. All 3 upload endpoint handlers integrated with API Gateway. All event coupling between Phase 21, 19, and 20 explicitly published with non-blocking error handling. Phase 22 next (Secure Viewer Links).
+Last activity: 2026-03-06 — Completed 21-06-PLAN.md (EventBridge transcription trigger)
 
-Progress: [████████████████████] 94% (51/54 plans complete)
+Progress: [████████████████████░] 96% (52/54 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 51 (v1.1 + v1.2 + v1.3 + gap closures)
+- Total plans completed: 52 (v1.1 + v1.2 + v1.3 + gap closures)
 - Average duration: 3.2 min
-- Total execution time: ~158 min (including all phase executions)
+- Total execution time: ~160 min (including all phase executions)
 
 **By Phase:**
 
@@ -48,7 +48,7 @@ Progress: [████████████████████] 94% (51
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 5 | 5 | 4.5 min (01-04: 4.5 min avg, 05 gap closure: 1 min) |
 | 20 | 2 | 2 | 4 min (01: 4 min, 05 gap closure: 15 min) |
-| 21 | 4 | 4 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min) |
+| 21 | 6 | 6 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min, api: 4min, eb: 2min) |
 | 22 | 4 | 1 | 2 min (22-01 complete) |
 
 *Updated after each plan completion*

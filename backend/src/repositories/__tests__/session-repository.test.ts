@@ -2,11 +2,11 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
 import * as dynamodbClient from '../../lib/dynamodb-client';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 jest.mock('../../lib/dynamodb-client');
 
@@ -45,6 +45,89 @@ describe('session-repository', () => {
     });
   });
 
+  describe('updateRecordingMetadata', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('accepts reactionSummary parameter and includes it in DynamoDB update expression', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateRecordingMetadata(tableName, 'session123', {
+        reactionSummary: { heart: 42, fire: 17, clap: 8, laugh: 5, surprised: 3 },
+      });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session123',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('#reactionSummary'),
+            ExpressionAttributeNames: expect.objectContaining({
+              '#reactionSummary': 'reactionSummary',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':reactionSummary': { heart: 42, fire: 17, clap: 8, laugh: 5, surprised: 3 },
+            }),
+          }),
+        })
+      );
+    });
+
+    it('stores empty reactionSummary map {} when provided (for sessions with zero reactions)', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateRecordingMetadata(tableName, 'session123', {
+        reactionSummary: {},
+      });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            ExpressionAttributeValues: expect.objectContaining({
+              ':reactionSummary': {},
+            }),
+          }),
+        })
+      );
+    });
+
+    it('works without reactionSummary parameter for backward compatibility', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateRecordingMetadata(tableName, 'session123', {
+        recordingDuration: 300000,
+        recordingStatus: 'available',
+      });
+
+      expect(mockSend).toHaveBeenCalled();
+      // Verify reactionSummary is not in the update expression
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).not.toContain('#reactionSummary');
+    });
+
+    it('correctly maps field names in expression attribute names', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateRecordingMetadata(tableName, 'session123', {
+        recordingDuration: 300000,
+        reactionSummary: { heart: 5 },
+      });
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.ExpressionAttributeNames).toHaveProperty('#reactionSummary', 'reactionSummary');
+      expect(call.input.ExpressionAttributeNames).toHaveProperty('#recordingDuration', 'recordingDuration');
+    });
+  });
+
   describe('getRecentRecordings', () => {
     const mockSend = jest.fn();
 
@@ -55,7 +138,7 @@ describe('session-repository', () => {
       });
     });
 
-    it('filters by status=ended AND recordingStatus=available', async () => {
+    it('filters by status IN (ended, ending) AND recordingStatus != failed', async () => {
       mockSend.mockResolvedValueOnce({ Items: [] });
 
       await getRecentRecordings(tableName, 20);
@@ -64,10 +147,11 @@ describe('session-repository', () => {
         expect.objectContaining({
           input: expect.objectContaining({
             TableName: tableName,
-            FilterExpression: expect.stringContaining('recordingStatus = :available'),
+            FilterExpression: expect.stringContaining('recordingStatus <> :failed'),
             ExpressionAttributeValues: expect.objectContaining({
               ':ended': 'ended',
-              ':available': 'available',
+              ':ending': 'ending',
+              ':failed': 'failed',
             }),
           }),
         })

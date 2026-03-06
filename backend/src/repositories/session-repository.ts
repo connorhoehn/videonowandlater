@@ -137,6 +137,7 @@ export async function updateRecordingMetadata(
     thumbnailUrl?: string;
     recordingHlsUrl?: string;
     recordingStatus?: RecordingStatus | 'processing' | 'available' | 'failed' | 'pending';
+    reactionSummary?: Record<string, number>;
   }
 ): Promise<void> {
   const docClient = getDocumentClient();
@@ -180,6 +181,12 @@ export async function updateRecordingMetadata(
     expressionAttributeValues[':recordingStatus'] = metadata.recordingStatus;
   }
 
+  if (metadata.reactionSummary !== undefined) {
+    updateParts.push('#reactionSummary = :reactionSummary');
+    expressionAttributeNames['#reactionSummary'] = 'reactionSummary';
+    expressionAttributeValues[':reactionSummary'] = metadata.reactionSummary;
+  }
+
   if (updateParts.length === 0) {
     // No fields to update
     return;
@@ -201,11 +208,12 @@ export async function updateRecordingMetadata(
 
 /**
  * Get recently recorded sessions
- * Returns sessions with recordingStatus='available' sorted by endedAt descending
+ * Returns sessions that have ended or are ending (recording may still be processing).
+ * Excludes failed recordings. Sorted by endedAt descending.
  *
  * @param tableName DynamoDB table name
  * @param limit Maximum number of recordings to return (default 20)
- * @returns Array of Session objects with available recordings
+ * @returns Array of Session objects
  */
 export async function getRecentRecordings(
   tableName: string,
@@ -215,14 +223,15 @@ export async function getRecentRecordings(
 
   const result = await docClient.send(new ScanCommand({
     TableName: tableName,
-    FilterExpression: '#status = :ended AND begins_with(PK, :pk) AND recordingStatus = :available',
+    FilterExpression: '#status IN (:ended, :ending) AND begins_with(PK, :pk) AND (attribute_not_exists(recordingStatus) OR recordingStatus <> :failed)',
     ExpressionAttributeNames: {
       '#status': 'status',
     },
     ExpressionAttributeValues: {
       ':ended': 'ended',
+      ':ending': 'ending',
       ':pk': 'SESSION#',
-      ':available': 'available',
+      ':failed': 'failed',
     },
   }));
 

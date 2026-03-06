@@ -61,6 +61,7 @@ export interface Session {
   thumbnailUrl?: string;
   recordingHlsUrl?: string;
   recordingStatus?: RecordingStatus;
+  reactionSummary?: Record<string, number>;
 }
 
 /**

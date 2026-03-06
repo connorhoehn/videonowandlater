@@ -2,7 +2,8 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount } from '../session-repository';
+import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
 import * as dynamodbClient from '../../lib/dynamodb-client';
@@ -372,6 +373,177 @@ describe('session-repository', () => {
       // Verify no KeyConditionExpression (which would indicate Query)
       const call = mockSend.mock.calls[0][0];
       expect(call.input.KeyConditionExpression).toBeUndefined();
+    });
+  });
+
+  describe('addHangoutParticipant', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('calls PutCommand with correct PK/SK/entityType and all participant fields', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await addHangoutParticipant(tableName, 'session-abc', 'user-123', 'user-123', 'participant-xyz');
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Item: expect.objectContaining({
+              PK: 'SESSION#session-abc',
+              SK: 'PARTICIPANT#user-123',
+              entityType: 'PARTICIPANT',
+              sessionId: 'session-abc',
+              userId: 'user-123',
+              displayName: 'user-123',
+              participantId: 'participant-xyz',
+              joinedAt: expect.any(String),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('re-join (same userId) does not throw — PutCommand overwrites existing item', async () => {
+      mockSend.mockResolvedValue({});
+
+      // First join
+      await addHangoutParticipant(tableName, 'session-abc', 'user-123', 'user-123', 'participant-v1');
+      // Re-join (same user, new participantId)
+      await addHangoutParticipant(tableName, 'session-abc', 'user-123', 'user-123', 'participant-v2');
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('getHangoutParticipants', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('calls QueryCommand with correct KeyConditionExpression and begins_with', async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            PK: 'SESSION#session-abc',
+            SK: 'PARTICIPANT#user-1',
+            entityType: 'PARTICIPANT',
+            sessionId: 'session-abc',
+            userId: 'user-1',
+            displayName: 'user-1',
+            participantId: 'p-1',
+            joinedAt: '2026-03-05T12:00:00Z',
+          },
+          {
+            PK: 'SESSION#session-abc',
+            SK: 'PARTICIPANT#user-2',
+            entityType: 'PARTICIPANT',
+            sessionId: 'session-abc',
+            userId: 'user-2',
+            displayName: 'user-2',
+            participantId: 'p-2',
+            joinedAt: '2026-03-05T12:01:00Z',
+          },
+        ],
+      });
+
+      const result = await getHangoutParticipants(tableName, 'session-abc');
+
+      // Verify QueryCommand was called correctly
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+            ExpressionAttributeValues: {
+              ':pk': 'SESSION#session-abc',
+              ':skPrefix': 'PARTICIPANT#',
+            },
+          }),
+        })
+      );
+
+      // Verify PK/SK/entityType are stripped from results
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        sessionId: 'session-abc',
+        userId: 'user-1',
+        displayName: 'user-1',
+        participantId: 'p-1',
+        joinedAt: '2026-03-05T12:00:00Z',
+      });
+      expect(result[1]).toEqual({
+        sessionId: 'session-abc',
+        userId: 'user-2',
+        displayName: 'user-2',
+        participantId: 'p-2',
+        joinedAt: '2026-03-05T12:01:00Z',
+      });
+    });
+
+    it('returns empty array when no participants found', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      const result = await getHangoutParticipants(tableName, 'session-empty');
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array when Items is undefined', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await getHangoutParticipants(tableName, 'session-undefined');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('updateParticipantCount', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('calls UpdateCommand with correct Key, UpdateExpression setting participantCount and incrementing version', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateParticipantCount(tableName, 'session-abc', 3);
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-abc',
+              SK: 'METADATA',
+            },
+            UpdateExpression: 'SET #participantCount = :count, #version = #version + :inc',
+            ExpressionAttributeNames: {
+              '#participantCount': 'participantCount',
+              '#version': 'version',
+            },
+            ExpressionAttributeValues: {
+              ':count': 3,
+              ':inc': 1,
+            },
+          }),
+        })
+      );
     });
   });
 });

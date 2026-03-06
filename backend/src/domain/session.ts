@@ -62,6 +62,8 @@ export interface Session {
   recordingHlsUrl?: string;
   recordingStatus?: RecordingStatus;
   reactionSummary?: Record<string, number>;
+  // Hangout participant tracking (populated at session end)
+  participantCount?: number;
 }
 
 /**

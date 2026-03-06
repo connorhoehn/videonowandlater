@@ -9,6 +9,17 @@ import { SessionStatus, RecordingStatus } from '../domain/session';
 import { EmojiType, SHARD_COUNT } from '../domain/reaction';
 
 /**
+ * Hangout participant record - one per user per session
+ */
+export interface HangoutParticipant {
+  sessionId: string;
+  userId: string;
+  displayName: string;
+  participantId: string;
+  joinedAt: string;
+}
+
+/**
  * Create a new session in DynamoDB
  *
  * @param tableName DynamoDB table name
@@ -355,4 +366,103 @@ export async function findSessionByStageArn(
   const item = result.Items[0];
   const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
   return session as Session;
+}
+
+/**
+ * Add a hangout participant record
+ * Uses PutCommand so re-joins (same userId) are idempotent upserts (no ConditionalCheckFailedException)
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID
+ * @param userId User ID (cognito:username)
+ * @param displayName Display name for the participant
+ * @param participantId IVS RealTime participant ID
+ */
+export async function addHangoutParticipant(
+  tableName: string,
+  sessionId: string,
+  userId: string,
+  displayName: string,
+  participantId: string,
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new PutCommand({
+    TableName: tableName,
+    Item: {
+      PK: `SESSION#${sessionId}`,
+      SK: `PARTICIPANT#${userId}`,
+      entityType: 'PARTICIPANT',
+      sessionId,
+      userId,
+      displayName,
+      participantId,
+      joinedAt: new Date().toISOString(),
+    },
+  }));
+}
+
+/**
+ * Get all participants for a hangout session
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID
+ * @returns Array of HangoutParticipant objects
+ */
+export async function getHangoutParticipants(
+  tableName: string,
+  sessionId: string,
+): Promise<HangoutParticipant[]> {
+  const docClient = getDocumentClient();
+
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': `SESSION#${sessionId}`,
+      ':skPrefix': 'PARTICIPANT#',
+    },
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return [];
+  }
+
+  // Strip DynamoDB keys, return clean participant objects
+  return result.Items.map(item => {
+    const { PK, SK, entityType, ...participant } = item;
+    return participant as HangoutParticipant;
+  });
+}
+
+/**
+ * Update participant count on session METADATA record
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID
+ * @param participantCount Number of unique participants
+ */
+export async function updateParticipantCount(
+  tableName: string,
+  sessionId: string,
+  participantCount: number,
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #participantCount = :count, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#participantCount': 'participantCount',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':count': participantCount,
+      ':inc': 1,
+    },
+  }));
 }

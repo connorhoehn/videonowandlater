@@ -41,15 +41,18 @@ export function RecordingSlider({ sessions }: RecordingSliderProps) {
 
   if (broadcasts.length === 0) {
     return (
-      <div className="px-6 py-8 text-gray-400 text-sm">No recordings yet</div>
+      <div className="border-b border-gray-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 text-gray-400 text-sm">No recordings yet</div>
+      </div>
     );
   }
 
   return (
-    <div className="px-6 py-6 border-b border-gray-100">
-      <h2 className="text-sm font-semibold text-gray-900 mb-4">Recent Broadcasts</h2>
-      <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
-        <div className="flex gap-4 pb-2">
+    <div className="border-b border-gray-100">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-4">Recent Broadcasts</h2>
+        <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
+          <div className="flex gap-4 pb-2">
           {broadcasts.map((session) => (
             <div
               key={session.sessionId}
@@ -83,6 +86,7 @@ export function RecordingSlider({ sessions }: RecordingSliderProps) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

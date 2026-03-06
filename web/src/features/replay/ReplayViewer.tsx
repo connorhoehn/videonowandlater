@@ -15,6 +15,7 @@ import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReac
 import { ReplayReactionPicker } from './ReplayReactionPicker';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
+import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
 
 interface Session {
@@ -24,6 +25,7 @@ interface Session {
   recordingDuration?: number; // milliseconds
   createdAt: string;
   endedAt?: string;
+  reactionSummary?: Record<string, number>;
 }
 
 /**
@@ -61,25 +63,37 @@ export function ReplayViewer() {
     const fetchSession = async () => {
       const config = getConfig();
       const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
+      const url = `${apiBaseUrl}/sessions/${sessionId}`;
+
+      console.log('[ReplayViewer] fetching session', { sessionId, url, hasToken: !!authToken });
 
       try {
-        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+        const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${authToken}` },
         });
+
+        console.log('[ReplayViewer] session response', { status: response.status, ok: response.ok });
 
         if (!response.ok) {
           if (response.status === 404) {
             setError('Recording not found');
           } else {
-            setError(`Failed to load recording: ${response.statusText}`);
+            setError(`Failed to load recording: ${response.status} ${response.statusText}`);
           }
           setLoading(false);
           return;
         }
 
         const data: Session = await response.json();
+        console.log('[ReplayViewer] session loaded', {
+          sessionId: data.sessionId,
+          recordingStatus: (data as any).recordingStatus,
+          recordingHlsUrl: (data as any).recordingHlsUrl,
+          status: (data as any).status,
+        });
         setSession(data);
       } catch (err: any) {
+        console.error('[ReplayViewer] fetch error', err);
         setError(`Error loading recording: ${err.message}`);
       } finally {
         setLoading(false);
@@ -310,6 +324,11 @@ export function ReplayViewer() {
                     </p>
                   </div>
                 )}
+
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-600 uppercase mb-2">Reactions</h3>
+                  <ReactionSummaryPills reactionSummary={session?.reactionSummary} />
+                </div>
 
                 <div className="pt-2 border-t border-gray-200">
                   <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>

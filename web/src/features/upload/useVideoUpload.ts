@@ -86,7 +86,7 @@ export const useVideoUpload = (authToken: string | null) => {
           const chunk = file.slice(start, end);
 
           // Get presigned URL for this chunk (with retry on 403)
-          let presignedUrl: string;
+          let presignedUrl: string | undefined;
           let retries = 0;
           while (retries < 3) {
             try {
@@ -127,6 +127,10 @@ export const useVideoUpload = (authToken: string | null) => {
               }
               await new Promise((resolve) => setTimeout(resolve, 1000));
             }
+          }
+
+          if (!presignedUrl) {
+            throw new Error(`Failed to obtain presigned URL for part ${partNumber}`);
           }
 
           // Upload chunk to S3 with presigned URL

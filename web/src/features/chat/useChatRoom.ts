@@ -49,6 +49,10 @@ export const useChatRoom = ({ sessionId, authToken }: UseChatRoomProps): UseChat
 
   // Track connectionState with listeners and connect
   React.useEffect(() => {
+    // Wait for a real auth token before connecting — the hook is called before
+    // the HangoutPage auth guard, so authToken may still be '' on first render.
+    if (!authToken) return;
+
     const unsubscribeConnecting = room.addListener('connecting', () => {
       setConnectionState('connecting');
       setError(null);
@@ -66,17 +70,15 @@ export const useChatRoom = ({ sessionId, authToken }: UseChatRoomProps): UseChat
       }
     });
 
-    // Connect on mount
     room.connect();
 
-    // Cleanup on unmount
     return () => {
       unsubscribeConnecting();
       unsubscribeConnect();
       unsubscribeDisconnect();
       room.disconnect();
     };
-  }, [room]);
+  }, [room, authToken]);
 
   return { room, connectionState, error };
 };

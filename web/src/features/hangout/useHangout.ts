@@ -93,6 +93,8 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
         // Set up Stage event listeners before joining
         stageInstance.on(StageEvents.STAGE_PARTICIPANT_JOINED, (participant: any) => {
           if (!mounted) return;
+          // Skip local participant — added explicitly after join()
+          if (participant.isLocal) return;
           console.log('[useHangout] Participant joined:', participant);
           setParticipants((prev) => [
             ...prev,
@@ -118,10 +120,16 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
           (participant: any, streams: any[]) => {
             if (!mounted) return;
+            // Skip local participant — its MediaStream is already set after join()
+            if (participant.isLocal) return;
             console.log('[useHangout] Participant streams added:', participant, streams);
+            // Convert StageStream[] → a single MediaStream with all tracks
+            const mediaStream = new MediaStream(
+              streams.map((s: any) => s.mediaStreamTrack).filter(Boolean)
+            );
             setParticipants((prev) =>
               prev.map((p) =>
-                p.participantId === participant.id ? { ...p, streams } : p
+                p.participantId === participant.id ? { ...p, streams: [mediaStream] } : p
               )
             );
           }

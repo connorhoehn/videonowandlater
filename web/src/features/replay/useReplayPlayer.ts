@@ -18,9 +18,20 @@ export function useReplayPlayer(recordingHlsUrl: string | undefined) {
   const playerRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!videoRef.current || !window.IVSPlayer || !recordingHlsUrl) {
+    if (!recordingHlsUrl) {
+      console.log('[useReplayPlayer] skipped — no recordingHlsUrl');
       return;
     }
+    if (!window.IVSPlayer) {
+      console.warn('[useReplayPlayer] skipped — IVSPlayer SDK not on window');
+      return;
+    }
+    if (!videoRef.current) {
+      console.warn('[useReplayPlayer] skipped — videoRef not ready');
+      return;
+    }
+
+    console.log('[useReplayPlayer] loading', recordingHlsUrl);
 
     // Initialize IVS Player
     const player = window.IVSPlayer.create();
@@ -42,7 +53,12 @@ export function useReplayPlayer(recordingHlsUrl: string | undefined) {
       setSyncTime(player.getPosition() * 1000);
     });
 
+    player.addEventListener(window.IVSPlayer.PlayerEventType.ERROR, (err: any) => {
+      console.error('[useReplayPlayer] player error', err);
+    });
+
     // Load HLS URL
+    console.log('[useReplayPlayer] player.load()');
     player.load(recordingHlsUrl);
 
     // Disable autoplay (mobile requires user interaction)

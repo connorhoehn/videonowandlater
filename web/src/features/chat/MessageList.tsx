@@ -50,7 +50,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, sessionOwner
           <MessageRow
             key={message.id}
             message={message}
-            isBroadcaster={message.sender.userId === sessionOwnerId}
+            isBroadcaster={message.sender?.userId === sessionOwnerId}
           />
         ))}
       </div>

@@ -1,7 +1,8 @@
 /**
- * RecordingFeed - displays recently recorded sessions in a responsive grid
+ * RecordingFeed - Modern card grid of recorded sessions
  */
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export interface Recording {
@@ -19,142 +20,156 @@ interface RecordingFeedProps {
   recordings: Recording[];
 }
 
-/**
- * Format duration from milliseconds to MM:SS
- */
 function formatDuration(ms: number): string {
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.floor((ms % 60000) / 1000);
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-/**
- * Format date to relative time or absolute date
- */
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffHours < 24) {
-    if (diffHours < 1) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      if (diffMinutes < 1) return 'Just now';
-      return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
-    }
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  } else if (diffDays < 7) {
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  }
-  return date.toLocaleDateString();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export function RecordingFeed({ recordings }: RecordingFeedProps) {
   const navigate = useNavigate();
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
 
   if (recordings.length === 0) {
     return (
-      <div className="p-8 text-center text-gray-500">
-        <p className="text-lg">No recordings yet</p>
-        <p className="text-sm mt-2">Recordings will appear here after broadcasts end</p>
+      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
+        <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="7" width="20" height="15" rx="2" ry="2" />
+            <polyline points="17 2 12 7 7 2" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-500">No recordings yet</p>
+        <p className="text-xs mt-1 text-gray-400">Go live to create your first recording</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
-      {recordings.map((recording) => {
-        const isHangout = recording.sessionType === 'HANGOUT';
-        const destination = `/replay/${recording.sessionId}`;
-        const isAvailable = !recording.recordingStatus || recording.recordingStatus === 'available';
-
-        return (
-          <div
-            key={recording.sessionId}
-            onClick={() => isAvailable && navigate(destination)}
-            className={`group ${isAvailable ? 'cursor-pointer' : 'cursor-default opacity-75'}`}
-          >
-            {/* Thumbnail container */}
-            <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
-            {recording.thumbnailUrl ? (
-              <img
-                src={recording.thumbnailUrl}
-                alt="Recording thumbnail"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-300 to-gray-400">
-                <svg
-                  className="w-16 h-16 text-gray-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-            )}
-
-            {/* Recording status overlay */}
-            {recording.recordingStatus === 'processing' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                <span className="text-white text-sm font-medium">Processing...</span>
-              </div>
-            )}
-            {recording.recordingStatus === 'failed' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                <span className="text-red-400 text-sm font-medium">Processing failed</span>
-              </div>
-            )}
-            {(!recording.recordingStatus || recording.recordingStatus === 'pending') && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                <span className="text-white text-sm font-medium">Awaiting recording...</span>
-              </div>
-            )}
-
-            {/* Session type badge (top-right) */}
-            {isHangout && (
-              <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs px-2 py-1 rounded font-medium">
-                Hangout
-              </div>
-            )}
-
-            {/* Duration badge (bottom-right) */}
-            {recording.recordingDuration !== undefined && (
-              <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">
-                {formatDuration(recording.recordingDuration)}
-              </div>
-            )}
-          </div>
-
-          {/* Metadata */}
-          <div className="mt-2">
-            <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
-              Recording {recording.sessionId.substring(0, 8)}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {recording.endedAt ? formatDate(recording.endedAt) : formatDate(recording.createdAt)}
-            </div>
-            <div className="text-xs text-gray-400 mt-0.5">
-              Broadcaster: {recording.userId.substring(0, 8)}
-            </div>
-          </div>
+    <div className="relative">
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900/95 text-white text-xs px-4 py-2.5 rounded-full shadow-xl pointer-events-none backdrop-blur-sm">
+          {toast}
         </div>
-        );
-      })}
+      )}
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+          {recordings.map((recording) => {
+            const isAvailable = recording.recordingStatus === 'available';
+            const isFailed = recording.recordingStatus === 'failed';
+            const isProcessing = !isFailed && !isAvailable;
+            const isHangout = recording.sessionType === 'HANGOUT';
+            const date = recording.endedAt ?? recording.createdAt;
+
+            const handleClick = () => {
+              if (isAvailable) {
+                navigate(`/replay/${recording.sessionId}`);
+              } else if (isFailed) {
+                showToast('Recording failed to process');
+              } else {
+                showToast('Still processing — check back soon');
+              }
+            };
+
+            return (
+              <div
+                key={recording.sessionId}
+                onClick={handleClick}
+                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group"
+              >
+                {/* Square thumbnail */}
+                <div style={{ position: 'relative', width: '100%', paddingBottom: '100%' }} className="bg-gray-900">
+                  {recording.thumbnailUrl && isAvailable ? (
+                    <img
+                      src={recording.thumbnailUrl}
+                      alt=""
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                      className="group-hover:scale-[1.03] transition-transform duration-300"
+                    />
+                  ) : (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="bg-gray-800">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                        <circle cx="12" cy="12" r="9" />
+                        <polygon points="10,8 16,12 10,16" fill="#4b5563" stroke="none" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Processing overlay */}
+                  {isProcessing && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }} className="bg-black/50 backdrop-blur-[2px]">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="text-white/80 text-[10px] font-medium tracking-wider uppercase">Processing</span>
+                    </div>
+                  )}
+
+                  {/* Failed overlay */}
+                  {isFailed && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="bg-black/50">
+                      <span className="text-red-400 text-xs font-medium">Failed</span>
+                    </div>
+                  )}
+
+                  {/* Play overlay on hover */}
+                  {isAvailable && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="bg-black/0 group-hover:bg-black/20 transition-colors duration-200">
+                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-200 scale-90 group-hover:scale-100 bg-white/95 rounded-full p-3 shadow-lg">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#111">
+                          <polygon points="6,4 20,12 6,20" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Hangout badge */}
+                  {isHangout && (
+                    <div className="absolute top-2 left-2">
+                      <span className="text-[9px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full text-white" style={{ background: '#7c3aed' }}>
+                        Hangout
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Duration */}
+                  {isAvailable && recording.recordingDuration !== undefined && (
+                    <div className="absolute bottom-2 right-2 bg-black/70 rounded-lg px-1.5 py-0.5">
+                      <span className="text-white text-[10px] font-medium tabular-nums">
+                        {formatDuration(recording.recordingDuration)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Metadata */}
+                <div className="px-3 pt-2 pb-3">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{recording.userId}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{formatDate(date)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

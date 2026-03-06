@@ -83,7 +83,27 @@ export function HangoutPage() {
     setIsCameraOn(!isCameraOn);
   };
 
+  // End session via API — only when this user is the last participant
+  const endSession = React.useCallback(() => {
+    if (!authToken || !sessionId) return;
+    if (participants.length > 1) return;
+    const config = getConfig();
+    if (!config?.apiUrl) return;
+    fetch(`${config.apiUrl}/sessions/${sessionId}/end`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      keepalive: true,
+    }).catch(() => {});
+  }, [authToken, sessionId, participants]);
+
+  // End session when tab is closed or user navigates away
+  React.useEffect(() => {
+    window.addEventListener('pagehide', endSession);
+    return () => window.removeEventListener('pagehide', endSession);
+  }, [endSession]);
+
   const handleLeave = () => {
+    endSession();
     navigate('/');
   };
 

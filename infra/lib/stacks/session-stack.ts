@@ -9,6 +9,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ivs from 'aws-cdk-lib/aws-ivs';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as path from 'path';
 import { Construct } from 'constructs';
 
@@ -166,7 +168,7 @@ export class SessionStack extends Stack {
         source: ['aws.ivs'],
         detailType: ['IVS Recording State Change'],
         detail: {
-          event_name: ['Recording Start'],
+          recording_status: ['Recording Start'],
         },
       },
       description: 'Capture recording start events from IVS',
@@ -177,7 +179,7 @@ export class SessionStack extends Stack {
         source: ['aws.ivs'],
         detailType: ['IVS Recording State Change'],
         detail: {
-          event_name: ['Recording End'],
+          recording_status: ['Recording End'],
         },
       },
       description: 'Capture recording end events from IVS',
@@ -249,7 +251,7 @@ export class SessionStack extends Stack {
     this.table.grantReadWriteData(streamStartedFn);
 
     // EventBridge rule for IVS Stream Start events
-    new events.Rule(this, 'StreamStartRule', {
+    const streamStartRule = new events.Rule(this, 'StreamStartRule', {
       eventPattern: {
         source: ['aws.ivs'],
         detailType: ['IVS Stream State Change'],
@@ -259,6 +261,40 @@ export class SessionStack extends Stack {
       },
       targets: [new targets.LambdaFunction(streamStartedFn)],
       description: 'Transition session to LIVE when IVS stream starts',
+    });
+    streamStartedFn.addPermission('AllowEBStreamStartInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: streamStartRule.ruleArn,
+    });
+
+    // Lambda function for stream-ended events
+    const streamEndedFn = new nodejs.NodejsFunction(this, 'StreamEnded', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/stream-ended.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    this.table.grantReadWriteData(streamEndedFn);
+
+    // EventBridge rule for IVS Stream End events
+    const streamEndRule = new events.Rule(this, 'StreamEndRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+        detailType: ['IVS Stream State Change'],
+        detail: {
+          event_name: ['Stream End'],
+        },
+      },
+      targets: [new targets.LambdaFunction(streamEndedFn)],
+      description: 'Transition session to ENDING when IVS stream ends',
+    });
+    streamEndedFn.addPermission('AllowEBStreamEndInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: streamEndRule.ruleArn,
     });
 
     // Lambda function for recording-ended events
@@ -291,9 +327,21 @@ export class SessionStack extends Stack {
     // Grant DynamoDB permissions
     this.table.grantReadWriteData(recordingStartedFn);
 
-    // Wire Lambda targets to EventBridge rules
-    this.recordingStartRule.addTarget(new targets.LambdaFunction(recordingStartedFn));
-    this.recordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn));
+    // Dead-letter queue: captures events EventBridge failed to deliver after retries
+    const recordingEventsDlq = new sqs.Queue(this, 'RecordingEventsDlq', {
+      queueName: 'vnl-recording-events-dlq',
+      retentionPeriod: Duration.days(14),
+    });
+
+    // Wire Lambda targets to EventBridge rules (DLQ catches delivery failures)
+    this.recordingStartRule.addTarget(new targets.LambdaFunction(recordingStartedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+    this.recordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
 
     // EventBridge rule for IVS RealTime Stage participant recording end events (hangouts)
     const stageRecordingEndRule = new events.Rule(this, 'StageRecordingEndRule', {
@@ -306,7 +354,43 @@ export class SessionStack extends Stack {
       },
       description: 'Capture IVS RealTime participant recording end events for hangout sessions',
     });
-    stageRecordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn));
+    stageRecordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+
+    // Explicit EventBridge → Lambda invoke permissions (belt-and-suspenders over CDK auto-grant)
+    // Guards against CloudFormation state drift from the RecordingEndRule → RecordingEndRuleV2 rename.
+    recordingEndedFn.addPermission('AllowEBRecordingEndInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: this.recordingEndRule.ruleArn,
+    });
+    recordingEndedFn.addPermission('AllowEBStageRecordingEndInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: stageRecordingEndRule.ruleArn,
+    });
+    recordingStartedFn.addPermission('AllowEBRecordingStartInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: this.recordingStartRule.ruleArn,
+    });
+
+    // Explicit SQS SendMessage grant so EventBridge can write delivery failures to the DLQ.
+    // CDK's targets.LambdaFunction does not auto-grant this when deadLetterQueue is set on the target.
+    recordingEventsDlq.addToResourcePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('events.amazonaws.com')],
+      actions: ['sqs:SendMessage'],
+      resources: [recordingEventsDlq.queueArn],
+      conditions: {
+        ArnLike: {
+          'aws:SourceArn': [
+            this.recordingStartRule.ruleArn,
+            this.recordingEndRule.ruleArn,
+            stageRecordingEndRule.ruleArn,
+          ],
+        },
+      },
+    }));
 
     // Update recording-ended function with CloudFront domain
     recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
@@ -315,5 +399,42 @@ export class SessionStack extends Stack {
     recordingsBucket.grantRead(streamStartedFn);
     recordingsBucket.grantRead(recordingEndedFn);
     recordingsBucket.grantRead(recordingStartedFn);
+
+    // ============================================================
+    // IVS Event Audit — catch-all for full pipeline observability
+    // CloudWatch log group: /aws/lambda/VnlSessionStack-IvsEventAudit...
+    // Logs every aws.ivs event: source, detailType, resources, full detail payload
+    // ============================================================
+    const ivsAuditDlq = new sqs.Queue(this, 'IvsEventAuditDlq', {
+      queueName: 'vnl-ivs-event-audit-dlq',
+      retentionPeriod: Duration.days(7),
+    });
+
+    const ivsEventAuditFn = new nodejs.NodejsFunction(this, 'IvsEventAudit', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/ivs-event-audit.ts'),
+      timeout: Duration.seconds(10),
+      logGroup: new logs.LogGroup(this, 'IvsEventAuditLogGroup', {
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    const ivsEventAuditRule = new events.Rule(this, 'IvsEventAuditRule', {
+      eventPattern: {
+        source: ['aws.ivs'],
+      },
+      targets: [new targets.LambdaFunction(ivsEventAuditFn, {
+        deadLetterQueue: ivsAuditDlq,
+        retryAttempts: 1,
+      })],
+      description: 'Capture ALL IVS events for CloudWatch observability',
+    });
+    ivsEventAuditFn.addPermission('AllowEBIvsAuditInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: ivsEventAuditRule.ruleArn,
+    });
   }
 }

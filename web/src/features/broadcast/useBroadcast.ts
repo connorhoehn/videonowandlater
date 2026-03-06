@@ -150,7 +150,16 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
       setIsMuted(false);
       setIsCameraOn(true);
       setIsScreenSharing(false);
-      console.log('[stopBroadcast] done — session will transition to ended via IVS EventBridge (may take several minutes)');
+      // Notify backend immediately so feed shows "processing" without waiting for EventBridge
+      try {
+        const endResp = await fetch(`${apiBaseUrl}/sessions/${sessionId}/end`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        console.log('[stopBroadcast] end-session API', endResp.status);
+      } catch (endErr) {
+        console.warn('[stopBroadcast] end-session API failed (EventBridge will catch it):', endErr);
+      }
     } catch (err: any) {
       console.error('[stopBroadcast] error:', err);
       setError(`Failed to stop broadcast: ${err.message}`);

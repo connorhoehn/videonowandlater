@@ -294,11 +294,11 @@ Plans:
   3. The full AI summary is displayed in the replay info panel when viewing a recording
   4. If Bedrock fails, the transcript that was already stored is preserved — the failure sets aiSummaryStatus to "failed" but does not overwrite or lose the transcriptText field
   5. "Summary coming soon" placeholder is shown on cards for sessions where the pipeline has not yet completed, rather than a blank or broken state
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 20-01: Bedrock client, store-transcript.ts AI extension, and CDK IAM wiring
-- [ ] 20-02: AI summary display on recording cards and replay info panel
+- [ ] 20-01-PLAN.md — Bedrock integration, store-summary handler, domain model, repository function, CDK wiring (AI-01, AI-02) - Planned
+- [ ] 20-02-PLAN.md — AI summary display on recording cards and replay info panel (AI-03, AI-04, AI-05) - Planned
 
 **Manual prerequisite:** Anthropic models require a one-time First Time Use (FTU) form in the Bedrock console before InvokeModel succeeds. This cannot be automated via CDK. Document as a pre-deployment step in plan 20-01. Confirm model availability in deployment region and whether the FTU form is still required at implementation time.
 
@@ -325,7 +325,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 18. Homepage Redesign & Activity Feed | v1.2 | 2/3 | In Progress | - |
 | 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
-| 20. AI Summary Pipeline | v1.2 | 0/2 | Not started | - |
+| 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
 
 ### Phase 21: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
 
@@ -339,4 +339,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-06 — Phase 19 planned*
+*Last updated: 2026-03-06 — Phase 20 planned (2 plans: 20-01 Bedrock backend, 20-02 frontend display)*

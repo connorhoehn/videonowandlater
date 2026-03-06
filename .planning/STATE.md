@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: executing
-stopped_at: Completed 18-02-PLAN.md (homepage activity feed layout)
-last_updated: "2026-03-06T00:58:00.000Z"
-last_activity: 2026-03-06 — Completed 18-02-PLAN.md (homepage activity feed layout components)
+stopped_at: Completed 18-03-PLAN.md (reaction summary in replay viewer)
+last_updated: "2026-03-06T00:57:45.000Z"
+last_activity: 2026-03-06 — Completed 18-03-PLAN.md (reaction summary display in ReplayViewer with test coverage)
 progress:
   total_phases: 17
   completed_phases: 14
   total_plans: 32
-  completed_plans: 31
-  percent: 47
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 18 of 20 (Homepage Redesign - Activity Feed) -- IN PROGRESS
-Plan: 02 of 03 (Homepage Activity Feed Layout) -- COMPLETE
-Status: In progress
-Last activity: 2026-03-06 — Completed 18-02-PLAN.md (homepage activity feed layout components)
+Phase: 18 of 20 (Homepage Redesign - Activity Feed) -- COMPLETE
+Plan: 03 of 03 (Reaction Summary in Replay Viewer) -- COMPLETE
+Status: Completed (Phase 18 all plans done)
+Last activity: 2026-03-06 — Completed 18-03-PLAN.md (reaction summary display in ReplayViewer)
 
-Progress: [██████░░░░] 47% (31/32 plans complete)
+Progress: [██████████] 100% (32/32 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (v1.2)
-- Average duration: 3.25 min
-- Total execution time: 13 min
+- Total plans completed: 5 (v1.2)
+- Average duration: 3.4 min
+- Total execution time: 25 min
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: [██████░░░░] 47% (31/32 plans complete)
 |-------|-------|-----------|----------|
 | 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
-| 18 | 3 | 2 | 3.25 min |
+| 18 | 3 | 3 | 3.5 min |
 
 *Updated after each plan completion*
 
@@ -76,6 +76,7 @@ v1.2 decisions from Phase 18:
 - **GET /activity is public** - No auth required, matching /recordings endpoint pattern (content discoverability)
 - **Single API call** - All metadata (reactionSummary, participantCount, messageCount) fetched in one query (eliminates N+1 on frontend)
 - **Scan + Sort** - Uses ScanCommand for ended sessions, sorts in app memory (acceptable for activity feed with ~100 sessions)
+- **Vitest for web component testing** (18-03) - Chose vitest over Jest for ESM-native testing, better Vite integration, and faster test runs. Excludes test files from TypeScript build via tsconfig pattern.
 
 v1.2 decisions pending:
 - Phase 20: Bedrock model ID and regional availability confirmation
@@ -96,8 +97,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 18-01-PLAN.md (activity feed API)
+Stopped at: Completed 18-03-PLAN.md (reaction summary in replay viewer)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 18-01 complete (activity feed API with messageCount tracking, getRecentActivity query, public /activity endpoint)*
+*Last updated: 2026-03-06 — 18-03 complete (ReplayViewer extended with reaction summary display, vitest infrastructure added for web testing)*

@@ -581,3 +581,581 @@ How roadmap phases should address these pitfalls.
 *Pitfalls research for: Adding S3 recording, reactions, and IVS RealTime Stages to existing IVS live video platform*
 
 *Researched: 2026-03-02*
+
+---
+---
+
+# v1.2 Pitfalls: AI Transcription + Activity Feed Pipeline
+
+**Domain:** Adding Amazon Transcribe + Bedrock AI pipeline to existing AWS IVS serverless application
+**Researched:** 2026-03-05
+**Confidence:** HIGH
+
+---
+
+## Critical Pitfalls — v1.2 AI/Transcription Pipeline
+
+### Pitfall 13: IVS Recordings Are HLS Segments — Amazon Transcribe Cannot Process Them Directly
+
+**What goes wrong:**
+The Lambda that starts a Transcribe job points at the IVS recording S3 path — e.g., `media/hls/master.m3u8` — and the job immediately fails with an unsupported format error. IVS records exclusively in HLS format (fMP4 segments + `.m3u8` playlists). Amazon Transcribe only accepts: AMR, FLAC, M4A, MP3, MP4, Ogg, WebM, WAV. HLS manifests and `.ts` / `.fmp4` segment files are not on the supported list.
+
+**Why it happens:**
+Developers see `.mp4` segment filenames in the IVS S3 path (e.g., `media/hls/high/1.mp4`) and assume they can pass one to Transcribe. These are fragmented MP4 (fMP4 / CMAF) segments, not standalone MP4 containers. Transcribe rejects them because they have no decodable audio header without the preceding initialization segment.
+
+**How to avoid:**
+Do not point Transcribe at individual HLS segments or `.m3u8` playlists. The correct approach for this project is:
+
+1. Use the IVS `recording-ended` EventBridge event to trigger a Lambda
+2. That Lambda starts an **AWS Elemental MediaConvert** job to concatenate the HLS segments into a single `.mp4` file stored in a transcription-work S3 prefix
+3. A second Lambda (triggered by the MediaConvert `COMPLETE` EventBridge event) starts the Transcribe job pointing at the consolidated `.mp4`
+4. A third Lambda (triggered by `Transcribe Job State Change` EventBridge event, `COMPLETED` status) reads the transcript JSON and stores plain text in DynamoDB / S3
+
+Alternatively: use `ffmpeg` in a Lambda layer to concatenate segments — but MediaConvert is the production-grade, serverless, zero-maintenance path.
+
+**Warning signs:**
+- Transcribe job status `FAILED` with `FailureReason: "The media format provided does not match"`
+- Passing `master.m3u8` URL to `StartTranscriptionJob` returns `BadRequestException`
+- CloudWatch logs show "unsupported media format" from Transcribe Lambda handler
+- Tests pass locally (using a real `.mp4` file) but fail in production (IVS HLS output)
+
+**Phase to address:**
+Phase: Transcription Pipeline — Build the MediaConvert → Transcribe chain from the start. Never design the pipeline assuming a single Lambda directly transcribes an IVS recording.
+
+---
+
+### Pitfall 14: Starting a Transcribe Job Inside the recording-ended Lambda Causes Timeout Mismatches and Silent Failures
+
+**What goes wrong:**
+The developer adds `StartTranscriptionJob` to the existing `recording-ended.ts` Lambda handler. The Lambda starts the job (fast, < 1 second) but then either: (a) polls for completion in a loop and times out after 30 seconds, or (b) starts the job and returns, but the follow-on Bedrock invocation — also added to the same function — waits for Transcribe and hits the Lambda's 30-second timeout.
+
+**Why it happens:**
+The `recording-ended` Lambda is already wired to EventBridge with a 30-second timeout and error retry logic. Developers add Transcribe/Bedrock calls to the same function because it's "already there." Transcribe async jobs take 30 seconds to several minutes depending on audio length. Bedrock inference takes 10-60+ seconds for long transcripts. Neither fits in a 30-second synchronous Lambda.
+
+**How to avoid:**
+Use a strict fan-out pattern with dedicated Lambdas and EventBridge as the glue:
+
+```
+[EventBridge: IVS Recording End]
+        |
+        v
+[Lambda: recording-ended]        <- existing, keeps 30s timeout
+  - updates DynamoDB status
+  - releases pool resources
+  - publishes custom EventBridge event: "vnl.transcription.requested"
+        |
+        v
+[Lambda: start-transcription]    <- new, 60s timeout
+  - starts MediaConvert job
+        |
+        v
+[EventBridge: MediaConvert COMPLETE]
+        |
+        v
+[Lambda: start-transcribe-job]   <- new, 60s timeout
+  - starts Transcribe job (returns immediately)
+        |
+        v
+[EventBridge: Transcribe Job State Change (COMPLETED)]
+        |
+        v
+[Lambda: process-transcript]     <- new, 5-minute timeout
+  - reads transcript JSON from S3
+  - calls Bedrock for summary
+  - stores transcript + summary in DynamoDB
+```
+
+Each Lambda has one job and an appropriate timeout. No Lambda ever polls for another service's async result.
+
+**Warning signs:**
+- CloudWatch shows `Task timed out after 30.00 seconds` in `recording-ended` handler
+- Transcribe jobs start successfully but no follow-on processing occurs
+- `recording-ended` DLQ receives events because the function keeps throwing timeout errors
+- Existing pool release functionality breaks because it shares retry budget with new code
+
+**Phase to address:**
+Phase: Transcription Pipeline — Design the pipeline as discrete Lambdas from day one. Do not modify `recording-ended.ts` to do more than it already does.
+
+---
+
+### Pitfall 15: Bedrock Read Timeout with Long Transcripts Kills the Summary Lambda
+
+**What goes wrong:**
+The summary Lambda invokes Bedrock with a long transcript (30-60 minute session = 10,000-40,000 words). The AWS SDK's default HTTP read timeout fires before Bedrock returns a response. The Lambda fails with `ReadTimeoutError`. Because the transcript was already stored in DynamoDB, re-invoking the Lambda does not fix it — the same timeout hits again.
+
+**Why it happens:**
+The AWS SDK for JavaScript v3 (`@aws-sdk/client-bedrock-runtime`) inherits a default `requestTimeout` of around 120 seconds. Claude Sonnet generating a paragraph summary of a 40,000-word transcript can take 45-90 seconds for the full response. Larger context windows increase first-token latency significantly. The Lambda timeout and SDK timeout both need to be set higher than the expected inference duration.
+
+**How to avoid:**
+Configure both the Lambda timeout AND the SDK HTTP client timeout explicitly:
+
+```typescript
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
+
+const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.AWS_REGION,
+  requestHandler: new NodeHttpHandler({
+    requestTimeout: 300_000,   // 5 minutes — matches Lambda timeout
+    connectionTimeout: 5_000,
+  }),
+});
+```
+
+Set the Lambda timeout in CDK to `Duration.minutes(5)`. For transcripts > 50,000 tokens, truncate the input before sending: extract the plain-text transcript, strip Transcribe's word-level JSON metadata, and limit to ~30,000 words before sending to Bedrock.
+
+**Warning signs:**
+- CloudWatch shows `ReadTimeoutError` or `socket hang up` from Bedrock SDK calls
+- Summary generation works for 5-minute test recordings but fails for 30-minute sessions
+- Lambda logs show the function timing out at exactly the default SDK timeout boundary
+- Bedrock logs show the model started generating but the client disconnected
+
+**Phase to address:**
+Phase: AI Summary Pipeline — Set both timeouts in CDK and SDK config at the same time. Test with a 45-minute recording before considering this phase complete.
+
+---
+
+### Pitfall 16: Bedrock Model Access Requires Manual Pre-Enablement — Not Just IAM Permissions
+
+**What goes wrong:**
+CDK grants the summary Lambda `bedrock:InvokeModel` on `*`. The Lambda deploys successfully. First invocation throws `AccessDeniedException: You don't have access to the model with the specified model ID`. IAM policy looks correct. The issue is that Bedrock foundation models must be explicitly enabled per account via the AWS console or API before any IAM policy can grant access to them. IAM is necessary but not sufficient.
+
+**Why it happens:**
+Developers assume IAM is the sole access control mechanism, as it is for most AWS services. Bedrock has a second gate: model access subscription in the Bedrock console. This step is manual and account-scoped. It is not reproducible via CDK or CloudFormation. Forgetting it during a fresh account setup or new-region deployment is easy.
+
+**How to avoid:**
+1. Before deploying any Bedrock-using stack, manually enable model access in the Bedrock console: **Bedrock > Model access > Enable specific models > Anthropic Claude Sonnet**
+2. Document this as a one-time bootstrapping step in the project README, alongside `cdk bootstrap`
+3. Add a CDK deploy pre-check Lambda or `npm run check:bedrock-access` script that calls `bedrock:ListFoundationModels` to verify the target model is `ACTIVE` before the pipeline deploys
+4. Use `us.anthropic.claude-3-5-sonnet-20241022-v2:0` as the model ID (with the `us.` inference profile prefix) for cross-region routing; do NOT use bare model ARNs — they require the same region as the model endpoint
+
+**Warning signs:**
+- `AccessDeniedException` on Bedrock invoke despite correct IAM policy
+- IAM policy simulator shows `Allow` but the live call still denies
+- New AWS account or new region deployment fails while existing environment works
+- CloudWatch shows the error on the very first invocation, not intermittently
+
+**Phase to address:**
+Phase: AI Summary Pipeline — Add model access verification to the deployment checklist. Document the manual enablement step prominently. Test in a clean account before shipping.
+
+---
+
+### Pitfall 17: Storing Full Transcript Text in DynamoDB Hits the 400 KB Item Size Limit
+
+**What goes wrong:**
+The process-transcript Lambda stores the raw Transcribe JSON output in the DynamoDB session item alongside the AI summary. A 30-minute session transcript in Transcribe's JSON format (which includes confidence scores, start/end times, and alternative transcriptions for every word) is typically 500 KB–2 MB. DynamoDB silently rejects the write with `ValidationException: Item size has exceeded the maximum allowed size`.
+
+**Why it happens:**
+Developers store the full Transcribe output because it seems convenient to have everything in one place. The Transcribe JSON format is verbose: a 5,000-word transcript generates ~300 KB of JSON when word-level metadata is included. A 10,000-word transcript (typical 45-minute hangout) exceeds 400 KB — the hard DynamoDB item limit.
+
+**How to avoid:**
+Never store the raw Transcribe JSON in DynamoDB. Use a two-tier strategy:
+
+- **S3:** Store the full Transcribe JSON output at `transcripts/{sessionId}/transcript.json`
+- **DynamoDB:** Store only the plain-text transcript (extracted `results.transcripts[0].transcript` field, ~20-40 KB for a 30-minute session) and the AI summary string (< 1 KB)
+
+When reading the transcript for the Bedrock summary call, read from S3 — not DynamoDB. The DynamoDB session item gains two new fields: `transcriptText` (the plain string) and `aiSummary` (the generated paragraph). If even `transcriptText` risks the 400 KB limit for very long sessions, store only `transcriptS3Key` in DynamoDB and retrieve full text from S3 on demand.
+
+```typescript
+// WRONG: hits 400KB limit
+await updateSessionMetadata(tableName, sessionId, {
+  transcriptJson: fullTranscribeOutput,  // can be 2MB
+});
+
+// RIGHT: store only what UI needs inline
+await updateSessionMetadata(tableName, sessionId, {
+  transcriptS3Key: `transcripts/${sessionId}/transcript.json`,
+  transcriptText: plainText,             // extracted string, < 50KB
+  aiSummary: summaryParagraph,           // < 1KB
+  transcriptStatus: 'available',
+});
+```
+
+**Warning signs:**
+- `ValidationException: Item size has exceeded the maximum allowed size` in Lambda logs
+- Works fine in testing (short recordings) but fails in production (long sessions)
+- DynamoDB UpdateItem returns 400 status with size-related error message
+- Transcript data disappears silently if the error is not caught and logged
+
+**Phase to address:**
+Phase: Transcription Pipeline — Design the storage split from the start. Do not prototype with in-DynamoDB transcript storage and plan to "move it later."
+
+---
+
+### Pitfall 18: Transcribe Job Names Must Be Globally Unique — Reprocessing Fails With ConflictException
+
+**What goes wrong:**
+The transcription Lambda uses the sessionId as the Transcribe job name (e.g., `transcribe-${sessionId}`). The job runs once. If the pipeline re-triggers (EventBridge retry, manual reprocessing, bug fix re-run), the Lambda calls `StartTranscriptionJob` with the same name and gets `ConflictException: A resource already exists with this name`. The second run does nothing, the transcript is never updated, and the error may be swallowed if the handler only logs it.
+
+**Why it happens:**
+Transcribe job names are permanent account-scoped identifiers. Unlike DynamoDB conditional writes or S3 PutObject, there is no "overwrite if exists" flag. Developers name jobs after the sessionId because it seems natural and idempotent — but Transcribe treats duplicate names as conflicts, not idempotent operations.
+
+**How to avoid:**
+Append a timestamp or attempt counter to job names:
+
+```typescript
+const jobName = `vnl-${sessionId}-${Date.now()}`;
+```
+
+Before starting a new job, call `GetTranscriptionJob` to check if a recent successful job already exists for this session. If one exists and succeeded, skip the new job start and proceed directly to the transcript fetch step. This makes the pipeline genuinely idempotent:
+
+```typescript
+async function startTranscribeIfNeeded(sessionId: string, mediaUri: string) {
+  try {
+    const existing = await transcribeClient.send(
+      new GetTranscriptionJobCommand({ TranscriptionJobName: `vnl-${sessionId}-latest` })
+    );
+    if (existing.TranscriptionJob?.TranscriptionJobStatus === 'COMPLETED') {
+      return existing.TranscriptionJob.Transcript?.TranscriptFileUri;
+    }
+  } catch (e: any) {
+    if (e.name !== 'NotFoundException') throw e;
+  }
+  // No completed job found — start a new one
+  const jobName = `vnl-${sessionId}-${Date.now()}`;
+  await transcribeClient.send(new StartTranscriptionJobCommand({
+    TranscriptionJobName: jobName,
+    MediaFormat: 'mp4',
+    Media: { MediaFileUri: mediaUri },
+    LanguageCode: 'en-US',
+    OutputBucketName: process.env.TRANSCRIPTS_BUCKET,
+    OutputKey: `transcripts/${sessionId}/transcript.json`,
+  }));
+  return null; // Wait for EventBridge completion event
+}
+```
+
+**Warning signs:**
+- `ConflictException` in Lambda logs when the pipeline re-runs
+- Manual reprocessing of failed transcriptions silently does nothing
+- Transcribe console shows old completed job but new pipeline run produces no output
+- EventBridge Transcribe completion event never fires on retry
+
+**Phase to address:**
+Phase: Transcription Pipeline — Build the idempotency check into the first implementation. Never design "start job" without "check if already done."
+
+---
+
+### Pitfall 19: Long Transcripts Exceed Bedrock Input Token Limits and Produce Truncated Summaries
+
+**What goes wrong:**
+The summary Lambda passes the full plain-text transcript directly to Bedrock. A 90-minute session with active participants can generate 20,000-50,000 words. Claude Sonnet 3.5 has a 200,000-token context window, but Bedrock on-demand inference has a **service quota of 4,096 input tokens per request on some model configurations**, and even without quota limits, very long prompts hit Bedrock's per-request payload size limit. The result is either a `ValidationException` for oversized input, a truncated summary that misses the second half of the session, or unexpectedly high Bedrock costs from token consumption.
+
+**Why it happens:**
+Developers test with short recordings (< 5 minutes, < 1,000 words) and the pipeline works. In production, 30-90 minute sessions generate transcripts that are 10-50x larger. The Bedrock call that worked in testing throws an error or generates a poor summary in production.
+
+**How to avoid:**
+Implement a transcript chunking strategy before sending to Bedrock:
+
+1. **For summaries (preferred):** Extract only the first 8,000 words of the transcript — sufficient for a one-paragraph summary of the session topic and tone. Most meaningful content is established in the first half of any conversation.
+2. **For comprehensive summaries:** Split the transcript into 3,000-word chunks, generate a bullet-point summary of each chunk, then send the combined bullet points (~500 words) to Bedrock for a final synthesis.
+3. Always count approximate tokens before the Bedrock call: `Math.ceil(wordCount * 1.3)` is a reasonable token estimate for English text.
+4. Set a hard input limit in the Lambda: if transcript > 15,000 words, truncate with a note in the summary: `[Note: transcript truncated at 15,000 words for summary generation]`
+
+```typescript
+const MAX_WORDS_FOR_SUMMARY = 8000;
+const words = transcriptText.split(/\s+/);
+const truncated = words.length > MAX_WORDS_FOR_SUMMARY
+  ? words.slice(0, MAX_WORDS_FOR_SUMMARY).join(' ') + ' [transcript continues...]'
+  : transcriptText;
+```
+
+**Warning signs:**
+- Summaries for long sessions end mid-sentence or stop describing content from the first half only
+- `ValidationException: Input is too long` from Bedrock API
+- Bedrock costs spike unexpectedly for one long session
+- Summary quality degrades linearly with session length
+
+**Phase to address:**
+Phase: AI Summary Pipeline — Implement truncation strategy from the start. Test with a 90-minute recording specifically. Do not ship without testing at least one long-session case.
+
+---
+
+### Pitfall 20: Missing LanguageCode in Transcribe Request Causes Immediate Job Failure
+
+**What goes wrong:**
+`StartTranscriptionJob` is called without specifying `LanguageCode`, `IdentifyLanguage`, or `IdentifyMultipleLanguages`. The API returns a `BadRequestException` immediately. The Lambda catches it as a generic error, the DLQ receives the event, and the session stays in `transcription_pending` state indefinitely.
+
+**Why it happens:**
+Amazon Transcribe has no default language. Developers assume English is the default (it is not). The API requires exactly one of the three language options — specifying more than one also throws `BadRequestException`. This is different from most AWS services where omitting an optional field uses a sensible default.
+
+**How to avoid:**
+Always include `LanguageCode: 'en-US'` explicitly for this project. If multi-language support is needed in the future, switch to `IdentifyLanguage: true` with `LanguageOptions` hint list. Never rely on Transcribe defaulting to any language.
+
+```typescript
+await transcribeClient.send(new StartTranscriptionJobCommand({
+  TranscriptionJobName: jobName,
+  LanguageCode: 'en-US',           // REQUIRED — no default exists
+  MediaFormat: 'mp4',
+  Media: { MediaFileUri: mediaUri },
+  OutputBucketName: process.env.TRANSCRIPTS_BUCKET,
+  OutputKey: `transcripts/${sessionId}/transcript.json`,
+}));
+```
+
+**Warning signs:**
+- `BadRequestException: You must include one of LanguageCode, IdentifyLanguage, or IdentifyMultipleLanguages`
+- Transcribe jobs never appear in the console after the Lambda runs
+- Lambda logs show `400` status from Transcribe with no useful downstream processing
+- All Transcribe jobs fail immediately (< 1 second) rather than failing after processing
+
+**Phase to address:**
+Phase: Transcription Pipeline — Include `LanguageCode` in the very first implementation. Add it to the Lambda integration test assertion.
+
+---
+
+### Pitfall 21: S3 Output Bucket Permissions for Transcribe Are Separate From Recording Bucket Permissions
+
+**What goes wrong:**
+The transcription Lambda has `s3:GetObject` on the recordings bucket (to read the input MP4) and `transcribe:StartTranscriptionJob` permission. The job starts, runs for several minutes, then fails with `FailureReason: "The S3 bucket does not allow Transcribe to write"`. The IAM role looks correct, but the issue is that **Amazon Transcribe (the service itself, not the Lambda) needs permission to write the output JSON to the S3 bucket**. The Lambda's IAM role is not used for the output write — Transcribe uses its own service principal.
+
+**Why it happens:**
+For input, Transcribe reads S3 using the **Lambda's IAM role**. For output, Transcribe writes S3 using its **own service principal** (`transcribe.amazonaws.com`). Developers grant `s3:PutObject` to the Lambda role for the output bucket, which has no effect on Transcribe's write permission. The S3 bucket policy must separately allow the Transcribe service principal.
+
+**How to avoid:**
+Add a bucket policy statement that grants Transcribe's service principal write access to the transcripts bucket:
+
+```typescript
+// In CDK session-stack.ts
+transcriptsBucket.addToResourcePolicy(new iam.PolicyStatement({
+  effect: iam.Effect.ALLOW,
+  principals: [new iam.ServicePrincipal('transcribe.amazonaws.com')],
+  actions: ['s3:PutObject', 's3:GetObject'],
+  resources: [`${transcriptsBucket.bucketArn}/transcripts/*`],
+  conditions: {
+    StringEquals: {
+      'aws:SourceAccount': this.account,
+    },
+  },
+}));
+```
+
+Also grant the Lambda role `s3:GetObject` on the transcripts bucket (to read the completed JSON) and `s3:PutObject` on the transcripts bucket if the Lambda writes intermediate files.
+
+**Warning signs:**
+- Transcribe job `FAILED` with reason mentioning S3 write permission
+- Job completes processing audio but output JSON never appears in S3
+- Lambda IAM policy shows `s3:PutObject` for the bucket but Transcribe still fails
+- No errors during `StartTranscriptionJob` call — failure only appears in the completed job status
+
+**Phase to address:**
+Phase: Transcription Pipeline — Set up the S3 bucket policy for Transcribe's service principal in the same CDK commit that creates the transcripts bucket. Test by checking that the output JSON appears in S3 after the first job.
+
+---
+
+### Pitfall 22: Polling Transcribe Job Status in Lambda Is Unreliable — Use EventBridge Completion Events
+
+**What goes wrong:**
+The transcription Lambda calls `StartTranscriptionJob`, then enters a polling loop calling `GetTranscriptionJob` every 5 seconds waiting for `COMPLETED` status. For a 20-minute recording, Transcribe takes 3-8 minutes. The Lambda times out after its configured timeout (30-300 seconds), the job completes later without any handler, and the transcript is never stored.
+
+**Why it happens:**
+Polling is the most obvious pattern. It works fine in testing with short 30-second clips (Transcribe finishes in < 15 seconds). In production with real session recordings, it fails for anything > 5 minutes of audio.
+
+**How to avoid:**
+Use the EventBridge-native pattern exclusively. Amazon Transcribe emits a `Transcribe Job State Change` event to EventBridge when jobs reach `COMPLETED` or `FAILED` status. Wire this event to a dedicated Lambda:
+
+```typescript
+// In CDK session-stack.ts
+const transcribeCompletionRule = new events.Rule(this, 'TranscribeCompletionRule', {
+  eventPattern: {
+    source: ['aws.transcribe'],
+    detailType: ['Transcribe Job State Change'],
+    detail: {
+      TranscriptionJobStatus: ['COMPLETED', 'FAILED'],
+    },
+  },
+  description: 'Trigger AI summary pipeline when Transcribe job finishes',
+});
+transcribeCompletionRule.addTarget(
+  new targets.LambdaFunction(processTranscriptFn, {
+    deadLetterQueue: transcriptionDlq,
+    retryAttempts: 2,
+  })
+);
+```
+
+The `TranscriptionJobName` in the event detail contains the session ID (embedded in the job name during creation), which the handler uses to look up the session and store the transcript.
+
+**Warning signs:**
+- Lambda logs show repeated `GetTranscriptionJob` calls followed by timeout
+- Transcribe jobs show `COMPLETED` in the console but no transcript in DynamoDB
+- Lambda timeout errors correlate with longer session recordings
+- Works in testing (short clips) but breaks in production (real sessions)
+
+**Phase to address:**
+Phase: Transcription Pipeline — Use EventBridge completion event from the first implementation. Never implement polling in a Lambda for async Transcribe jobs.
+
+---
+
+### Pitfall 23: Homepage Feed Shows Stale "Pending" State for Transcription While Pipeline Runs
+
+**What goes wrong:**
+Users load the homepage and see recording cards with no AI summary (because Transcribe + Bedrock take 5-15 minutes after a session ends). Users refresh and still see no summary. On subsequent loads, the summary appears. The UI has no indication that a summary is being generated, so users assume the feature is broken.
+
+**Why it happens:**
+The frontend fetches the session list once on mount and displays whatever is in DynamoDB. Transcription is asynchronous and takes much longer than the IVS recording pipeline (which typically completes in < 30 seconds). There is no UI state for "summary pending" — only "has summary" or "no summary."
+
+**How to avoid:**
+Add a `transcriptStatus` field to the session record with values: `pending | processing | available | failed`. The pipeline updates this field at each stage:
+
+- `recording-ended` sets `transcriptStatus: 'processing'`
+- `process-transcript` sets `transcriptStatus: 'available'` (or `'failed'`)
+
+In the frontend, recording cards check this field:
+- `processing`: Show a subtle "Generating summary..." skeleton or placeholder text
+- `available`: Render `aiSummary` with a small AI badge
+- `failed`: Show nothing (fall back gracefully, no broken UI)
+- `undefined` / missing (old sessions before feature): Show nothing
+
+Avoid polling for status updates on the homepage — it is a feed, not a real-time dashboard. A single fetch on mount is sufficient. Users who want the summary can navigate to the replay page, which can optionally re-fetch after a delay if `transcriptStatus === 'processing'`.
+
+**Warning signs:**
+- Users report "AI summary never shows up" because they only loaded the page once during the pipeline run
+- Cards flip from no summary to summary on page refresh, confusing users
+- No loading state means users report the feature as "missing" in feedback
+- Cards sometimes show empty `aiSummary: ""` if the field is set but Bedrock returned an empty string
+
+**Phase to address:**
+Phase: Activity Feed UI — Add `transcriptStatus` to the Session domain model and DynamoDB schema at the same time as the transcription pipeline. The UI must handle all four states from day one.
+
+---
+
+### Pitfall 24: The recording-ended Lambda Already Has Retry Logic — Double-Triggering the Transcription Pipeline
+
+**What goes wrong:**
+The existing `recording-ended.ts` handler catches errors and re-throws them so EventBridge retries. When a new transcription trigger is added to this handler (even as a side effect, like publishing a custom event), errors in the transcription setup code cause EventBridge to retry the entire `recording-ended` handler — including the session status update and pool resource release. The `updateSessionStatus` conditional write correctly rejects duplicate status updates, but the pool release is not idempotent: releasing an already-released resource may re-add it to the pool incorrectly or throw.
+
+**Why it happens:**
+The `recording-ended` handler was designed with the assumption that any thrown error means "retry the whole thing." Adding new side-effect code to this handler changes its error surface. An error in the new transcription trigger code (e.g., failed custom EventBridge publish) causes retries that re-run code that was already successfully executed.
+
+**How to avoid:**
+Do not add any transcription-related code to `recording-ended.ts`. Maintain the separation by having `recording-ended` publish a lightweight custom EventBridge event (`vnl.session.recording-available`) with just the `sessionId` and `recordingS3KeyPrefix`. A completely separate Lambda (`start-transcription.ts`) subscribes to this event and handles the pipeline start. This way, failures in the transcription pipeline never affect session cleanup:
+
+```typescript
+// At the end of recording-ended.ts — only after all cleanup succeeds
+await eventBridgeClient.send(new PutEventsCommand({
+  Entries: [{
+    Source: 'vnl.sessions',
+    DetailType: 'Recording Available',
+    Detail: JSON.stringify({ sessionId, recordingS3KeyPrefix }),
+  }],
+}));
+```
+
+If the EventBridge publish fails, only the transcription pipeline is affected, not the session lifecycle.
+
+**Warning signs:**
+- Pool resources appear "double-released" (back in pool twice) after recording-ended retries
+- Sessions show incorrect status after EventBridge retries on transcription errors
+- `recording-ended` DLQ messages increase after adding transcription code
+- CloudWatch shows `recording-ended` invoked 3x for the same session (2 retries after transcription failure)
+
+**Phase to address:**
+Phase: Transcription Pipeline — Publish the `Recording Available` custom event from `recording-ended.ts` as the final step, isolated from all existing logic with its own try/catch that does NOT re-throw.
+
+---
+
+## v1.2 Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| IVS Recording + Transcribe | Point Transcribe at `master.m3u8` or fMP4 segment | Use MediaConvert to produce a standalone `.mp4` first; only then call Transcribe |
+| Transcribe + Lambda | Poll job status in a loop | Wire `Transcribe Job State Change` EventBridge event to a completion Lambda |
+| Transcribe + S3 output | Grant Lambda role `s3:PutObject` for output | Add bucket policy allowing `transcribe.amazonaws.com` service principal to write |
+| Transcribe + Job Names | Use `sessionId` as job name | Append timestamp: `vnl-${sessionId}-${Date.now()}`; check for existing completed job first |
+| Transcribe + Language | Omit `LanguageCode` assuming English default | Always include `LanguageCode: 'en-US'` explicitly; no default exists |
+| Bedrock + Lambda Timeout | Use default SDK read timeout (120s) | Set `requestTimeout: 300_000` in `NodeHttpHandler`; set Lambda timeout to 5 minutes |
+| Bedrock + Model Access | Deploy IAM policy and assume it's enough | Manually enable model access in Bedrock console before deployment; IAM alone is insufficient |
+| Bedrock + Long Transcripts | Send full transcript text to Bedrock | Truncate to 8,000 words before Bedrock call; store full text in S3 separately |
+| DynamoDB + Transcript Text | Store full Transcribe JSON output in session item | Store only plain text (`results.transcripts[0].transcript`) and `aiSummary`; full JSON → S3 |
+| recording-ended + Transcription | Add Transcribe code to existing handler | Publish custom EventBridge event from recording-ended; transcription in separate Lambda |
+| React UI + AI Content | No loading state for async AI generation | Add `transcriptStatus` field; render "Generating summary..." skeleton when `processing` |
+| React UI + Stale Data | Fetch once on mount, assume data is current | Re-fetch replay page data if `transcriptStatus === 'processing'`; no polling on homepage |
+
+---
+
+## v1.2 Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Point Transcribe at IVS HLS directly | Skip MediaConvert step | All jobs fail immediately with format error | Never; HLS is not a supported Transcribe input |
+| Poll Transcribe status in Lambda | Simpler code, no EventBridge plumbing | Lambda timeouts for any session > 5 minutes | Never; async pipeline is required |
+| Store full Transcribe JSON in DynamoDB | One query returns everything | Exceeds 400 KB limit for sessions > 30 minutes | Never; always split between DynamoDB and S3 |
+| Skip `transcriptStatus` field in schema | Fewer DynamoDB writes | No loading states in UI; users think feature is missing | Never; add status field at same time as pipeline |
+| Add transcription trigger to recording-ended | Reuse existing function | Error in transcription code triggers EventBridge retries of session cleanup | Never; transcription pipeline must be isolated |
+| Use bare sessionId as Transcribe job name | Simple, readable | ConflictException on any retry or reprocessing | Never; always append timestamp |
+| Skip truncation for Bedrock input | Simpler code, passes full context | Token limit errors or extreme costs for long sessions | Only for sessions guaranteed < 10 minutes |
+| Don't enable Bedrock model access before deploy | Skip manual step | AccessDeniedException on first invocation; blocks entire feature | Never; required one-time bootstrapping step |
+
+---
+
+## v1.2 "Looks Done But Isn't" Checklist
+
+- [ ] **Transcription pipeline:** Often missing MediaConvert step — verify Transcribe input is an `.mp4`, not a `.m3u8` or fMP4 segment
+- [ ] **Transcription pipeline:** Often missing `LanguageCode` in `StartTranscriptionJob` — verify request includes `LanguageCode: 'en-US'`
+- [ ] **Transcription pipeline:** Often missing S3 bucket policy for Transcribe service principal — verify output JSON appears in S3 after first test job
+- [ ] **Transcription pipeline:** Often missing EventBridge completion rule — verify Transcribe `COMPLETED` event triggers Lambda (not polling)
+- [ ] **Transcription pipeline:** Often missing idempotency on job names — verify `ConflictException` is handled and does not block reprocessing
+- [ ] **Bedrock integration:** Often missing model access enablement — verify model is `ACTIVE` in Bedrock console before first deploy
+- [ ] **Bedrock integration:** Often missing SDK `requestTimeout` config — verify timeout is set to 300,000 ms in `NodeHttpHandler`
+- [ ] **Bedrock integration:** Often missing Lambda timeout increase — verify summary Lambda timeout is `Duration.minutes(5)` in CDK
+- [ ] **Bedrock integration:** Often missing transcript truncation — verify long sessions (> 10,000 words) don't cause token limit errors
+- [ ] **DynamoDB storage:** Often missing S3 offload for full transcript JSON — verify session item does not store raw Transcribe output
+- [ ] **DynamoDB storage:** Often missing `transcriptStatus` field — verify field exists and transitions correctly through `pending → processing → available`
+- [ ] **recording-ended isolation:** Often missing isolation of transcription trigger — verify transcription errors do NOT cause recording-ended retries
+- [ ] **UI loading states:** Often missing "Generating summary..." state — verify recording cards render correctly in all four `transcriptStatus` states
+- [ ] **UI fallback:** Often missing graceful no-summary render — verify cards without `aiSummary` render cleanly (no empty boxes or broken layout)
+- [ ] **Testing scope:** Often missing long-session test — verify pipeline tested with a recording > 30 minutes before phase sign-off
+
+---
+
+## v1.2 Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| IVS HLS not supported by Transcribe | Transcription Pipeline | First integration test uses `.mp4` from MediaConvert; HLS path never reaches Transcribe |
+| recording-ended timeout from sync Transcribe call | Transcription Pipeline | recording-ended Lambda stays at 30s timeout; new start-transcription Lambda separate |
+| Bedrock read timeout on long transcripts | AI Summary Pipeline | 45-minute recording tested; SDK timeout set to 5 min; Lambda timeout set to 5 min |
+| Bedrock model not enabled | AI Summary Pipeline | Deployment checklist includes Bedrock console step; pre-deploy verification script runs |
+| Transcript JSON > 400 KB in DynamoDB | Transcription Pipeline | Session item inspected after first job; raw JSON confirmed absent; S3 key present |
+| Duplicate Transcribe job name ConflictException | Transcription Pipeline | Pipeline re-triggered manually; second run succeeds or skips gracefully |
+| Transcribe output S3 permission denied | Transcription Pipeline | Output JSON appears in transcripts bucket after first end-to-end test |
+| Polling pattern in Lambda | Transcription Pipeline | No `GetTranscriptionJob` loop in any Lambda; EventBridge rule verified in CloudWatch |
+| Long transcript exceeds Bedrock token limit | AI Summary Pipeline | 90-minute recording generates non-truncated summary without ValidationException |
+| Missing language code | Transcription Pipeline | Unit test for start-transcription Lambda asserts `LanguageCode` present in API call |
+| recording-ended double-trigger from transcription errors | Transcription Pipeline | Error injection in start-transcription Lambda does not cause recording-ended retries |
+| No loading state for AI summary | Activity Feed UI | All four `transcriptStatus` states rendered in Storybook or manual UI test |
+
+---
+
+## v1.2 Sources
+
+### Amazon Transcribe
+- [Data input and output — Amazon Transcribe](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html)
+- [StartTranscriptionJob API Reference](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_StartTranscriptionJob.html)
+- [Using Amazon EventBridge with Amazon Transcribe](https://docs.aws.amazon.com/transcribe/latest/dg/monitoring-events.html)
+- [Job queueing — Amazon Transcribe](https://docs.aws.amazon.com/transcribe/latest/dg/job-queueing.html)
+- [Identity and Access Management for Amazon Transcribe](https://docs.aws.amazon.com/transcribe/latest/dg/security-iam.html)
+
+### IVS Recording Formats
+- [IVS Individual Participant Recording](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/rt-individual-participant-recording.html)
+- [IVS Auto-Record to Amazon S3](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html)
+
+### Amazon Bedrock
+- [InvokeModel — Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
+- [Prevent LLM read timeouts in Amazon Bedrock](https://repost.aws/knowledge-center/bedrock-large-model-read-timeouts)
+- [Access Amazon Bedrock foundation models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)
+- [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html)
+- [Bedrock AccessDeniedException for Claude model](https://repost.aws/questions/QUUd8mxsiNRu-_gtUjgVwHNw/bedrock-accessdeniedexception-for-claude-model)
+
+### DynamoDB Item Limits
+- [Best practices for storing large items and attributes in DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-use-s3-too.html)
+- [The Three DynamoDB Limits You Need to Know](https://www.alexdebrie.com/posts/dynamodb-limits/)
+
+### Lambda Async Patterns
+- [How Lambda handles errors and retries with asynchronous invocation](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)
+- [Detect, Avoid, and Troubleshoot Timeouts in AWS Lambda](https://awsfundamentals.com/blog/best-practices-to-avoid-and-troubleshoot-timeouts-in-aws-lambda)
+
+---
+
+*v1.2 pitfalls appended: 2026-03-05*

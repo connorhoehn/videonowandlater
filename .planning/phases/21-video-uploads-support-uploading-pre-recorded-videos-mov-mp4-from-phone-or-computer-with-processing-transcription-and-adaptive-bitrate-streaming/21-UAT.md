@@ -8,11 +8,11 @@ updated: 2026-03-06T18:15:00Z
 
 ## Current Test
 
-number: 5
-name: Upload Completion and Navigation
+number: 4
+name: Upload Progress Display
 expected: |
-  After upload completes and processing begins, the browser automatically navigates to /replay/{sessionId} and displays the replay viewer. The session appears as an uploaded recording with title matching the uploaded filename.
-awaiting: user response
+  After clicking "Upload" on a valid file, a progress bar appears showing the upload progress (0-100%). The bar increments as chunks are uploaded. At 100%, the message shows "Processing... estimated 2-5 minutes" while waiting for MediaConvert.
+awaiting: user response (retesting after CORS fix)
 
 ## Tests
 
@@ -30,9 +30,7 @@ result: pass
 
 ### 4. Upload Progress Display
 expected: After clicking "Upload" on a valid file, a progress bar appears showing the upload progress (0-100%). The bar increments as chunks are uploaded. At 100%, the message shows "Processing... estimated 2-5 minutes" while waiting for MediaConvert.
-result: issue
-reported: "CORS errors block part-upload requests. POST to /upload/part-url returns 200 but browser blocks fetch due to missing CORS headers. Error: 'No Access-Control-Allow-Origin header present'"
-severity: blocker
+result: pending (retesting after CORS fix commit 39d5fe8)
 
 ### 5. Upload Completion and Navigation
 expected: After upload completes and processing begins, the browser automatically navigates to /replay/{sessionId} and displays the replay viewer. The session appears as an uploaded recording with title matching the uploaded filename.
@@ -62,18 +60,10 @@ result: pending
 
 total: 10
 passed: 3
-issues: 1
-pending: 6
+issues: 0
+pending: 7
 skipped: 0
 
 ## Gaps
 
-- truth: "Upload requests should include CORS headers to allow browser fetch from frontend origin"
-  status: failed
-  reason: "User reported: CORS errors block part-upload requests. POST to /upload/part-url returns 200 but browser blocks fetch due to missing CORS headers. Error: 'No Access-Control-Allow-Origin header present'"
-  severity: blocker
-  test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+[FIXED in commit 39d5fe8: Added Access-Control-Allow-Origin headers to get-part-presigned-url handler]

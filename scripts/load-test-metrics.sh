@@ -17,13 +17,22 @@ echo ""
 # Step 1: Get CloudWatch baseline metrics (5 min before test)
 echo "[1/5] Capturing baseline CloudWatch metrics..."
 START_TIME=$(date -u -v-5M +%s 2>/dev/null || date -u -d '5 minutes ago' +%s)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS date format
+  START_DATE=$(date -u -v-5M +%Y-%m-%dT%H:%M:%S)
+  END_DATE=$(date -u +%Y-%m-%dT%H:%M:%S)
+else
+  # Linux date format
+  START_DATE=$(date -u -d "@$START_TIME" +%Y-%m-%dT%H:%M:%S)
+  END_DATE=$(date -u +%Y-%m-%dT%H:%M:%S)
+fi
 BASELINE_LATENCY=$(aws cloudwatch get-metric-statistics \
   --namespace AWS/ApiGateway \
   --metric-name Latency \
   --dimensions Name=ApiName,Value=VideoNowAndLaterAPI \
   --statistics Average \
-  --start-time $(date -u -d "@$START_TIME" +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --start-time "$START_DATE" \
+  --end-time "$END_DATE" \
   --period 300 \
   --region "$REGION" \
   --query 'Datapoints[0].Average' \
@@ -39,11 +48,21 @@ for i in $(seq 1 $CONCURRENT_BROADCASTERS); do
     SESSION_ID="load-test-session-$i"
     for j in $(seq 1 $((TEST_DURATION_SEC / 5))); do
       # Simulate metrics poll (5s cadence)
-      START=$(date +%s%3N)
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS: use Python for millisecond precision
+        START=$(python3 -c 'import time; print(int(time.time() * 1000))')
+      else
+        # Linux: use date with milliseconds
+        START=$(date +%s%3N)
+      fi
       curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer fake-token-$i" \
         "$API_ENDPOINT/sessions/$SESSION_ID" > /tmp/load-test-$i-$j.log 2>&1
-      END=$(date +%s%3N)
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        END=$(python3 -c 'import time; print(int(time.time() * 1000))')
+      else
+        END=$(date +%s%3N)
+      fi
       LATENCY=$((END - START))
       echo "$LATENCY" >> /tmp/load-test-latencies.log
       sleep 5
@@ -96,13 +115,22 @@ echo "[4/5] Checking DynamoDB throttle events..."
 TEST_END_TIME=$(date -u +%s)
 TEST_START_TIME=$((TEST_END_TIME - TEST_DURATION_SEC))
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS date format
+  THROTTLE_START_DATE=$(date -u -r "$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S)
+  THROTTLE_END_DATE=$(date -u -r "$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S)
+else
+  # Linux date format
+  THROTTLE_START_DATE=$(date -u -d "@$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S)
+  THROTTLE_END_DATE=$(date -u -d "@$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S)
+fi
 THROTTLE_COUNT=$(aws cloudwatch get-metric-statistics \
   --namespace AWS/DynamoDB \
   --metric-name UserErrors \
   --dimensions Name=TableName,Value="$TABLE_NAME" \
   --statistics Sum \
-  --start-time $(date -u -d "@$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u -d "@$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S) \
+  --start-time "$THROTTLE_START_DATE" \
+  --end-time "$THROTTLE_END_DATE" \
   --period $TEST_DURATION_SEC \
   --region "$REGION" \
   --query 'Datapoints[0].Sum' \

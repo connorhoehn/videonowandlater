@@ -66,4 +66,7 @@ skipped: 0
 
 ## Gaps
 
-[FIXED in commit 39d5fe8: Added Access-Control-Allow-Origin headers to get-part-presigned-url handler]
+[FIXED in commits 39d5fe8 + b5059ff:
+- 39d5fe8: Added Access-Control-Allow-Origin headers to get-part-presigned-url handler
+- b5059ff: Enabled CORS on S3 recordings bucket for direct multipart uploads
+- REQUIRES REDEPLOY: Both fixes need `npm run deploy` to take effect in AWS]

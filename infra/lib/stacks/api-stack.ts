@@ -448,6 +448,22 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Phase 21: Export upload endpoint URLs
+    new CfnOutput(this, 'UploadInitUrl', {
+      value: `${api.url}upload/init`,
+      description: 'Upload initialization endpoint - POST to start multipart upload',
+    });
+
+    new CfnOutput(this, 'UploadPartUrlEndpoint', {
+      value: `${api.url}upload/part-url`,
+      description: 'Presigned URL request endpoint - GET presigned URLs for upload parts',
+    });
+
+    new CfnOutput(this, 'UploadCompleteUrl', {
+      value: `${api.url}upload/complete`,
+      description: 'Upload completion endpoint - POST to finalize upload and start MediaConvert',
+    });
+
     // Phase 22: Wire IVS_PLAYBACK_PRIVATE_KEY to handlers that need it
     // This is read from environment variable during CDK synthesis
     const ivsPlaybackPrivateKey = process.env.IVS_PLAYBACK_PRIVATE_KEY || '';

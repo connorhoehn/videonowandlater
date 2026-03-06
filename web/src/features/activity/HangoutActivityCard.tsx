@@ -4,6 +4,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './RecordingSlider';
 
@@ -66,6 +67,9 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
           className="text-gray-700"
         />
       </div>
+
+      {/* Audit Log - Processing Timeline */}
+      <SessionAuditLog session={session} compact={true} />
     </div>
   );
 }

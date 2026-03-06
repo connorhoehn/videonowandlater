@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Live Broadcast with Secure Links
 status: in-progress
-stopped_at: Completed 19-05-PLAN.md (EventBridge event payload contract fix - Phase 19→20 integration aligned)
-last_updated: "2026-03-06T01:19:45Z"
-last_activity: 2026-03-06 — Completed 19-05-PLAN.md (Gap closure: transcriptText event payload, Phase 20 ready)
+stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering and private channel pool infrastructure)
+last_updated: "2026-03-06T01:27:00Z"
+last_activity: 2026-03-06 — Completed 22-03-PLAN.md (Private session visibility filtering, private channel pool initialization, IVS playback key infrastructure)
 progress:
   total_phases: 22
-  completed_phases: 20
+  completed_phases: 22
   total_plans: 48
-  completed_plans: 44
-  percent: 92
+  completed_plans: 45
+  percent: 94
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.2 Phase 16 complete, Phase 17 complete — next: Phase 18 (Homepage Redesign)
+**Current focus:** v1.3 Phase 22 (Live Broadcast with Secure Viewer Links) — Plan 03 complete
 
 ## Current Position
 
-Phase: 19 of 23 (Transcription Pipeline) -- GAP CLOSURE (19-05)
-Plan: 05 of 05 (Event Payload Contract Fix) -- COMPLETE
-Status: Fixed EventBridge event Detail payload contract mismatch between Phase 19 (transcribe-completed emitter) and Phase 20 (store-summary consumer). Event now emits transcriptText (plaintext content) instead of transcriptS3Uri. Phase 19→20 integration ready: store-summary handler receives actual transcript for Bedrock invocation. All 315 backend tests passing.
-Last activity: 2026-03-06 — Completed 19-05-PLAN.md (Event payload contract fix - transcriptText field emitted correctly)
+Phase: 22 of 22 (Live Broadcast with Secure Viewer Links) -- IN PROGRESS
+Plan: 03 of 04 (Activity Feed Private Session Filtering) -- COMPLETE
+Status: Implemented private session filtering in GET /activity endpoint with comprehensive test coverage (6 new tests). Added private channel pool infrastructure to replenish-pool handler with MIN_PRIVATE_CHANNELS configuration. Wired IVS_PLAYBACK_PRIVATE_KEY environment variable through CDK for future JWT token generation. All 321 backend tests passing. Backward compatible with existing public sessions.
+Last activity: 2026-03-06 — Completed 22-03-PLAN.md (Private session visibility filtering, private channel pool initialization)
 
-Progress: [████████████████████] 92% (44/48 plans complete)
+Progress: [███████████████████] 94% (45/48 plans complete)
 
 ## Performance Metrics
 
@@ -123,6 +123,13 @@ v1.3 decisions from Phase 22-01 (Private Broadcast Foundation):
 - **claimPrivateChannel return signature** - Returns { channelArn, isPrivate: true } or null on unavailability; ConditionalCheckFailedException returns null (allows caller to retry)
 - **Zero coupling with existing fields** - Adding isPrivate field does not affect any other Session fields or existing update patterns
 
+v1.3 decisions from Phase 22-03 (Activity Feed & Private Channel Infrastructure):
+- **Activity feed filtering in handler** - Private session filtering applied after getRecentActivity() returns sorted results; maintains existing sort behavior without re-sorting
+- **Public-default backward compatibility** - Sessions without isPrivate field treated as public (undefined is falsy); enables zero-migration for legacy sessions
+- **Private channel pool replenishment** - Dedicated createPrivateChannel() function mirrors createChannel() pattern; stored with GSI1PK=STATUS#AVAILABLE#PRIVATE_CHANNEL marker
+- **MIN_PRIVATE_CHANNELS configuration** - Default 5 private channels (one-fifth of public pool) assumes fewer broadcasts are private; configurable via environment variable
+- **IVS_PLAYBACK_PRIVATE_KEY bootstrap** - Read from process.env during CDK synthesis; allows flexible deployment configuration without code changes (future JWT token generation)
+
 Gap closure decisions (Phase 19-05):
 - **EventBridge event Detail contract alignment** - Emit transcriptText (plaintext content) instead of transcriptS3Uri in Transcript Stored events to match Phase 20's store-summary consumer interface expectation
 - **Payload minimalism principle** - Event Detail contains only fields downstream consumers use: { sessionId, transcriptText }; removed unused timestamp field
@@ -144,9 +151,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T01:19:01Z
-Stopped at: Completed 22-01-PLAN.md (Session.isPrivate field, claimPrivateChannel function, 10 new tests, 315/315 backend tests passing)
+Last session: 2026-03-06T01:27:00Z
+Stopped at: Completed 22-03-PLAN.md (Activity feed private session filtering, private channel pool infrastructure, IVS playback key wiring)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 22-01 complete (Session domain extended with isPrivate field for broadcast privacy control; claimPrivateChannel() repository function implemented with atomic pool claiming; 10 new unit tests covering channel claiming, field isolation, error handling; 315/315 backend tests passing; Phase 22 infrastructure foundation ready)*
+*Last updated: 2026-03-06 — 22-03 complete (GET /activity endpoint filters private sessions by owner; comprehensive filtering tests (6 new); private channel pool replenishment with MIN_PRIVATE_CHANNELS; countAvailablePrivateChannels() function; IVS_PLAYBACK_PRIVATE_KEY environment variable wiring in CDK; 321/321 backend tests passing; Phase 22 activity feed and channel infrastructure ready)*

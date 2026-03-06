@@ -147,11 +147,11 @@ export const handler = async (event: SNSEvent): Promise<void> => {
           },
           Tags: {
             sessionId,
-            phase: '21-uploads',
+            phase: '19-transcription',
           },
           UserMetadata: {
             sessionId,
-            phase: '21-uploads',
+            phase: '19-transcription',
           },
         })
       );

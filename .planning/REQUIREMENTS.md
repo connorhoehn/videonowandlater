@@ -9,12 +9,12 @@
 
 - [x] **QUAL-01**: Broadcaster can view real-time stream quality dashboard during live broadcast
 - [x] **QUAL-02**: Dashboard displays current bitrate (Mbps) and target bitrate for comparison
-- [ ] **QUAL-03**: Dashboard displays current frame rate (FPS) and resolution (e.g., 1920x1080)
-- [ ] **QUAL-04**: Dashboard displays network status (Connected/Unstable/Disconnected) with visual indicator
+- [x] **QUAL-03**: Dashboard displays current frame rate (FPS) and resolution (e.g., 1920x1080)
+- [x] **QUAL-04**: Dashboard displays network status (Connected/Unstable/Disconnected) with visual indicator
 - [x] **QUAL-05**: Dashboard displays health score (0-100%) based on bitrate stability and FPS consistency
 - [ ] **QUAL-06**: Dashboard alerts broadcaster when bitrate drops >30% below target (warning badge)
 - [ ] **QUAL-07**: Dashboard is non-intrusive overlay on broadcast page (does not block stream preview)
-- [ ] **QUAL-08**: Metrics update every 1-2 seconds with no API latency impact on broadcast
+- [x] **QUAL-08**: Metrics update every 1-2 seconds with no API latency impact on broadcast
 
 ### Creator Spotlight
 
@@ -81,12 +81,12 @@
 |-------------|-------|--------|
 | QUAL-01 | Phase 23 | Complete |
 | QUAL-02 | Phase 23 | Complete |
-| QUAL-03 | Phase 23 | Pending |
-| QUAL-04 | Phase 23 | Pending |
+| QUAL-03 | Phase 23 | Complete |
+| QUAL-04 | Phase 23 | Complete |
 | QUAL-05 | Phase 23 | Complete |
 | QUAL-06 | Phase 23 | Pending |
 | QUAL-07 | Phase 23 | Pending |
-| QUAL-08 | Phase 23 | Pending |
+| QUAL-08 | Phase 23 | Complete |
 | SPOT-01 | Phase 24 | Pending |
 | SPOT-02 | Phase 24 | Pending |
 | SPOT-03 | Phase 24 | Pending |

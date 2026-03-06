@@ -653,6 +653,17 @@ export class SessionStack extends Stack {
       resources: ['*'],
     }));
 
+    // Grant start-mediaconvert IAM pass-role permission for MediaConvert job
+    startMediaConvertFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['iam:PassRole'],
+      resources: ['arn:aws:iam::*:role/*'],
+      conditions: {
+        StringEquals: {
+          'iam:PassedToService': 'mediaconvert.amazonaws.com',
+        },
+      },
+    }));
+
     // Subscribe start-mediaconvert Lambda to SNS topic
     this.mediaConvertTopic.addSubscription(new sns_subscriptions.LambdaSubscription(startMediaConvertFunction));
 

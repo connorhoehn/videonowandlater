@@ -367,6 +367,18 @@ export class ApiStack extends Stack {
     // No authorizer - public endpoint for activity feed discovery
     activity.addMethod('GET', new apigateway.LambdaIntegration(listActivityHandler));
 
+    // Phase 22: Wire IVS_PLAYBACK_PRIVATE_KEY to handlers that need it
+    // This is read from environment variable during CDK synthesis
+    const ivsPlaybackPrivateKey = process.env.IVS_PLAYBACK_PRIVATE_KEY || '';
+
+    // Export private key availability status
+    if (ivsPlaybackPrivateKey) {
+      new CfnOutput(this, 'IvsPlaybackPrivateKeyConfigured', {
+        value: 'true',
+        description: 'IVS playback private key is configured for JWT token generation',
+      });
+    }
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

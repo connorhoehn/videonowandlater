@@ -208,6 +208,7 @@ export class SessionStack extends Stack {
         MIN_CHANNELS: '3',
         MIN_STAGES: '2',
         MIN_ROOMS: '5',
+        MIN_PRIVATE_CHANNELS: '5', // Phase 22: Private channels for secure broadcasts
         RECORDING_CONFIGURATION_ARN: recordingConfiguration.attrArn,
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),

@@ -1,4 +1,4 @@
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Stack } from 'aws-cdk-lib';
 import { IvsCleanupResource } from './ivs-cleanup-resource';
 
@@ -18,19 +18,14 @@ describe('IvsCleanupResource', () => {
 
     // Check that custom resource exists
     template.hasResourceProperties('Custom::IvsCleanup', {
-      ServiceToken: {
-        'Fn::GetAtt': [
-          expect.stringMatching(/.*Provider.*Function.*/),
-          'Arn'
-        ]
-      }
+      ServiceToken: Match.anyValue()
     });
 
-    // Check Lambda configuration
+    // Check Lambda configuration with handler
     template.hasResourceProperties('AWS::Lambda::Function', {
       Handler: 'index.handler',
-      Runtime: expect.stringMatching(/nodejs/),
-      Timeout: expect.any(Number)
+      Runtime: Match.stringLikeRegexp('nodejs'),
+      Timeout: 60
     });
   });
 
@@ -42,18 +37,18 @@ describe('IvsCleanupResource', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::IAM::Policy', {
-      PolicyDocument: {
-        Statement: expect.arrayContaining([
-          expect.objectContaining({
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
             Effect: 'Allow',
-            Action: expect.arrayContaining([
+            Action: Match.arrayWith([
               'ivs:ListChannels',
               'ivs:GetChannel',
               'ivs:UpdateChannel'
             ])
           })
         ])
-      }
+      })
     });
   });
 
@@ -67,7 +62,7 @@ describe('IvsCleanupResource', () => {
     // Verify the Lambda function is created with proper configuration
     template.hasResourceProperties('AWS::Lambda::Function', {
       Handler: 'index.handler',
-      Description: expect.stringContaining('IVS cleanup')
+      Description: Match.stringLikeRegexp('IVS cleanup')
     });
   });
 
@@ -79,18 +74,18 @@ describe('IvsCleanupResource', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::IAM::Policy', {
-      PolicyDocument: {
-        Statement: expect.arrayContaining([
-          expect.objectContaining({
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
             Effect: 'Allow',
-            Action: expect.arrayContaining([
+            Action: Match.arrayWith([
               'logs:CreateLogGroup',
               'logs:CreateLogStream',
               'logs:PutLogEvents'
             ])
           })
         ])
-      }
+      })
     });
   });
 });

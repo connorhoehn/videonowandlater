@@ -21,7 +21,7 @@ export const handler = async (
   const { sessionId, transcriptS3Uri } = event.detail;
   const tableName = process.env.TABLE_NAME!;
   const bedrockRegion = process.env.BEDROCK_REGION || process.env.AWS_REGION!;
-  const modelId = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+  const modelId = process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0';
 
   const s3Client = new S3Client({ region: process.env.AWS_REGION });
   const bedrockClient = new BedrockRuntimeClient({ region: bedrockRegion });
@@ -65,17 +65,44 @@ export const handler = async (
     const systemPrompt = 'Generate a concise one-paragraph summary (2-3 sentences) of the following video session transcript.';
     const userPrompt = `Transcript:\n\n${transcriptText}`;
 
-    const payload = {
-      anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: userPrompt }],
+    // Determine if this is a Claude model or Nova model
+    const isClaudeModel = modelId.startsWith('anthropic.');
+
+    let payload: any;
+    if (isClaudeModel) {
+      // Claude model format (backward compatibility)
+      payload = {
+        anthropic_version: 'bedrock-2023-05-31',
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: userPrompt }],
+          },
+        ],
+      };
+    } else {
+      // Nova Pro format (new default)
+      payload = {
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                text: `${systemPrompt}\n\n${userPrompt}`,
+              },
+            ],
+          },
+        ],
+        inferenceConfig: {
+          maxTokens: 500,
+          temperature: 0.7,
         },
-      ],
-    };
+      };
+    }
+
+    console.log('Using model:', { modelId, isClaudeModel });
 
     const command = new InvokeModelCommand({
       contentType: 'application/json',
@@ -86,7 +113,16 @@ export const handler = async (
     const apiResponse = await bedrockClient.send(command);
     const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody);
-    const summary = responseBody.content[0].text;
+
+    // Extract summary based on model response format
+    let summary: string;
+    if (isClaudeModel) {
+      // Claude response format
+      summary = responseBody.content[0].text;
+    } else {
+      // Nova Pro response format
+      summary = responseBody.output.message.content[0].text;
+    }
 
     // Store summary on session record (non-blocking — don't fail entire handler on error)
     try {

@@ -15,6 +15,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as path from 'path';
 import { Construct } from 'constructs';
+import { IvsCleanupResource } from '../constructs/ivs-cleanup-resource';
 
 /**
  * SessionStack - DynamoDB table for session management and resource pool
@@ -152,6 +153,10 @@ export class SessionStack extends Stack {
         },
       })
     );
+
+    // IVS Cleanup Custom Resource
+    // This ensures IVS channels are properly cleaned up before stack deletion
+    const cleanupResource = new IvsCleanupResource(this, 'IvsCleanup');
 
     // IVS Recording Configuration (L1 constructs)
     const recordingConfiguration = new ivs.CfnRecordingConfiguration(this, 'RecordingConfiguration', {
@@ -585,7 +590,7 @@ export class SessionStack extends Stack {
       environment: {
         TABLE_NAME: this.table.tableName,
         BEDROCK_REGION: this.region,
-        BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+        BEDROCK_MODEL_ID: 'amazon.nova-pro-v1:0',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
@@ -593,12 +598,13 @@ export class SessionStack extends Stack {
     // Grant DynamoDB permissions (read for getSession, write for updateSessionAiSummary)
     this.table.grantReadWriteData(storeSummaryFn);
 
-    // Grant Bedrock InvokeModel permission
+    // Grant Bedrock InvokeModel permission for both Nova Pro and Claude models (backward compatibility)
     storeSummaryFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
         resources: [
-          `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0`,
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
+          `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-*`,
         ],
         effect: iam.Effect.ALLOW,
       })

@@ -34,7 +34,9 @@ result: pass
 
 ### 5. Upload Completion and Navigation
 expected: After upload completes and processing begins, the browser automatically navigates to /replay/{sessionId} and displays the replay viewer. The session appears as an uploaded recording with title matching the uploaded filename.
-result: pending
+result: issue
+reported: "Redirects to /replay page but should have different experience for uploads (e.g., /upload/{sessionId} or distinct upload viewer page with different components/layout)"
+severity: major
 
 ### 6. Error Handling and Retry
 expected: Interrupt the upload by closing the browser or losing network connectivity. Reopen the upload form and start again with the same file. The form shows an error message and allows retrying without restarting from 0%.
@@ -60,13 +62,18 @@ result: pending
 
 total: 10
 passed: 4
-issues: 0
-pending: 6
+issues: 1
+pending: 5
 skipped: 0
 
 ## Gaps
 
-[FIXED in commits 39d5fe8 + b5059ff:
-- 39d5fe8: Added Access-Control-Allow-Origin headers to get-part-presigned-url handler
-- b5059ff: Enabled CORS on S3 recordings bucket for direct multipart uploads
-- REQUIRES REDEPLOY: Both fixes need `npm run deploy` to take effect in AWS]
+- truth: "Uploaded recordings should display in a distinct upload viewer page with different experience than broadcast replays"
+  status: failed
+  reason: "User reported: Redirects to /replay page but should have different experience for uploads (e.g., /upload/{sessionId} or distinct upload viewer page with different components/layout)"
+  severity: major
+  test: 5
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""

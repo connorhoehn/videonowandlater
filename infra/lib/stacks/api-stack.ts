@@ -393,7 +393,13 @@ export class ApiStack extends Stack {
     activity.addMethod('GET', new apigateway.LambdaIntegration(listActivityHandler));
 
     // Phase 21: Upload handlers - wire upload endpoints
-    const uploadResource = api.root.addResource('upload');
+    const uploadResource = api.root.addResource('upload', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
 
     // POST /upload/init
     const initUploadFunction = new NodejsFunction(this, 'InitUploadFunction', {

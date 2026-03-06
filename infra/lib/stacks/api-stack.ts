@@ -128,6 +128,21 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // POST /sessions/{sessionId}/end
+    const sessionEndResource = sessionIdResource.addResource('end');
+    const endSessionHandler = new NodejsFunction(this, 'EndSessionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/end-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(endSessionHandler);
+    sessionEndResource.addMethod('POST', new apigateway.LambdaIntegration(endSessionHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // GET /sessions/{sessionId}/playback (get playback URL) - public endpoint
     const sessionPlaybackResource = sessionIdResource.addResource('playback');
 
@@ -333,6 +348,24 @@ export class ApiStack extends Stack {
 
     // No authorizer - public endpoint for discovery
     recordings.addMethod('GET', new apigateway.LambdaIntegration(listRecordingsHandler));
+
+    // GET /activity (list recent activity - broadcasts and hangouts) - public endpoint
+    const activity = api.root.addResource('activity');
+
+    const listActivityHandler = new NodejsFunction(this, 'ListActivityHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-activity.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(listActivityHandler);
+
+    // No authorizer - public endpoint for activity feed discovery
+    activity.addMethod('GET', new apigateway.LambdaIntegration(listActivityHandler));
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { StreamMetrics } from '../metrics';
 
 describe('StreamMetrics backend type', () => {

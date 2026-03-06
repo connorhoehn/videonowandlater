@@ -1,236 +1,288 @@
-# Project Research Summary
+# Project Research Summary: v1.4 Creator Studio & Stream Quality
 
-**Project:** VideoNowAndLater v1.2 — Activity Feed & Intelligence
-**Domain:** AWS IVS live-video platform — AI transcription pipeline, activity feed, homepage redesign
-**Researched:** 2026-03-05
-**Confidence:** HIGH (Phases 1-3); MEDIUM (Phase 4 — HLS/MediaConvert conflict unresolved; see critical gap)
+**Domain:** AWS IVS live video platform — stream quality monitoring + creator cross-promotion features
+**Research Date:** 2026-03-06
+**Researched Artifacts:** STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md
+**Overall Confidence:** HIGH
+
+---
 
 ## Executive Summary
 
-VideoNowAndLater v1.2 adds an intelligence layer and social history surface on top of the completed v1.1 foundation. The milestone has five feature areas: reaction summary aggregation, hangout participant tracking, a homepage redesign (horizontal recording slider + activity feed), a transcription pipeline (Amazon Transcribe + S3), and an AI summary pipeline (Amazon Bedrock Claude). The recommended approach is an event-driven two-Lambda chain: a `start-transcription` Lambda fires as a second EventBridge target on the existing `RecordingEndRuleV2`, and a `store-transcript` Lambda is triggered by Transcribe's own EventBridge completion event and then calls Bedrock inline. All AI and transcript data is stored as new fields on the existing `SESSION#{id} / METADATA` DynamoDB item — no new tables are required. Two new npm packages are added to the backend (`@aws-sdk/client-transcribe`, `@aws-sdk/client-bedrock-runtime`); zero new frontend packages; zero new CDK library imports.
+Adding stream quality monitoring and creator spotlight features to VideoNowAndLater requires **minimal new infrastructure** but **careful integration discipline** to avoid degrading the existing real-time system.
 
-The most significant risk in this milestone is a direct conflict between the two research files on whether Amazon Transcribe accepts IVS HLS recordings directly. FEATURES.md (HIGH confidence, backed by official AWS Transcribe input format documentation) states that Transcribe does NOT accept HLS M3U8 and requires an AWS MediaConvert conversion step first. ARCHITECTURE.md (MEDIUM confidence, self-flagged as "requires verification") takes the opposite position — that Transcribe accepts `.m3u8` as a supported `MediaFormat`. These are mutually exclusive. The correct answer determines whether Phase 4 requires one Lambda and one EventBridge rule, or three Lambdas, two EventBridge rules, and a MediaConvert IAM role. The FEATURES.md position (MediaConvert required) must be treated as the working assumption until Phase 4 is verified against current AWS documentation.
+**The recommendation:** Stream quality metrics are natively available from AWS IVS Web Broadcast SDK (`getStatus()` call, synchronous). Visualize with a lightweight charting library (Recharts, 40KB). Creator spotlight is purely metadata (one optional `featuredUid` field on Session). No breaking changes, fully backward compatible.
 
-The remaining four feature areas carry low-to-medium risk. Phases 1-2 (reaction summaries, participant tracking) are purely additive modifications to existing Lambda handlers with no new AWS services. Phase 3 (homepage redesign) is frontend-only with a new `GET /activity` endpoint following the established `list-recordings.ts` pattern. Phase 5 (AI summary) is straightforward once Phase 4's transcription pipeline is running. The phase ordering recommended independently by both FEATURES.md and ARCHITECTURE.md delivers three visible wins first, isolates the highest-risk infrastructure work in Phase 4, and allows homepage UI to launch with graceful "coming soon" placeholders for AI summaries.
+**The risk:** Quality metrics polling must be bounded (5+ second minimum cadence) to prevent API load multiplication. Featured broadcast cross-promotion creates N×M query explosion if not architecturally constrained. Both features compete with existing IVS Chat polling if spotlight updates sent via Chat instead of separate transport. Success depends on strict cardinality limits and performance gating during verification.
+
+---
 
 ## Key Findings
 
-### Recommended Stack
+### From STACK.md: Technology Additions
 
-The existing stack is unchanged for v1.2. Only two new npm packages are added to the backend, both at `^3.1000.0` to match the project's existing AWS SDK v3 monorepo version. No new CDK library packages are needed — all new infrastructure uses primitives already imported from `aws-cdk-lib`. No new frontend packages are required; the homepage redesign, recording slider, and AI summary display all use existing React and Tailwind.
+| Technology | Version | Purpose | Why | Status |
+|-----------|---------|---------|-----|--------|
+| **recharts** | ^1.8.5 | Real-time metrics visualization | Lightweight React wrapper on D3; 40KB gzipped; perfect for live updates | NEW dependency |
+| **amazon-ivs-web-broadcast** | ^1.32.0 | Metrics collection | Already installed; `getStatus()` provides bitrate, resolution, fps natively | NO change |
+| **motion** | ^12.34.4 | UI transitions for spotlight | Already installed; reuse for fade-in/slide-in | NO change |
+| **DynamoDB** | existing | Featured broadcast storage | Add optional `featuredUid?: string` to Session model | Optional field |
+| **Lambda** | existing | Spotlight endpoint | New `POST /sessions/{sessionId}/feature` handler | New handler |
 
-**New backend packages:**
-- `@aws-sdk/client-transcribe` — Batch transcription jobs from S3 recordings; fire-and-forget from Lambda; use `StartTranscriptionJobCommand`
-- `@aws-sdk/client-bedrock-runtime` — Claude model invocation for AI summaries; use `InvokeModelCommand` (synchronous), NOT `InvokeModelWithResponseStreamCommand`
+**Breaking changes:** NONE. All additions are backward compatible. Session model extension is optional; existing sessions have undefined field (falsy check works).
 
-**New CDK infrastructure (no new CDK library imports):**
-- `StartTranscription` NodejsFunction — second target on existing `RecordingEndRuleV2`
-- `StoreTranscript` NodejsFunction — target for new `TranscribeJobCompleteRule`
-- `TranscribeJobCompleteRule` EventBridge rule — listens for `aws.transcribe` / `Transcribe Job State Change` with status `COMPLETED` or `FAILED`
+**Key decision:** Metrics come free from IVS Broadcast SDK via synchronous `getStatus()` call. No external metrics infrastructure (CloudWatch, Datadog) needed. Latency stays low, cost stays zero. For real-time dashboard, synchronous API is mandatory.
 
-**AI model — two valid choices with minor differences:**
-- `anthropic.claude-3-5-haiku-20241022-v1:0` (STACK.md recommendation) — smarter, ~$0.006/session
-- `anthropic.claude-3-haiku-20240307-v1:0` (ARCHITECTURE.md and FEATURES.md recommendation) — slightly cheaper, well-documented
+---
 
-Both are Haiku-class models and both cost ~$0.006/session. Either is correct for this summarization workload. Choose based on regional availability at implementation time.
+### From FEATURES.md: What Gets Built in v1.4
 
-CRITICAL manual step: Anthropic models require a one-time First Time Use (FTU) form in the Bedrock console before `InvokeModel` succeeds. This cannot be automated via CDK and must be documented as a pre-deployment step in Phase 5.
+**In Scope (Differentiators):**
+- Stream quality metrics dashboard for broadcaster (viewer experience: join latency, buffering events, playback quality state)
+- Creator spotlight: broadcaster can feature one active creator from their viewers
+- Featured broadcast link shown on viewer page
+- Featured broadcast persisted on Session (shows in replay)
 
-**Cost profile:** Transcribe dominates at ~$0.72 per 30-min broadcast and ~$0.12 per 5-min hangout. Bedrock is ~$0.006/session regardless of model. Total AI cost at 100 sessions/month is ~$73 (Transcribe) + ~$0.60 (Bedrock).
+**Out of Scope (Defer to v1.5+):**
+- Encoder bitrate/fps/frame drops (requires encoder integration, not available in browser)
+- Per-viewer analytics (privacy concern)
+- Historical quality trends (analytics DB needed)
+- Featured creator recommendations (ML)
+- Global search for featured creators (scope: this broadcast's viewers only)
 
-### Expected Features
+**Phasing constraint:** Reaction counts + Hangout tracking from v1.2 already complete. v1.4 sits on top of stable v1.1-v1.3 foundation.
 
-Both FEATURES.md and ARCHITECTURE.md agree on the same five feature areas, their scope, and their ordering. The data model extensions to `SESSION#{id} / METADATA` are all additive optional fields — no DynamoDB migrations, no breaking changes to existing API consumers.
+---
 
-**Must have (table stakes for v1.2 launch):**
-- Reaction summary counts aggregated at session end — social proof on recording cards without clicking into replay
-- Hangout session duration and participant list on activity cards — Discord/Slack/Zoom all persist this group history
-- Relative timestamps ("2 hours ago") on all activity cards — reuse existing `formatDate()` pattern
-- Graceful degradation for AI pipeline — "Summary coming soon" placeholders; AI is async and takes 3-10 min post-recording
+### From ARCHITECTURE.md: System Integration Points
 
-**Should have (competitive differentiators):**
-- AI-generated 1-paragraph summary on recording cards — Prime Video X-Ray pattern; high perceived value at low cost
-- Hangout activity cards with participant avatar row — no streaming competitor does group session history this way
-- Horizontal recording slider replacing the current full-page grid — Netflix/YouTube shelf is the dominant video discovery pattern
-- Activity feed below the slider showing all session types — two-zone homepage mirrors YouTube Shorts + long-form split
+**Hangout Participant Tracking (Existing from v1.2):**
+- Modify `join-hangout.ts`: persist PARTICIPANT item after token generation
+- PK=`SESSION#{id}`, SK=`PARTICIPANT#{userId}` (separate items, no version conflict)
+- Query with `begins_with(SK, 'PARTICIPANT#')` for all participants
 
-**Defer to v1.x / v2+:**
-- Keyword search on transcripts (needs transcript corpus first)
-- Full transcript viewer in replay (5,000+ words inline overwhelms the UI)
-- Real-time transcription during live sessions (separate SDK and separate infrastructure)
-- AI topic chapters (requires NLP topic modeling on top of transcription)
-- Semantic content search (requires vector embeddings and OpenSearch)
+**Reaction Summary (Existing from v1.2):**
+- Modify `recording-ended.ts`: compute reaction counts at session end
+- Store `reactionSummary: { fire: N, heart: N, ... }` on Session METADATA
+- Frontend displays top 2-3 emoji types on cards + full breakdown on replay panel
 
-**Anti-features — do not implement:**
-- Per-user reaction breakdown (violates the anonymous-by-design reaction system)
-- AI chat + transcript diarization (IVS Chat lacks speaker fidelity; hallucination risk)
-- Speaker attribution on hangout activity cards (social pressure dynamics)
+**For v1.4 — Quality Metrics:**
+- New metrics fields on Session (optional): `metricsLastUpdated`, `viewerExperienceStatus`
+- No EventBridge changes; metrics polled on-demand via HTTP
+- Caching: 4-5 second TTL on backend to prevent API storms
 
-### Architecture Approach
+**For v1.4 — Featured Broadcast:**
+- Add optional `featuredUid?: string` to Session METADATA item
+- New handler: `POST /sessions/{sessionId}/feature` (atomic DynamoDB write)
+- Frontend polls `GET /sessions/{sessionId}` every 5-10 seconds to detect featured change
+- Alternative for v1.5+: WebSocket push (not v1.4)
 
-All v1.2 changes extend the existing single-table DynamoDB design, existing EventBridge infrastructure, and the established Lambda handler pattern. New fields are added to `SESSION#{id} / METADATA` items. Hangout participants are stored as separate `SESSION#{id} / PARTICIPANT#{userId}` items (same PK, different SK prefix) to avoid write-lock contention with the existing optimistic locking in `updateSessionStatus()`. The transcription and AI pipeline uses fan-out (two Lambda targets on one EventBridge rule) followed by a linear async chain (Transcribe completion event triggers `store-transcript` Lambda, which calls Bedrock inline before returning).
+**Performance constraint:** Featured broadcast data NOT loaded on list views. Only on broadcaster dashboard (during live) and replay detail page. Prevent N+1 query explosion.
 
-**New Lambda handlers and precise integration points:**
-1. `join-hangout.ts` (MODIFY) — add `addHangoutParticipant()` call after `ivsRealTimeClient.send()` returns, approximately line 65
-2. `recording-ended.ts` (MODIFY) — add `computeAndStoreReactionSummary()` after `updateRecordingMetadata()`, approximately line 127; wrap in try/catch (pool release must always run regardless of this failure)
-3. `start-transcription.ts` (NEW) — second target on `RecordingEndRuleV2`; job name convention `vnl-{sessionId}-{epochMs}` enables sessionId extraction from the completion event without extra DynamoDB reads
-4. `store-transcript.ts` (NEW) — triggered by `TranscribeJobCompleteRule`; calls `GetTranscriptionJobCommand` to get transcript S3 URI; fetches JSON; extracts `results.transcripts[0].transcript`; calls Bedrock inline; writes both transcript and summary fields to session record
-5. `list-activity.ts` (NEW) — `GET /activity` endpoint; DynamoDB scan for all session types with all new fields
+---
 
-**New repository functions (all in `session-repository.ts`):**
-`addHangoutParticipant`, `getHangoutParticipants`, `updateReactionSummary`, `updateTranscriptFields`, `updateAiSummary`, `getRecentActivity`
+### From PITFALLS.md: Critical Risks & Prevention
 
-**Key architectural patterns applied:**
-- Fan-out via multiple EventBridge targets — two independent, parallel handlers on the same IVS Recording End event
-- Linear async chain for sequential dependencies — Bedrock call inline in `store-transcript.ts` rather than a separate Lambda and EventBridge event
-- Compute-once, read-many for aggregates — reaction counts computed once at session end (500 DynamoDB queries run once) rather than on every homepage load
-- Co-located items on shared PK — `PARTICIPANT#{userId}` items under `SESSION#` PK require no new GSI and avoid version conflicts
+| Pitfall | Severity | Prevention | Detection |
+|---------|----------|-----------|-----------|
+| **Unbounded metrics polling creates API storms** | CRITICAL | Min 5s polling cadence; backend cache 4-5s; load test with 50 concurrent broadcasters | DynamoDB throttle warnings; IVS GetStream latency > 500ms |
+| **Featured broadcast N×M query explosion** | CRITICAL | Featured data only on detail views, not lists; pre-fetch in list-activity response | Homepage load time > 2.5s; 20+ parallel GET requests on page load |
+| **Spotlight events overwhelm IVS Chat channel** | CRITICAL | Separate API transport for spotlight updates; don't mix with messages | Chat message delivery latency increases 1-2s; users report missing messages |
+| **Metrics require encoder instrumentation (unavailable in browser)** | MODERATE | Scope: viewer experience metrics only (join latency, buffering); NOT encoder bitrate/fps/frame drops | Phase research doesn't mention IVS API limitations; encoder stats in feature requirements |
+| **Featured broadcast field added as required (backward compat failure)** | MODERATE | ALL new fields optional (`?`); default to undefined; test loading Phase 1-22 sessions | Activity feed 500 error on production; validation errors in logs |
+| **Featured creator modal search becomes performance nightmare** | MODERATE | Scope: viewers of THIS broadcast only; max 20 broadcasts shown; no autocomplete search | Modal search latency > 2s; DynamoDB consumed capacity spikes |
+| **Metrics state not cleared when broadcast ends** | MINOR | Reset metrics on session status → ENDED; unmount component or set state to null | Stale metrics visible for 5+ seconds after broadcast restart |
+| **Featured creator avatar flickers (CLS issue)** | MINOR | Preload avatar image; include URL in response; show skeleton while loading | Avatar placeholder for 200ms then appears; CLS score increases |
+| **Metrics caching obscures live issues** | MINOR | Show "last updated X seconds ago"; invalidate cache if bitrate drops > 50% | User complaint: dashboard said stream fine but viewers saw buffering |
 
-### Critical Pitfalls
+**Gate requirements:**
+- Phase 23 (Quality Metrics): Load test with 50 concurrent broadcasters; API latency < 200ms; backward compatibility test
+- Phase 24 (Featured Broadcast): Homepage load < 2.5s; query audit required; featured data pre-fetched in list responses
 
-These are the v1.2-specific pitfalls identified from architecture analysis. V1.1 pitfalls (recording reconnect windows, mobile participant limits, token expiration, HLS player memory) are already resolved in the existing codebase.
-
-1. **Reaction summary computation blocks pool release** — `computeAndStoreReactionSummary()` involves 500 DynamoDB queries (5 emoji types x 100 shards). Wrapping this in try/catch and ensuring `releasePoolResources()` always runs (in a `finally` block or sequentially after the try/catch) is mandatory. Pool resource availability for new sessions must never be gated on reaction aggregation.
-
-2. **Participant write contention via list_append on session METADATA** — The existing `updateSessionStatus()` uses optimistic locking (`#version = :currentVersion`). Adding participants as a `list_append` to the session item causes `ConditionalCheckFailedException` when two participants join within the same second. Store each participant as a separate `PARTICIPANT#{userId}` item under the session PK — items are naturally idempotent on re-join and require no version coordination.
-
-3. **Transcribe input format conflict — UNRESOLVED (see Research Flags)** — FEATURES.md says MediaConvert is required before Transcribe. ARCHITECTURE.md says Transcribe accepts HLS directly. The wrong assumption causes silent failures in the transcription pipeline with no recordings reaching Bedrock. Treat FEATURES.md (MediaConvert required) as the default assumption.
-
-4. **Bedrock model access requires a manual console step** — `bedrock:InvokeModel` returns `AccessDeniedException` until the Anthropic First Time Use form is completed in the Bedrock console. This cannot be automated via CDK or CLI. Must be a clearly documented pre-deployment step in the Phase 5 plan.
-
-5. **DynamoDB item size for long transcripts** — A 60-minute session transcript is 20-60KB of plain text; well under DynamoDB's 400KB item limit. For sessions exceeding approximately 3 hours, guard with a 250,000-character truncation limit and store only the S3 URI on the DynamoDB item, fetching the full text on demand.
+---
 
 ## Implications for Roadmap
 
-Both FEATURES.md and ARCHITECTURE.md independently converge on the same 5-phase ordering. This agreement across two separate research analyses is a strong signal that the dependency graph is correct.
+### Recommended Phase Structure
 
-### Phase 1: Hangout Participant Tracking
+**Phase 23: Stream Quality Metrics Dashboard (Low to Medium Risk)**
 
-**Rationale:** No external service dependencies. Touches only `join-hangout.ts` and `session-repository.ts`. Produces the participant data required by Phase 3 hangout activity cards. Simplest scope and highest confidence of any phase in this milestone.
+*Rationale:* Standalone broadcaster-facing feature; no viewer impact; metrics free from IVS SDK.
 
-**Delivers:** `PARTICIPANT#{userId}` items written to DynamoDB on every hangout join; `participantCount` denormalized to session METADATA at session end; `addHangoutParticipant()` and `getHangoutParticipants()` repository functions; Session domain model extended with new optional fields.
+**Deliverables:**
+- Metrics collection hook in BroadcastPage: poll `client.getStatus()` on 5s cadence
+- Quality dashboard component: Recharts line chart showing bitrate, fps, network status
+- Caching layer: Backend caches metrics 4-5s; multiple simultaneous requests return cached result
+- Display cache age: "Last updated 4s ago" label on dashboard
+- Backward compatibility: Optional metric fields on Session; test with Phase 1-22 sessions
+- Load test gate: 50 concurrent broadcasters; verify API latency < 200ms, no DynamoDB throttle
 
-**Addresses:** "Who was there" table-stakes expectation for group session history; data layer for hangout activity cards in Phase 3.
+**Stack additions:** Recharts only (40KB gzipped)
 
-**Avoids pitfall:** Participant write contention — separate items per participant, not list_append on the version-locked session METADATA item.
+**Duration estimate:** 2-3 weeks (includes load testing)
 
-**Research flag:** Standard patterns, no research-phase needed. DynamoDB co-located item pattern is established in this codebase. Integration point is precisely identified.
+---
 
-### Phase 2: Reaction Summary at Session End
+**Phase 24: Creator Spotlight (Medium Risk)**
 
-**Rationale:** No new infrastructure. Extends the already-running `recording-ended.ts` handler with best-effort reaction aggregation. Produces `reactionSummary` data required by Phase 3 recording cards. Shipping before the homepage redesign ensures reaction counts are populated when the new cards launch.
+*Rationale:* Depends on Phase 23 load testing validation. Pure metadata feature; scope strictly limited to avoid query explosion.
 
-**Delivers:** `computeAndStoreReactionSummary()` (try/catch wrapped, non-blocking) in `recording-ended.ts`; `updateReactionSummary()` repository function; `reactionSummary` map on session METADATA; reaction count display on the existing replay info panel.
+**Deliverables:**
+- Featured broadcast selection modal: shows viewers of THIS broadcast only (max 20 results)
+- Backend endpoint: `POST /sessions/{sessionId}/feature` (validate ownership, atomic DynamoDB write)
+- Frontend polling: `GET /sessions/{sessionId}` every 5-10s to detect featured change (acceptable for v1.4)
+- Viewer page link: featured broadcast info + link to navigate
+- Replay persistence: featured broadcast shown on replay viewer of original session
+- Backward compatibility: `featuredUid?: string` optional field; handle undefined gracefully
+- Query audit: Featured data pre-fetched in `list-activity` response (not fetched per card)
+- Privacy audit: Featured creator links only visible to active broadcast viewers
 
-**Addresses:** Per-type reaction counts on recording cards (table stakes for social proof); eliminates 10,000 DynamoDB queries per homepage load that would result from computing counts at read time.
+**Stack additions:** None (pure backend metadata + frontend UI)
 
-**Avoids pitfall:** Reaction summary must never block pool release — wrap in try/catch, ensure `releasePoolResources()` runs in `finally`.
+**Duration estimate:** 2-3 weeks (includes query audit + load testing)
 
-**Research flag:** Standard patterns, no research-phase needed. `getReactionCounts()` already exists in `reaction-repository.ts`. Integration point precisely identified.
+---
 
-### Phase 3: Homepage Redesign + Activity Feed API
+### Feature Grouping & Dependencies
 
-**Rationale:** Frontend-heavy phase. Depends on Phases 1-2 for full data richness but can build the layout with empty/loading states and ship independently. No new AWS services. The `GET /activity` endpoint follows the established `list-recordings.ts` pattern exactly.
+```
+Phase 1-22 (Complete)
+├─ v1.1 (Broadcast + Hangout + Chat + Reactions + Replay)
+├─ v1.2 (Reaction Counts + Hangout Tracking + Activity Feed)
+├─ v1.3 (Transcription + AI Summaries)
+│
+└─ v1.4 (Creator Studio & Stream Quality)
+   ├─ Phase 23: Quality Metrics (independent; broadcaster-only)
+   │  └─ Phase 24: Creator Spotlight (depends on Phase 23 validation)
+   │     └─ Phase 25 (optional): WebSocket Real-Time Spotlight Updates (v1.5+)
+```
 
-**Delivers:** Two-zone homepage (horizontal recording slider + activity feed list); hangout activity cards (participant avatars, message count, duration); BROADCAST recording cards with reaction counts and AI summary placeholders; `GET /activity` API endpoint; `list-activity.ts` Lambda; `getRecentActivity()` repository function.
+**No architectural changes.** Both phases add data to existing Session model (optional fields). No new tables, no new EventBridge rules, no new Lambda patterns beyond what v1.2 established.
 
-**Addresses:** Homepage redesign replacing current full-page grid (competitive differentiator); unified BROADCAST + HANGOUT history surface.
+---
 
-**Avoids pitfall:** Use pre-computed `reactionSummary` from Phase 2 — never call `getReactionCounts()` inside the activity list handler.
+## Validation Gates (Must Pass Before Ship)
 
-**Research flag:** CSS scroll-snap and peek pattern is well-documented; no research-phase needed. One open question to decide before writing the plan: whether `GET /activity` should be authenticated or public (the current `GET /recordings` auth posture). Also decide whether `messageCount` is tracked atomically in `send-message.ts` or computed at session end.
+### Phase 23 Verification Checklist
+- [ ] Load test: 50 concurrent broadcasters polling metrics at 5s cadence; API latency < 200ms; DynamoDB throttle events = 0
+- [ ] Backward compatibility: Load Phase 1-22 recordings; no validation errors on missing metric fields
+- [ ] Cache behavior: Metrics display updates within 5 seconds; "last updated X seconds ago" label accurate and shows correct time
+- [ ] Fallback: If IVS GetStream API fails, dashboard shows "Metrics unavailable"; broadcast continues normally
+- [ ] Unit/integration tests: useBroadcast hook + QualityMetricsDashboard component; 80%+ code coverage
+- [ ] Performance: Dashboard renders without janky animations; Recharts re-render optimized for 1-5 updates/sec
 
-### Phase 4: Transcription Pipeline
+### Phase 24 Verification Checklist
+- [ ] Query performance: Homepage loads in < 2.5s with 30 active broadcasts
+- [ ] Featured data loading: Pre-fetched in `list-activity` response (verified in network tab)
+- [ ] Featured creator selection: Modal search latency < 500ms; returns <= 20 broadcasts (viewers of THIS broadcast only)
+- [ ] Backward compatibility: Replays of Phase 1-22 broadcasts render without errors; missing `featuredUid` field handled gracefully
+- [ ] Avatar preload: Featured creator overlay loads without Cumulative Layout Shift (CLS); no visual flicker
+- [ ] State reset: After broadcast ends, starting new broadcast shows clean featured state (no stale data)
+- [ ] Privacy audit: Featured creator links only visible to active broadcast viewers; spot-check activity feed for no exposure
+- [ ] Integration test: End-to-end flow — broadcaster selects featured creator → viewers see link → click → navigate to featured broadcast (no timeouts)
 
-**Rationale:** Highest infrastructure risk. Introduces two new Lambda handlers, a new EventBridge rule, new IAM permissions, and an external AWS service (Transcribe) with an unresolved input format conflict. Must be fully operational before Phase 5 (AI summary) can begin. Isolated as its own phase so that Phases 1-3 can ship and be validated while Phase 4's conflict is resolved.
+---
 
-**Delivers:** `start-transcription.ts` Lambda (second target on `RecordingEndRuleV2`); `TranscribeJobCompleteRule` EventBridge rule; `store-transcript.ts` Lambda (transcript storage only, without Bedrock initially); `transcriptStatus`, `transcriptJobName`, `transcriptText` fields on session records; IAM permissions for Transcribe and S3.
+## Research Flags (Phases Needing Additional Research)
 
-**If FEATURES.md is correct (MediaConvert required):** Phase 4 also requires a MediaConvert job Lambda, a `MediaConvertCompleteRule` EventBridge rule, an IAM role for MediaConvert, and updated CDK in `session-stack.ts`. This approximately doubles the scope.
+| Phase | Topic | Why Research Needed | Action |
+|-------|-------|-------------------|--------|
+| Phase 23 | IVS GetStream API exact metrics | Confirm available metrics from AWS IVS SDK before UI mockups created | Run Phase 23 research; document `getStatus()` output schema |
+| Phase 23 | Encoder bitrate capability | Verify if browser WebRTC stats provide encoder-side metrics; probably not | Test IVS Web Broadcast SDK + RTCPeerConnection APIs in spike |
+| Phase 24 | Featured creator opt-in | If creators don't want to be featured, should we require consent? | Product/design alignment; defer to v1.5 if complex |
+| Phase 24 | WebSocket real-time updates | For featured broadcast changes to propagate instantly; current polling is 5-10s | Defer to v1.5; v1.4 acceptable with polling latency |
 
-**If ARCHITECTURE.md is correct (HLS accepted directly):** Phase 4 is simpler — pass the existing HLS URL directly to `StartTranscriptionJobCommand` with `MediaFormat: 'mp4'` ... actually `MediaFormat` would need to be the correct value for HLS. Verify the exact parameter as part of the research-phase.
+**Standard patterns (no research needed):**
+- DynamoDB optional fields + backward compatibility (v1.2 established this pattern)
+- Lambda handler + EventBridge integration (established in v1.1-v1.3)
+- React hooks for state management (project convention)
+- Frontend caching strategies (standard web patterns)
 
-**Addresses:** Transcription of all recordings (differentiator; foundation for AI summaries).
-
-**Avoids pitfall:** S3 event trigger anti-pattern — IVS recording is multi-file (HLS segments, thumbnails, manifests); S3 events fire multiple times before assembly is complete. The existing `RecordingEndRuleV2` is the authoritative single trigger.
-
-**CRITICAL research flag: REQUIRES research-phase before plan-phase.** The HLS/MediaConvert conflict must be resolved against current AWS Transcribe documentation before writing the Phase 4 implementation plan. Default assumption: MediaConvert is required (FEATURES.md position, backed by official AWS docs).
-
-### Phase 5: AI Summary Pipeline
-
-**Rationale:** Strictly blocked by Phase 4. Extends `store-transcript.ts` with an inline Bedrock call. No new EventBridge rules, no new Lambda handlers beyond what Phase 4 delivers. Lowest new infrastructure risk of any phase once transcription is working.
-
-**Delivers:** `bedrock:InvokeModel` call within `store-transcript.ts`; `aiSummary`, `aiSummaryStatus`, `aiModel` fields on session records; AI summary truncated display (2 lines) on recording cards; full summary in replay info panel; `bedrock-client.ts` shared client module.
-
-**Addresses:** AI-generated 1-paragraph summary (highest-value differentiator); "Summary unavailable" graceful degradation on cards when the pipeline fails.
-
-**Avoids pitfall:** Bedrock call is try/catch isolated — a Bedrock failure must not lose the already-stored transcript. Model ARN scoped to specific model in IAM (not wildcard). Synchronous `InvokeModelCommand` only — streaming adds complexity with no benefit in this batch pipeline.
-
-**Research flag:** Confirm Bedrock model availability in deployment region before writing CDK. Confirm whether Anthropic FTU form is still required as of implementation date. Both are fast lookups, not a full research-phase.
-
-### Phase Ordering Rationale
-
-- Phases 1-2 have zero new AWS service dependencies and deliver visible wins (participant data, reaction counts) that Phase 3 UI depends on — they must ship first
-- Phase 3 can technically begin before Phases 1-2 complete (build with empty states) but the full feature requires their data — plan Phase 3 to start after Phase 2 is deployed
-- Phase 4 is isolated specifically because it contains the unresolved Transcribe HLS conflict; isolating it protects Phases 1-3 from scope uncertainty
-- Phase 5 is strictly blocked on Phase 4 — the dependency is hard, not just recommended
-- The ordering guarantees progressive delivery: Phases 1-3 ship visible UX improvements weeks before the AI pipeline is complete; users see the new homepage and activity cards immediately
-
-### Research Flags
-
-**Requires research-phase before plan-phase:**
-- **Phase 4 (Transcription Pipeline):** Resolve the HLS/MediaConvert conflict before writing the implementation plan. Check the current [Amazon Transcribe supported input formats](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html) page. If HLS is NOT supported, Phase 4 scope expands to include MediaConvert. The FEATURES.md position (MediaConvert required) is the default assumption — verify before implementing either path.
-
-**Standard patterns, skip research-phase:**
-- **Phase 1 (Participant Tracking):** DynamoDB co-located items pattern is established; `join-hangout.ts` integration point is at a specific line.
-- **Phase 2 (Reaction Summary):** `recording-ended.ts` integration point is at a specific line; `getReactionCounts()` already exists.
-- **Phase 3 (Homepage Redesign):** CSS scroll-snap is well-documented; `list-activity.ts` follows `list-recordings.ts` pattern. Two pre-plan decisions needed (auth posture, messageCount tracking approach) but neither requires external research.
-- **Phase 5 (AI Summary):** Bedrock `InvokeModelCommand` pattern is fully documented in STACK.md with working TypeScript. Confirm model availability in deployment region before CDK wiring — this is a single-page check, not a research session.
+---
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | All packages verified against npm registry; IAM patterns verified against AWS docs; SDK v3 monorepo version compatibility confirmed; no new CDK library needed |
-| Features | HIGH | Transcribe input format constraints backed by official AWS docs; UX patterns verified against Discord, Slack, YouTube, Prime Video; dependency graph is internally consistent across both research files |
-| Architecture | HIGH | Based on direct codebase analysis of existing handlers; integration points identified to specific file lines; DynamoDB patterns match established codebase conventions; fan-out and linear-chain patterns are well-documented AWS patterns |
-| Pitfalls | HIGH (Phases 1-3) / MEDIUM (Phases 4-5) | V1.1 pitfalls are resolved in the existing codebase; v1.2-specific pitfalls (reaction contention, participant write contention, Bedrock FTU) are derived from direct code analysis; Transcribe/MediaConvert pitfall is the primary open question |
+| Area | Level | Notes |
+|------|-------|-------|
+| **Stack (Recharts + IVS SDK metrics)** | HIGH | Recharts mature library (40K+ weekly npm downloads); IVS SDK v1.32.0 stable with documented `getStatus()` API |
+| **Featured broadcast metadata** | HIGH | Simple optional Session field; backward compatible; proven pattern from v1.2 optional fields |
+| **Architecture (no breaking changes)** | HIGH | All changes additive; Session model extension is optional; DynamoDB single-table design accommodates new fields |
+| **Polling strategy (5s+ minimum)** | HIGH | Inferred from existing `useViewerCount` (15s cadence) and IVS API documented limits; load testing will validate |
+| **No encoder metrics in browser** | MEDIUM | IVS Web Broadcast SDK likely limited to viewer experience stats; requires verification in Phase 23 research |
+| **Query performance gating** | MEDIUM | Depends on discipline during Phase 24 implementation; risk if featured data added to list views without pre-fetch |
+| **Privacy implications** | MEDIUM | Current plan assumes featured creators OK with visibility; opt-in consent may be needed (defer to v1.5) |
+| **WebSocket real-time updates** | LOW | Deferred to v1.5; polling strategy (5-10s) acceptable for v1.4 MVP |
 
-**Overall confidence:** HIGH for Phases 1-3; MEDIUM for Phase 4 until the HLS/MediaConvert conflict is resolved; HIGH for Phase 5 once Phase 4 is verified.
+---
 
-### Gaps to Address
+## Gaps & Open Questions
 
-- **CRITICAL — Transcribe HLS input format conflict:** FEATURES.md (HIGH confidence, official AWS docs) says Transcribe does NOT accept HLS M3U8. ARCHITECTURE.md (MEDIUM confidence, self-flagged as "requires verification") says Transcribe accepts HLS m3u8 directly. Before Phase 4 plan-phase, verify against [Amazon Transcribe supported input formats](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html). Treat FEATURES.md as the working assumption: MediaConvert is required. If ARCHITECTURE.md turns out to be correct, Phase 4 scope shrinks significantly.
+1. **Encoder metrics availability:** Phase 23 research must verify exact output of `IVSBroadcastClient.getStatus()` and whether browser WebRTC APIs provide encoder-side bitrate/fps/frame drops. If unavailable, scope dashboard to viewer experience metrics only.
 
-- **Bedrock model ID and regional availability:** STACK.md recommends `anthropic.claude-3-5-haiku-20241022-v1:0`; ARCHITECTURE.md and FEATURES.md recommend `anthropic.claude-3-haiku-20240307-v1:0`. Both are valid. Confirm which is available in the deployment region before writing Phase 5 CDK. Confirm whether the Anthropic FTU form is still required as of the implementation date. Document the manual Bedrock console step prominently in Phase 5's plan.
+2. **Featured creator opt-in:** Should creators be able to opt out of being featured by others? Current plan assumes yes. Product/design needs to clarify consent model before Phase 24 implementation.
 
-- **messageCount tracking approach:** ARCHITECTURE.md recommends an atomic `ADD messageCount :1` counter in `send-message.ts` to avoid a full chat scan at session end for activity card display. This is a `send-message.ts` change not otherwise in scope for any phase. Decide in Phase 3 plan: (a) add the counter to `send-message.ts` as part of Phase 3, (b) scan chat messages at session end in `recording-ended.ts`, or (c) show message count as N/A initially. Option (a) is cleanest long-term; option (c) is lowest risk.
+3. **Avatar storage & CDN:** Featured creator avatars must be preloaded to avoid CLS. Confirm S3 avatars are CloudFront-cached with 1-year cache headers before Phase 24 ships.
 
-- **`GET /activity` authentication posture:** ARCHITECTURE.md specifies `None (public)` for the `/activity` endpoint. Verify whether activity feed data (participant lists, message counts) warrants authentication, or whether the current `GET /recordings` public posture applies equally here. Decide before Phase 3 plan-phase.
+4. **Real-time spotlight transport for v1.5:** Current featured broadcast selection uses HTTP polling (5-10s latency). For instant updates, v1.5 should add WebSocket transport to avoid cluttering IVS Chat with spotlight events.
+
+5. **Load testing infrastructure:** CI/CD should add load testing suite for Phase 23+ to measure API latency under 50+ concurrent users. Currently not in test suite.
+
+---
+
+## Next Steps
+
+1. **Phase 23 Planning:** Run `/gsd:research-phase` to confirm IVS SDK metrics availability + encoder limitations. Update feature requirements based on findings.
+
+2. **Phase 23 Implementation:** Implement metrics collection (5s polling cadence) + caching before UI code. Load test gate must pass before Phase 24 begins.
+
+3. **Phase 24 Planning:** Design featured creator selection modal scoped to "viewers of THIS broadcast only" (not global). Create query audit checklist.
+
+4. **Phase 24 Implementation:** Implement with strict performance gating. Featured data pre-fetched in `list-activity` response; never loaded per card.
+
+5. **Post-Phase 24:** Gather user feedback on polling latency (5-10s). If real-time updates critical, prioritize WebSocket transport for v1.5.
+
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- [Amazon Transcribe supported input formats](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html) — HLS/M3U8 NOT listed as supported format (FEATURES.md position)
-- [Amazon Transcribe StartTranscriptionJob API](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_StartTranscriptionJob.html) — required parameters, output patterns, job name constraints
-- [Amazon Transcribe EventBridge monitoring](https://docs.aws.amazon.com/transcribe/latest/dg/monitoring-events.html) — `Transcribe Job State Change` event structure and detail fields
-- [Bedrock Runtime InvokeModel — Claude TypeScript example](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-runtime_example_bedrock-runtime_InvokeModel_AnthropicClaude_section.html) — `anthropic_version`, payload structure, `content[0].text` response parsing
-- [Amazon Bedrock supported models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) — model IDs and regional availability
-- [Simplified Bedrock model access (Sept 2025)](https://aws.amazon.com/blogs/security/simplified-amazon-bedrock-model-access/) — auto-enablement; Anthropic FTU form still required
-- Codebase direct analysis: `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/` — integration points confirmed at specific lines; IAM and EventBridge patterns read from live CDK
+**High Confidence (Direct Codebase Analysis):**
+- STACK.md: Recharts library research + amazon-ivs-web-broadcast capabilities (verified against installed package versions)
+- ARCHITECTURE.md: Integration points read directly from `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`
+- FEATURES.md: Phasing constraints + feature scope from v1.2 research + AWS official docs (Transcribe, Bedrock, IVS)
+- PITFALLS.md: Risks identified from existing polling pattern (`useViewerCount` 15s cadence) + DynamoDB single-table design + N+1 query anti-patterns
 
-### Secondary (MEDIUM confidence)
-- [IVS and MediaConvert post-processing workflow](https://aws.amazon.com/blogs/media/awse-using-amazon-ivs-and-mediaconvert-in-a-post-processing-workflow/) — confirmed MediaConvert as conversion path after IVS recording
-- [Create summaries of recordings using Bedrock + Transcribe](https://aws.amazon.com/blogs/machine-learning/create-summaries-of-recordings-using-generative-ai-with-amazon-bedrock-and-amazon-transcribe/) — confirmed Bedrock + Transcribe pipeline pattern
-- [Amazon Transcribe pricing](https://aws.amazon.com/transcribe/pricing/) — $0.024/min standard batch, per-second billing
-- [Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) — Claude 3.5 Haiku ~$0.80/M input, ~$4.00/M output
-- [Activity Feed Design Guide (GetStream)](https://getstream.io/blog/activity-feed-design/) — activity feed UX patterns
-- [Horizontal Scrolling Lists in Mobile Best Practices](https://uxdesign.cc/best-practices-for-horizontal-lists-in-mobile-21480b9b73e5) — peek + scroll-snap pattern
+**Medium Confidence (AWS Documentation + Community Patterns):**
+- IVS GetStream API polling limits (5 TPS documented in service docs)
+- Recharts performance at 1-5 updates/sec (40K+ weekly downloads + production dashboards using it)
+- Backend caching tradeoffs for real-time systems (standard architecture pattern)
+- DynamoDB optional fields + backward compatibility (v1.2 established this pattern in same codebase)
 
-### Tertiary (LOW confidence — needs validation before implementation)
-- ARCHITECTURE.md claim that Transcribe accepts HLS m3u8 directly — SELF-FLAGGED by the researcher as "MEDIUM confidence — requires verification against current Transcribe docs before implementation." Do not implement Phase 4 based on this claim without explicit verification. The researcher's own caveat demotes this to LOW confidence for implementation decisions.
+**Verification Required (Phase 23-24 Research Spikes):**
+- Exact metrics available from `IVSBroadcastClient.getStatus()`
+- Browser WebRTC RTCPeerConnection encoder-side stats availability
+- Avatar CDN caching headers (S3 CloudFront config)
+- Load test results with 50+ concurrent broadcasters
 
 ---
-*Research completed: 2026-03-05*
-*Supersedes: v1.1 SUMMARY.md (2026-03-02)*
-*Ready for roadmap: yes — with Phase 4 gated on Transcribe HLS format verification*
+
+## Summary Table: v1.4 Roadmap at a Glance
+
+| Aspect | Phase 23 (Quality Metrics) | Phase 24 (Creator Spotlight) |
+|--------|---------------------------|--------------------------|
+| **Risk Level** | Low-Medium | Medium |
+| **Dependencies** | None | Phase 23 validation |
+| **New Libraries** | Recharts (40KB) | None |
+| **New Handlers** | None (HTTP polling) | `POST /sessions/{id}/feature` |
+| **New Fields (Session)** | `metricsLastUpdated` (optional) | `featuredUid` (optional) |
+| **Breaking Changes** | None | None |
+| **Load Test Required** | YES (50 concurrent) | YES (query audit) |
+| **Duration Estimate** | 2-3 weeks | 2-3 weeks |
+| **Validation Gate** | API latency < 200ms @ 5s cadence | Homepage < 2.5s; featured data pre-fetched |
+| **Backward Compat** | Optional fields; Phase 1-22 compatible | Optional fields; Phase 1-22 compatible |
+| **v1.5 Upgrade Path** | Add encoder metrics if available | Add WebSocket real-time updates; global search |
+
+---
+
+**Research Complete:** 2026-03-06
+**Confidence:** HIGH
+**Ready for Phase Planning:** YES

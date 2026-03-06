@@ -401,6 +401,55 @@ export class SessionStack extends Stack {
     recordingsBucket.grantRead(recordingStartedFn);
 
     // ============================================================
+    // AI Summary Pipeline (Phase 20)
+    // Triggered when transcript is stored, invokes Bedrock Claude to generate summaries
+    // ============================================================
+
+    // Lambda function for store-summary (Bedrock invocation)
+    const storeSummaryFn = new nodejs.NodejsFunction(this, 'StoreSummary', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/store-summary.ts'),
+      timeout: Duration.seconds(60), // Critical: Bedrock latency 5-10s + buffer
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        BEDROCK_REGION: this.region,
+        BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB permissions (read for getSession, write for updateSessionAiSummary)
+    this.table.grantReadWriteData(storeSummaryFn);
+
+    // Grant Bedrock InvokeModel permission
+    storeSummaryFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0`,
+        ],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // EventBridge rule triggered on transcript storage completion (Phase 19)
+    const transcriptStoreRule = new events.Rule(this, 'TranscriptStoreRule', {
+      eventPattern: {
+        source: ['custom.vnl'],
+        detailType: ['Transcript Stored'],
+      },
+      targets: [new targets.LambdaFunction(storeSummaryFn)],
+      description: 'Trigger AI summary generation when transcript is stored',
+    });
+
+    // Grant EventBridge permission to invoke Lambda
+    storeSummaryFn.addPermission('AllowEBTranscriptStoreInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: transcriptStoreRule.ruleArn,
+    });
+
+    // ============================================================
     // IVS Event Audit — catch-all for full pipeline observability
     // CloudWatch log group: /aws/lambda/VnlSessionStack-IvsEventAudit...
     // Logs every aws.ivs event: source, detailType, resources, full detail payload

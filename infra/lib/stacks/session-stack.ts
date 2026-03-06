@@ -101,7 +101,7 @@ export class SessionStack extends Stack {
           allowedOrigins: ['*'],
           allowedHeaders: ['*'],
           exposedHeaders: ['ETag'],
-          maxAge: Duration.hours(1),
+          maxAge: 3600, // 1 hour in seconds
         },
       ],
     });

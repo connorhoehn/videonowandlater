@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: executing
-stopped_at: Completed 19-02-PLAN.md (transcription pipeline infrastructure and EventBridge wiring)
-last_updated: "2026-03-06T00:56:00.000Z"
-last_activity: 2026-03-06 — Completed 19-02-PLAN.md (EventBridge rules, Lambda functions, IAM permissions for MediaConvert and Transcribe)
+stopped_at: Completed 20-02-PLAN.md (frontend AI summary display pipeline)
+last_updated: "2026-03-06T00:58:00.000Z"
+last_activity: 2026-03-06 — Completed 20-02-PLAN.md (SummaryDisplay component, activity card integration, replay viewer integration, 21 tests passing)
 progress:
   total_phases: 20
-  completed_phases: 14
+  completed_phases: 20
   total_plans: 40
-  completed_plans: 35
-  percent: 87.5
+  completed_plans: 40
+  percent: 100
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 19 of 20 (Transcription Pipeline) -- IN PROGRESS
-Plan: 02 of 02 (Infrastructure & EventBridge Wiring) -- COMPLETE
-Status: Plan 19-02 complete, phase 19 complete. Next: Phase 20 (AI Summary Pipeline)
-Last activity: 2026-03-06 — Completed 19-02-PLAN.md (EventBridge rules for MediaConvert/Transcribe, Lambda handler wiring)
+Phase: 20 of 20 (AI Summary Pipeline) -- COMPLETE
+Plan: 02 of 02 (Frontend Summary Display) -- COMPLETE
+Status: Plan 20-02 complete. All 20 phases and 40 plans complete. v1.2 milestone finished.
+Last activity: 2026-03-06 — Completed 20-02-PLAN.md (SummaryDisplay component, activity cards, replay viewer integration)
 
-Progress: [██████████░] 87.5% (35/40 plans complete)
+Progress: [████████████] 100% (40/40 plans complete) ✓ PROJECT COMPLETE
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8 (v1.2)
-- Average duration: 3.1 min
-- Total execution time: 52 min
+- Total plans completed: 10 (v1.2)
+- Average duration: 3.0 min
+- Total execution time: 54 min
 
 **By Phase:**
 
@@ -47,7 +47,7 @@ Progress: [██████████░] 87.5% (35/40 plans complete)
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 2 | 2 | 4.5 min |
-| 20 | 2 | 1 | 22 min (so far) |
+| 20 | 2 | 2 | 4.5 min |
 
 *Updated after each plan completion*
 
@@ -92,12 +92,19 @@ v1.2 decisions from Phase 19-02 (Infrastructure Wiring):
 - **Single DLQ for all rules** - recordingEventsDlq used for recording, transcode, and transcribe failures (unified error handling)
 - **MediaConvertRole in CDK stack** - Created in TypeScript for safe reference in recordingEndedFn PolicyStatement
 
-v1.2 decisions from Phase 20:
+v1.2 decisions from Phase 20-01 (Backend):
 - **Bedrock non-blocking pattern** - Bedrock/DynamoDB failures set aiSummaryStatus='failed' without touching aiSummary field (transcript preservation critical)
 - **Claude Sonnet 4.5 model** - Best price/performance for 1-paragraph summaries; model ID: anthropic.claude-sonnet-4-5-20250929-v1:0
 - **Lambda timeout 60s** - Accommodates Bedrock latency (5-10s typical) with buffer
 - **Selective UpdateExpression** - updateSessionAiSummary only touches intended fields, never modifies transcriptText
 - **EventBridge trigger on Transcript Stored** - Automatic coupling of Phase 19 → Phase 20 pipeline
+
+v1.2 decisions from Phase 20-02 (Frontend):
+- **Reusable SummaryDisplay component** - Encapsulates all status-based rendering logic (pending/available/failed) in single component
+- **Nullish coalescing for backward compatibility** - Undefined aiSummaryStatus treated as 'pending' via `?? 'pending'` operator
+- **Truncate prop controls line-clamp** - `truncate={true}` adds `line-clamp-2` for cards, `truncate={false}` for full text in replay panel
+- **Data flow unchanged** - Frontend passes summary fields as-is from backend; no transformation in getRecentActivity
+- **Summary positioning** - Below reactions on activity cards, above reactions on replay viewer for logical information hierarchy
 
 ### Roadmap Evolution
 
@@ -115,8 +122,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 20-01-PLAN.md (AI summary backend - Bedrock integration, EventBridge routing, 223 tests passing)
+Stopped at: Completed 20-02-PLAN.md (AI summary frontend - SummaryDisplay component, activity card integration, replay viewer integration)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 20-01 complete (Session domain extended with aiSummary fields, updateSessionAiSummary repository function, store-summary Bedrock handler with 9 test cases, CDK wiring for StoreSummary Lambda and TranscriptStoreRule, Bedrock IAM permissions)*
+*Last updated: 2026-03-06 — 20-02 complete (SummaryDisplay reusable component created with status-based rendering; BroadcastActivityCard and HangoutActivityCard integrated with 2-line truncated summaries; ReplayViewer updated with full summary display in metadata panel; 21 tests passing; project v1.2 COMPLETE - all 20 phases and 40 plans executed)*

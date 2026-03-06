@@ -336,6 +336,8 @@ export class SessionStack extends Stack {
       timeout: Duration.seconds(30),
       environment: {
         TABLE_NAME: this.table.tableName,
+        // Force Lambda update
+        LAMBDA_VERSION: '2026-03-06-16:15',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });

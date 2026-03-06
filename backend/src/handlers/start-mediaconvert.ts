@@ -83,18 +83,6 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                         },
                       },
                     },
-                    AudioDescriptions: [
-                      {
-                        CodecSettings: {
-                          Codec: 'AAC',
-                          AacSettings: {
-                            Bitrate: 128000,
-                            CodingMode: 'CODING_MODE_2_0',
-                            SampleRate: 48000,
-                          },
-                        },
-                      },
-                    ],
                   },
                   {
                     NameModifier: '720p',
@@ -112,18 +100,6 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                         },
                       },
                     },
-                    AudioDescriptions: [
-                      {
-                        CodecSettings: {
-                          Codec: 'AAC',
-                          AacSettings: {
-                            Bitrate: 128000,
-                            CodingMode: 'CODING_MODE_2_0',
-                            SampleRate: 48000,
-                          },
-                        },
-                      },
-                    ],
                   },
                   {
                     NameModifier: '480p',
@@ -141,18 +117,6 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                         },
                       },
                     },
-                    AudioDescriptions: [
-                      {
-                        CodecSettings: {
-                          Codec: 'AAC',
-                          AacSettings: {
-                            Bitrate: 128000,
-                            CodingMode: 'CODING_MODE_2_0',
-                            SampleRate: 48000,
-                          },
-                        },
-                      },
-                    ],
                   },
                 ],
               },

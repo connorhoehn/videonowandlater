@@ -210,6 +210,7 @@ export const handler = async (
                       CodecSettings: {
                         Codec: 'H_264',
                         H264Settings: {
+                          Bitrate: 5000000,
                           MaxBitrate: 5000000,
                           RateControlMode: 'VBR',
                           CodecProfile: 'MAIN',

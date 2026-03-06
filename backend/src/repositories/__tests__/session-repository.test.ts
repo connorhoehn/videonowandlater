@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary, createUploadSession, updateUploadProgress, updateConvertStatus } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary, createUploadSession, updateUploadProgress, updateConvertStatus, claimPrivateChannel } from '../session-repository';
 import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
@@ -1081,6 +1081,142 @@ describe('session-repository', () => {
       const call = mockSend.mock.calls[0][0];
       expect(call.input.UpdateExpression).not.toContain('uploadProgress');
       expect(call.input.UpdateExpression).not.toContain('uploadStatus');
+    });
+  });
+
+  describe('claimPrivateChannel', () => {
+    const mockSend = jest.fn();
+    const mockPoolItem = {
+      PK: 'POOL#CHANNEL#priv-123',
+      SK: 'METADATA',
+      GSI1PK: 'STATUS#AVAILABLE#PRIVATE_CHANNEL',
+      channelArn: 'arn:aws:ivs:us-west-2:123456789:channel/private-abc',
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('should return private channel when available', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      mockSend.mockResolvedValueOnce({}); // UpdateCommand response
+
+      const result = await claimPrivateChannel(tableName);
+
+      expect(result).toEqual({
+        channelArn: mockPoolItem.channelArn,
+        isPrivate: true,
+      });
+    });
+
+    it('should query GSI1 for STATUS#AVAILABLE#PRIVATE_CHANNEL', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      mockSend.mockResolvedValueOnce({});
+
+      await claimPrivateChannel(tableName);
+
+      const queryCall = mockSend.mock.calls[0][0];
+      expect(queryCall.input.IndexName).toBe('GSI1');
+      expect(queryCall.input.KeyConditionExpression).toBe('GSI1PK = :pk');
+      expect(queryCall.input.ExpressionAttributeValues[':pk']).toBe('STATUS#AVAILABLE#PRIVATE_CHANNEL');
+    });
+
+    it('should transition pool item to CLAIMED state', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      mockSend.mockResolvedValueOnce({});
+
+      await claimPrivateChannel(tableName);
+
+      const updateCall = mockSend.mock.calls[1][0];
+      expect(updateCall.input.UpdateExpression).toBe('SET GSI1PK = :claimed');
+      expect(updateCall.input.ExpressionAttributeValues[':claimed']).toBe('STATUS#CLAIMED#PRIVATE_CHANNEL');
+      expect(updateCall.input.ConditionExpression).toBe('GSI1PK = :expected');
+    });
+
+    it('should return null when no private channels available', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      const result = await claimPrivateChannel(tableName);
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when Items is undefined', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await claimPrivateChannel(tableName);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle ConditionalCheckFailedException gracefully by returning null', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      const conditionalError = Object.assign(new Error('Conditional check failed'), {
+        name: 'ConditionalCheckFailedException',
+      });
+      mockSend.mockRejectedValueOnce(conditionalError);
+
+      const result = await claimPrivateChannel(tableName);
+
+      expect(result).toBeNull();
+    });
+
+    it('should re-throw non-ConditionalCheckFailedException errors', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      const otherError = new Error('Network error');
+      mockSend.mockRejectedValueOnce(otherError);
+
+      await expect(claimPrivateChannel(tableName)).rejects.toThrow('Network error');
+    });
+
+    it('should use Limit: 1 to get only one channel', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [mockPoolItem] });
+      mockSend.mockResolvedValueOnce({});
+
+      await claimPrivateChannel(tableName);
+
+      const queryCall = mockSend.mock.calls[0][0];
+      expect(queryCall.input.Limit).toBe(1);
+    });
+  });
+
+  describe('Session.isPrivate field isolation', () => {
+    it('should not affect other session fields when isPrivate is set', () => {
+      const session: Session = {
+        sessionId: 'sess-123',
+        userId: 'user-456',
+        sessionType: SessionType.BROADCAST,
+        status: SessionStatus.CREATING,
+        isPrivate: true,
+        createdAt: '2026-03-06T12:00:00Z',
+        claimedResources: { chatRoom: 'room-abc' },
+        version: 1,
+      };
+
+      // Verify field isolation (check the type is correct and other fields intact)
+      expect(session.isPrivate).toBe(true);
+      expect(session.userId).toBe('user-456');
+      expect(session.sessionType).toBe(SessionType.BROADCAST);
+      expect(session.sessionId).toBe('sess-123');
+    });
+
+    it('should treat undefined isPrivate as false for backward compatibility', () => {
+      const session: Session = {
+        sessionId: 'sess-old',
+        userId: 'user-789',
+        sessionType: SessionType.BROADCAST,
+        status: SessionStatus.LIVE,
+        createdAt: '2026-03-06T12:00:00Z',
+        claimedResources: { chatRoom: 'room-def' },
+        version: 1,
+      };
+
+      // Verify backward compatibility — undefined is falsy
+      expect(session.isPrivate ?? false).toBe(false);
+      expect(session.userId).toBe('user-789');
     });
   });
 });

@@ -17,6 +17,7 @@ jest.mock('../../lib/ivs-clients');
 const mockGetSessionById = sessionRepository.getSessionById as jest.MockedFunction<typeof sessionRepository.getSessionById>;
 const mockGetIVSRealTimeClient = ivsClients.getIVSRealTimeClient as jest.MockedFunction<typeof ivsClients.getIVSRealTimeClient>;
 const mockUpdateSessionStatus = sessionRepository.updateSessionStatus as jest.MockedFunction<typeof sessionRepository.updateSessionStatus>;
+const mockAddHangoutParticipant = sessionRepository.addHangoutParticipant as jest.MockedFunction<typeof sessionRepository.addHangoutParticipant>;
 
 describe('join-hangout handler', () => {
   const TABLE_NAME = 'test-table';
@@ -35,6 +36,7 @@ describe('join-hangout handler', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUpdateSessionStatus.mockResolvedValue(undefined);
+    mockAddHangoutParticipant.mockResolvedValue(undefined);
   });
 
   function createEvent(overrides?: Partial<APIGatewayProxyEvent>): APIGatewayProxyEvent {
@@ -130,10 +132,10 @@ describe('join-hangout handler', () => {
       expect.objectContaining({
         input: expect.objectContaining({
           stageArn: STAGE_ARN,
-          userId: USER_ID,
-          duration: 43200, // 12 hours
+          userId: USERNAME, // cognito:username, not sub
+          duration: 720, // 12 hours in minutes (IVS max: 20160)
           capabilities: ['PUBLISH', 'SUBSCRIBE'],
-          attributes: { username: USERNAME, userId: USERNAME },
+          attributes: { userId: USERNAME },
         }),
       })
     );
@@ -186,5 +188,87 @@ describe('join-hangout handler', () => {
       expirationTime: new Date(EXPIRATION_TIME).toISOString(),
       userId: USERNAME,
     });
+  });
+
+  test('calls addHangoutParticipant after successful token generation', async () => {
+    const event = createEvent();
+
+    const hangoutSession: Session = {
+      sessionId: SESSION_ID,
+      userId: 'owner123',
+      sessionType: SessionType.HANGOUT,
+      status: SessionStatus.LIVE,
+      claimedResources: {
+        stage: STAGE_ARN,
+        chatRoom: 'arn:aws:ivschat:us-west-2:123456789012:room/abc',
+      },
+      createdAt: '2026-03-03T12:00:00Z',
+      version: 1,
+    };
+
+    mockGetSessionById.mockResolvedValueOnce(hangoutSession);
+
+    const mockSend = jest.fn().mockResolvedValueOnce({
+      participantToken: {
+        token: PARTICIPANT_TOKEN,
+        participantId: PARTICIPANT_ID,
+        expirationTime: new Date(EXPIRATION_TIME),
+      },
+    });
+
+    mockGetIVSRealTimeClient.mockReturnValueOnce({
+      send: mockSend,
+    } as any);
+
+    const result = await handler(event) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    expect(mockAddHangoutParticipant).toHaveBeenCalledWith(
+      TABLE_NAME,
+      SESSION_ID,
+      USERNAME,
+      USERNAME,
+      PARTICIPANT_ID,
+    );
+  });
+
+  test('returns 200 even when addHangoutParticipant throws', async () => {
+    const event = createEvent();
+
+    const hangoutSession: Session = {
+      sessionId: SESSION_ID,
+      userId: 'owner123',
+      sessionType: SessionType.HANGOUT,
+      status: SessionStatus.LIVE,
+      claimedResources: {
+        stage: STAGE_ARN,
+        chatRoom: 'arn:aws:ivschat:us-west-2:123456789012:room/abc',
+      },
+      createdAt: '2026-03-03T12:00:00Z',
+      version: 1,
+    };
+
+    mockGetSessionById.mockResolvedValueOnce(hangoutSession);
+    mockAddHangoutParticipant.mockRejectedValueOnce(new Error('DynamoDB write failed'));
+
+    const mockSend = jest.fn().mockResolvedValueOnce({
+      participantToken: {
+        token: PARTICIPANT_TOKEN,
+        participantId: PARTICIPANT_ID,
+        expirationTime: new Date(EXPIRATION_TIME),
+      },
+    });
+
+    mockGetIVSRealTimeClient.mockReturnValueOnce({
+      send: mockSend,
+    } as any);
+
+    const result = await handler(event) as APIGatewayProxyResult;
+
+    // Handler should still return 200 with token (participant tracking is best-effort)
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.token).toBe(PARTICIPANT_TOKEN);
+    expect(body.participantId).toBe(PARTICIPANT_ID);
   });
 });

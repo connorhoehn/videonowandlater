@@ -10,10 +10,12 @@ import {
   updateSessionStatus,
   updateRecordingMetadata,
   findSessionByStageArn,
-  computeAndStoreReactionSummary
+  computeAndStoreReactionSummary,
+  getHangoutParticipants,
+  updateParticipantCount,
 } from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
-import { SessionStatus } from '../domain/session';
+import { SessionStatus, SessionType } from '../domain/session';
 import type { Session } from '../domain/session';
 
 interface BroadcastRecordingEndDetail {
@@ -143,6 +145,19 @@ export const handler = async (
     } catch (summaryError: any) {
       console.error('Failed to compute reaction summary (non-blocking):', summaryError.message);
       // Don't throw - summary computation is best-effort, don't block session cleanup
+    }
+
+    // Compute participant count for hangout sessions -- best-effort (PTCP-02)
+    if (session.sessionType === SessionType.HANGOUT) {
+      try {
+        const participants = await getHangoutParticipants(tableName, sessionId);
+        if (participants.length > 0) {
+          await updateParticipantCount(tableName, sessionId, participants.length);
+          console.log('Participant count updated:', { sessionId, count: participants.length });
+        }
+      } catch (participantCountError: any) {
+        console.error('Failed to update participant count (non-blocking):', participantCountError.message);
+      }
     }
 
     // Release pool resources (Channel or Stage)

@@ -123,6 +123,7 @@ None.
 |---|-------------|------|--------|-----------|
 | 1 | Fix MediaConvert EventBridge rule | 2026-03-06 | 177aed2 | [1-fix-mediaconvert-eventbridge-rule](./quick/1-fix-mediaconvert-eventbridge-rule/) |
 | 2 | Update webapp scripts to connect to user | 2026-03-06 | 5462ffd | [2-update-webapp-scripts-to-connect-to-user](./quick/2-update-webapp-scripts-to-connect-to-user/) |
+| 3 | Add start-transcribe handler to complete pipeline | 2026-03-06 | 4c7548c | [3-add-start-transcribe-handler-to-complete](./quick/3-add-start-transcribe-handler-to-complete/) |
 
 ## Session Continuity
 

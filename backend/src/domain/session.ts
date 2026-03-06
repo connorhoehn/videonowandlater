@@ -62,6 +62,10 @@ export interface Session {
   recordingHlsUrl?: string;
   recordingStatus?: RecordingStatus;
   reactionSummary?: Record<string, number>;
+  // Transcription pipeline state (populated after recording is available)
+  transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  transcriptS3Path?: string;
+  transcript?: string;
   // Hangout participant tracking (populated at session end)
   participantCount?: number;
   // Chat activity (tracked atomically in send-message handler)

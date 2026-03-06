@@ -22,7 +22,7 @@ BASELINE_LATENCY=$(aws cloudwatch get-metric-statistics \
   --metric-name Latency \
   --dimensions Name=ApiName,Value=VideoNowAndLaterAPI \
   --statistics Average \
-  --start-time $(date -u -d "@$START_TIME" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -r "$START_TIME" +%Y-%m-%dT%H:%M:%S) \
+  --start-time $(date -u -d "@$START_TIME" +%Y-%m-%dT%H:%M:%S) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
   --period 300 \
   --region "$REGION" \
@@ -39,11 +39,11 @@ for i in $(seq 1 $CONCURRENT_BROADCASTERS); do
     SESSION_ID="load-test-session-$i"
     for j in $(seq 1 $((TEST_DURATION_SEC / 5))); do
       # Simulate metrics poll (5s cadence)
-      START=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+      START=$(date +%s%3N)
       curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer fake-token-$i" \
         "$API_ENDPOINT/sessions/$SESSION_ID" > /tmp/load-test-$i-$j.log 2>&1
-      END=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+      END=$(date +%s%3N)
       LATENCY=$((END - START))
       echo "$LATENCY" >> /tmp/load-test-latencies.log
       sleep 5
@@ -101,8 +101,8 @@ THROTTLE_COUNT=$(aws cloudwatch get-metric-statistics \
   --metric-name UserErrors \
   --dimensions Name=TableName,Value="$TABLE_NAME" \
   --statistics Sum \
-  --start-time $(date -u -d "@$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -r "$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u -d "@$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -r "$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S) \
+  --start-time $(date -u -d "@$TEST_START_TIME" +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u -d "@$TEST_END_TIME" +%Y-%m-%dT%H:%M:%S) \
   --period $TEST_DURATION_SEC \
   --region "$REGION" \
   --query 'Datapoints[0].Sum' \

@@ -35,6 +35,12 @@ interface GetSessionResponse {
   recordingDuration?: number;
   thumbnailUrl?: string;
   recordingStatus?: RecordingStatus;
+  reactionSummary?: Record<string, number>;
+  aiSummary?: string;
+  aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  mediaConvertJobName?: string;
 }
 
 /**
@@ -165,5 +171,11 @@ export async function getSession(tableName: string, sessionId: string): Promise<
     recordingDuration: session.recordingDuration,
     thumbnailUrl: session.thumbnailUrl,
     recordingStatus: session.recordingStatus,
+    reactionSummary: session.reactionSummary,
+    aiSummary: session.aiSummary,
+    aiSummaryStatus: session.aiSummaryStatus,
+    transcriptStatus: session.transcriptStatus,
+    convertStatus: session.convertStatus,
+    mediaConvertJobName: session.mediaConvertJobName,
   };
 }

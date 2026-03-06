@@ -346,7 +346,10 @@ export function ReplayViewer() {
                 </div>
 
                 {/* Processing Timeline Audit Log */}
-                <SessionAuditLog session={session} compact={false} />
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-600 uppercase mb-3">Processing Timeline</h3>
+                  <SessionAuditLog session={session} compact={false} />
+                </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <h3 className="text-xs font-semibold text-gray-600 uppercase mb-2">Reactions</h3>

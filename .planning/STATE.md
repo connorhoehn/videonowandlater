@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Activity Feed & Intelligence
-status: Implemented POST /sessions/{sessionId}/playback-token endpoint with ES384 JWT signing for private broadcast playback. Handler validates private sessions, extracts channel ARNs, generates time-limited tokens (24-hour default), and constructs playback URLs with token parameters. Comprehensive unit test coverage (8 tests) for token generation, defaults, and all error cases. Added jsonwebtoken dependency. All 331 backend tests passing.
-stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering, private channel pool infrastructure, IVS playback key wiring)
-last_updated: "2026-03-06T01:39:12.895Z"
-last_activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
+milestone: v1.3
+milestone_name: Video Uploads (Phase 21) + Live Broadcast with Secure Viewer Links (Phase 22)
+status: Completed Phase 21 Plan 05 (API Gateway integration for upload handlers). Three upload endpoints (/upload/init, /upload/part-url, /upload/complete) wired into API Gateway with Lambda function definitions, Cognito authorization, and proper IAM permissions. CloudFormation outputs added for debugging. All 339 backend tests passing. Upload API now accessible from frontend.
+stopped_at: Completed 21-05-PLAN.md (API Gateway integration for upload handlers)
+last_updated: "2026-03-06T01:57:00Z"
+last_activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway integration for three upload endpoints)
 progress:
   total_phases: 22
-  completed_phases: 20
+  completed_phases: 21
   total_plans: 54
-  completed_plans: 49
-  percent: 91
+  completed_plans: 51
+  percent: 94
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 21 of 22 (Video Uploads) -- IN PROGRESS
-Plan: 05 of 06 (API Gateway Wiring - Gap Closure) -- COMPLETE
-Status: Successfully wired upload handlers into API Gateway with Lambda functions, Cognito auth, and complete IAM permissions. API Gateway routes created for POST /upload/init, POST /upload/part-url, POST /upload/complete. All three functions have correct environment variables and permissions (DynamoDB, S3, SNS). CDK synthesizes successfully with all handlers bundled. Upload API infrastructure ready for frontend integration.
-Last activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway wiring for upload handlers)
+Plan: 05 of 05 (API Gateway Integration) -- COMPLETE
+Status: API Gateway integration complete. Three upload endpoints (init, part-url, complete) wired into API Gateway with Lambda function definitions, Cognito authorization, and IAM permissions. CloudFormation outputs for debugging. Ready for frontend integration.
+Last activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway integration for upload handlers)
 
-Progress: [█████████████████░░░] 91% (49/54 plans complete)
+Progress: [████████████████████] 94% (51/54 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 44 (v1.1 + v1.2 + v1.3 start + gap closure)
-- Average duration: 3.5 min
-- Total execution time: ~141 min (including all phase executions)
+- Total plans completed: 51 (v1.1 + v1.2 + v1.3 + gap closures)
+- Average duration: 3.2 min
+- Total execution time: ~158 min (including all phase executions)
 
 **By Phase:**
 

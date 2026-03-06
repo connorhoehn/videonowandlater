@@ -3,11 +3,13 @@
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SessionStatus } from '../domain/session';
 import { calculateSessionRelativeTime } from '../domain/chat-message';
 import type { ChatMessage } from '../domain/chat-message';
 import { getSessionById } from '../repositories/session-repository';
 import { persistMessage } from '../repositories/chat-repository';
+import { getDocumentClient } from '../lib/dynamodb-client';
 
 interface SendMessageRequest {
   messageId: string;
@@ -111,8 +113,23 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       senderAttributes: body.senderAttributes || {},
     };
 
-    // Persist message
+    // Persist message and increment messageCount atomically
     await persistMessage(tableName, message);
+
+    // Increment messageCount on session record
+    const docClient = getDocumentClient();
+    await docClient.send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `SESSION#${sessionId}`,
+        SK: 'METADATA',
+      },
+      UpdateExpression: 'SET messageCount = if_not_exists(messageCount, :zero) + :inc',
+      ExpressionAttributeValues: {
+        ':zero': 0,
+        ':inc': 1,
+      },
+    }));
 
     return {
       statusCode: 201,

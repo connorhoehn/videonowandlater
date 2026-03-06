@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Creator Studio & Stream Quality
 status: executing
-stopped_at: "Completed 22.1-03-PLAN.md"
-last_updated: "2026-03-06T15:18:00.000Z"
-last_activity: 2026-03-06 — Completed Phase 22.1 Plan 03: Upload Activity Card Variant
+stopped_at: "Completed 22.1-02-PLAN.md"
+last_updated: "2026-03-06T15:36:00.000Z"
+last_activity: 2026-03-06 — Completed Phase 22.1 Plan 02: Nova Pro AI Integration
 progress:
   total_phases: 2
   completed_phases: 0
@@ -51,6 +51,12 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 ## Accumulated Context
 
 ### Key Decisions
+
+**Phase 22.1-02 — Nova Pro AI Integration:**
+- Switched default AI model from Claude to Amazon Nova Pro for 30-50% cost reduction
+- Implemented dual payload format support for both Nova and Claude models
+- Environment-based model configuration via BEDROCK_MODEL_ID variable
+- Backward compatibility maintained through automatic model detection
 
 **Phase 22.1-03 — Upload Activity Card:**
 - Switch statement for session type rendering (extensible for future types)
@@ -99,7 +105,7 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 ### Pending Todos (4)
 
 - [ ] Add CDK hooks to clean up IVS resources before stack deletion (infra)
-- [ ] Switch to Nova Pro for AI generative processing (backend)
+- [x] Switch to Nova Pro for AI generative processing (backend) - COMPLETED in 22.1-02
 - [ ] Phase 23-02: Dashboard UI with real-time charts integration
 - [ ] Phase 23-03: Broadcaster preferences and dashboard controls
 

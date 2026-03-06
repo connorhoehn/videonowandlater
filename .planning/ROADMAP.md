@@ -71,7 +71,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 Plans:
 - [ ] 22.1-01-PLAN.md — Add CDK custom resource for IVS cleanup on stack deletion
-- [ ] 22.1-02-PLAN.md — Switch AI processing from Claude to Nova Pro model
+- [x] 22.1-02-PLAN.md — Switch AI processing from Claude to Nova Pro model ✅
 - [x] 22.1-03-PLAN.md — Create upload activity card variant for activity feed ✅
 
 ### Phase 23: Stream Quality Monitoring Dashboard

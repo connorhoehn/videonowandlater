@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Activity Feed & Intelligence
-status: completed
-stopped_at: Completed 18-04-PLAN.md (5 activity component test files, 31 tests, gap closure)
-last_updated: "2026-03-06T01:08:53.782Z"
-last_activity: 2026-03-06 — Completed 21-02-PLAN.md (POST /upload/init, POST /upload/part-url, POST /upload/complete handlers)
+milestone: v1.3
+milestone_name: Video Upload Support
+status: in-progress
+stopped_at: Completed 21-04-PLAN.md (Frontend Upload UI & HomePage Integration)
+last_updated: "2026-03-06T01:20:14.000Z"
+last_activity: 2026-03-06 — Completed 21-04-PLAN.md (useVideoUpload hook, VideoUploadForm component, HomePage modal, 16 unit tests)
 progress:
-  total_phases: 19
-  completed_phases: 16
-  total_plans: 43
-  completed_plans: 39
-  percent: 90
+  total_phases: 21
+  completed_phases: 20
+  total_plans: 44
+  completed_plans: 40
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 21 of 21 (Video Uploads Support) -- IN PROGRESS
-Plan: 02 of 04 (Upload Lambda Handlers) -- COMPLETE
-Status: Plans 21-01 and 21-02 complete. Session domain extended with UPLOAD type and repository functions. Three Lambda handlers implemented (init-upload, get-part-presigned-url, complete-upload) with 32 unit tests. Next: 21-03 (MediaConvert job submission).
-Last activity: 2026-03-06 — Completed 21-02-PLAN.md (POST /upload/init, POST /upload/part-url, POST /upload/complete handlers)
+Plan: 04 of 04 (Frontend Upload UI & HomePage Integration) -- COMPLETE
+Status: All four Phase 21 plans complete. Complete upload pipeline: domain models (21-01), Lambda handlers with S3 multipart (21-02), MediaConvert/transcription integration (21-03), frontend UI with retry logic and HomePage integration (21-04). 16 new web tests added. Next: Phase 22 launch.
+Last activity: 2026-03-06 — Completed 21-04-PLAN.md (useVideoUpload hook, VideoUploadForm component, HomePage modal overlay, vitest setup)
 
-Progress: [██████████████░░░░] 90% (38/42 plans complete)
+Progress: [███████████████░░░░] 91% (40/44 plans complete)
 
 ## Performance Metrics
 
@@ -48,8 +48,7 @@ Progress: [██████████████░░░░] 90% (38/42 pl
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 2 | 2 | 4.5 min |
 | 20 | 2 | 2 | 4.5 min |
-| 21 | 4 | 2 | 4 min (so far) |
-| 21 | 2 | 1 | 12 min (so far) |
+| 21 | 4 | 4 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min) |
 
 *Updated after each plan completion*
 | Phase 18 P04 | 3min | 2 tasks | 5 files |

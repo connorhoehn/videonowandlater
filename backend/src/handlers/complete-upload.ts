@@ -12,6 +12,13 @@ import {
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { getSessionById, updateUploadProgress } from '../repositories/session-repository';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || 'http://localhost:5173',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '3600',
+};
+
 interface PartETag {
   partNumber: number;
   eTag: string;
@@ -41,7 +48,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!sessionId || !uploadId || !Array.isArray(partETags) || partETags.length === 0) {
       return {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         body: JSON.stringify({
           error: 'Missing required fields: sessionId, uploadId, partETags (non-empty array)',
         }),
@@ -53,7 +60,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!session) {
       return {
         statusCode: 404,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         body: JSON.stringify({ error: 'Session not found' }),
       };
     }
@@ -104,7 +111,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
       return {
         statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         body: JSON.stringify(response),
       };
     } catch (s3Error) {
@@ -129,7 +136,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         body: JSON.stringify({ error: 'Failed to complete upload. Upload aborted.' }),
       };
     }
@@ -137,7 +144,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.error('complete-upload error:', error);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       body: JSON.stringify({ error: 'Internal server error' }),
     };
   }

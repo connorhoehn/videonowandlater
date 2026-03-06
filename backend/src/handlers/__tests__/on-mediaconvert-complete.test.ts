@@ -6,8 +6,10 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../on-mediaconvert-complete';
 import * as sessionRepository from '../../repositories/session-repository';
+import * as eventbridgeModule from '@aws-sdk/client-eventbridge';
 
 jest.mock('../../repositories/session-repository');
+jest.mock('@aws-sdk/client-eventbridge');
 
 const mockGetSessionById = sessionRepository.getSessionById as jest.MockedFunction<typeof sessionRepository.getSessionById>;
 const mockUpdateSessionRecording = sessionRepository.updateSessionRecording as jest.MockedFunction<typeof sessionRepository.updateSessionRecording>;
@@ -471,6 +473,188 @@ describe('on-mediaconvert-complete handler', () => {
           recordingHlsUrl: `s3://${BUCKET_NAME}/hls/${sessionId}/master.m3u8`,
         })
       );
+    });
+  });
+
+  describe('EventBridge event publication', () => {
+    it('should publish EventBridge event to trigger transcription on COMPLETE status', async () => {
+      const mockSend = jest.fn().mockResolvedValue({});
+      const mockEventBridgeClient = {
+        send: mockSend,
+      };
+
+      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      (eventbridgeModule.PutEventsCommand as unknown as jest.Mock).mockImplementation((input) => ({ input }));
+
+      const sessionId = 'eb-test-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-eb-test',
+          status: 'COMPLETE',
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-eb-test',
+        resources: [],
+      } as any;
+
+      await handler(event);
+
+      expect(mockSend).toHaveBeenCalled();
+      const putEventsCommand = mockSend.mock.calls[0][0];
+      expect(putEventsCommand.input.Entries[0].Source).toBe('vnl.upload');
+      expect(putEventsCommand.input.Entries[0].DetailType).toBe('Upload Recording Available');
+
+      const detail = JSON.parse(putEventsCommand.input.Entries[0].Detail);
+      expect(detail.sessionId).toBe(sessionId);
+      expect(detail.recordingHlsUrl).toBe(`s3://${BUCKET_NAME}/hls/${sessionId}/master.m3u8`);
+    });
+
+    it('should NOT publish EventBridge event on ERROR status', async () => {
+      const mockSend = jest.fn().mockResolvedValue({});
+      const mockEventBridgeClient = {
+        send: mockSend,
+      };
+
+      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+
+      const sessionId = 'eb-error-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-eb-error',
+          status: 'ERROR',
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-eb-error',
+        resources: [],
+      } as any;
+
+      await handler(event);
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('should NOT publish EventBridge event on CANCELED status', async () => {
+      const mockSend = jest.fn().mockResolvedValue({});
+      const mockEventBridgeClient = {
+        send: mockSend,
+      };
+
+      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+
+      const sessionId = 'eb-canceled-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-eb-canceled',
+          status: 'CANCELED',
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-eb-canceled',
+        resources: [],
+      } as any;
+
+      await handler(event);
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('should log error if EventBridge publish fails', async () => {
+      const mockSend = jest.fn().mockRejectedValue(new Error('EventBridge publish failed'));
+      const mockEventBridgeClient = {
+        send: mockSend,
+      };
+
+      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      (eventbridgeModule.PutEventsCommand as unknown as jest.Mock).mockImplementation((input) => ({ input }));
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const sessionId = 'eb-publish-fail-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-eb-publish-fail',
+          status: 'COMPLETE',
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-eb-publish-fail',
+        resources: [],
+      } as any;
+
+      // Should not throw
+      await expect(handler(event)).resolves.toBeUndefined();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/Failed to publish transcription event/),
+        expect.any(Error)
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

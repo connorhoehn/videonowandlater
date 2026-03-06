@@ -5,15 +5,18 @@ import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
 import { RecordingSlider, type ActivitySession } from '../features/activity/RecordingSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
+import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 
 export function HomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<ActivitySession[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchActivity = async () => {
@@ -34,6 +37,19 @@ export function HomePage() {
       }
     };
     fetchActivity();
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const session = await fetchAuthSession();
+        const token = session.tokens?.idToken?.toString() || null;
+        setAuthToken(token);
+      } catch (err) {
+        console.error('Error fetching auth session:', err);
+      }
+    };
+    initAuth();
   }, []);
 
   const handleSignOut = async () => {
@@ -118,6 +134,14 @@ export function HomePage() {
             >
               {isCreatingHangout ? 'Creating…' : 'Hangout'}
             </button>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-50"
+              style={{ background: '#16a34a', color: 'white' }}
+            >
+              Upload
+            </button>
           </div>
 
           {/* User */}
@@ -152,6 +176,18 @@ export function HomePage() {
           </>
         )}
       </main>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <VideoUploadForm
+              authToken={authToken}
+              onClose={() => setShowUploadModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

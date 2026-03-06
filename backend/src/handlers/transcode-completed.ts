@@ -26,18 +26,19 @@ export const handler = async (
   const tableName = process.env.TABLE_NAME!;
   const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
   const detail = event.detail as any;
-  const jobName: string = detail.jobName;
 
-  console.log('MediaConvert job completed:', { jobName, status: detail.status });
+  // MediaConvert events include jobId and userMetadata, not jobName
+  const jobId: string = detail.jobId;
+  const userMetadata = detail.userMetadata || {};
+  const sessionId = userMetadata.sessionId;
 
-  // Parse sessionId from job name (format: vnl-{sessionId}-{epochMs})
-  const jobNameParts = jobName.split('-');
-  if (jobNameParts.length < 3 || jobNameParts[0] !== 'vnl') {
-    console.warn('Cannot parse sessionId from job name:', jobName);
+  console.log('MediaConvert job completed:', { jobId, sessionId, status: detail.status });
+
+  // Validate sessionId from userMetadata
+  if (!sessionId) {
+    console.warn('No sessionId found in userMetadata:', userMetadata);
     return;
   }
-
-  const sessionId = jobNameParts[1];
 
   if (detail.status === 'ERROR' || detail.status === 'CANCELED') {
     console.warn('MediaConvert job failed or canceled for session:', { sessionId, status: detail.status });

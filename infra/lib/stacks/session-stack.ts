@@ -437,7 +437,7 @@ export class SessionStack extends Stack {
 
     // Grant MediaConvert permissions to recording-ended handler for job submission
     recordingEndedFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['mediaconvert:CreateJob'],
+      actions: ['mediaconvert:CreateJob', 'mediaconvert:TagResource'],
       resources: ['*'],
     }));
 

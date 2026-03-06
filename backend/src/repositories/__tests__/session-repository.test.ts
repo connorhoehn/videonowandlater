@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateSessionAiSummary } from '../session-repository';
 import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
@@ -544,6 +544,133 @@ describe('session-repository', () => {
           }),
         })
       );
+    });
+  });
+
+  describe('updateSessionAiSummary', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('updates only aiSummary field when provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const summary = 'This is a test summary about the video session.';
+      await updateSessionAiSummary(tableName, 'session-123', { aiSummary: summary });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-123',
+              SK: 'METADATA',
+            },
+            UpdateExpression: 'SET #aiSummary = :aiSummary, #version = #version + :inc',
+            ExpressionAttributeNames: expect.objectContaining({
+              '#aiSummary': 'aiSummary',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':aiSummary': summary,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('updates only aiSummaryStatus field when provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSessionAiSummary(tableName, 'session-456', { aiSummaryStatus: 'available' });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-456',
+              SK: 'METADATA',
+            },
+            UpdateExpression: 'SET #aiSummaryStatus = :aiSummaryStatus, #version = #version + :inc',
+            ExpressionAttributeNames: expect.objectContaining({
+              '#aiSummaryStatus': 'aiSummaryStatus',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':aiSummaryStatus': 'available',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('updates both aiSummary and aiSummaryStatus when both provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const summary = 'Generated summary text';
+      await updateSessionAiSummary(tableName, 'session-789', {
+        aiSummary: summary,
+        aiSummaryStatus: 'available',
+      });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-789',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('#aiSummary'),
+            ExpressionAttributeNames: expect.objectContaining({
+              '#aiSummary': 'aiSummary',
+              '#aiSummaryStatus': 'aiSummaryStatus',
+            }),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':aiSummary': summary,
+              ':aiSummaryStatus': 'available',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('never modifies transcriptText field — only updates AI summary fields', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSessionAiSummary(tableName, 'session-xyz', { aiSummaryStatus: 'failed' });
+
+      const call = mockSend.mock.calls[0][0];
+      // Verify transcriptText is NOT in UpdateExpression
+      expect(call.input.UpdateExpression).not.toContain('transcriptText');
+      expect(call.input.UpdateExpression).not.toContain('transcript');
+    });
+
+    it('does not send UpdateCommand when no fields provided', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSessionAiSummary(tableName, 'session-empty', {});
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('sets aiSummaryStatus to failed without touching aiSummary field', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSessionAiSummary(tableName, 'session-fail', { aiSummaryStatus: 'failed' });
+
+      const call = mockSend.mock.calls[0][0];
+      const updates = call.input.ExpressionAttributeValues;
+
+      // aiSummaryStatus should be 'failed'
+      expect(updates[':aiSummaryStatus']).toBe('failed');
+
+      // aiSummary should NOT be in the values (not touched)
+      expect(Object.keys(updates)).not.toContain(':aiSummary');
     });
   });
 });

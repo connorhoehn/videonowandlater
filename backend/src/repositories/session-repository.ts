@@ -527,6 +527,65 @@ export async function updateTranscriptStatus(
 }
 
 /**
+ * Update session AI summary fields (aiSummary and/or aiSummaryStatus)
+ * Non-blocking pattern: used to store Bedrock-generated summaries without affecting transcript
+ * Selective updates only affect provided fields; transcriptText is never touched
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param updates Partial update object with optional aiSummary and aiSummaryStatus fields
+ */
+export async function updateSessionAiSummary(
+  tableName: string,
+  sessionId: string,
+  updates: {
+    aiSummary?: string;
+    aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  }
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  // Build dynamic update expression for provided fields only
+  const updateParts: string[] = [];
+  const expressionAttributeNames: Record<string, string> = {
+    '#version': 'version',
+  };
+  const expressionAttributeValues: Record<string, any> = {
+    ':inc': 1,
+  };
+
+  if (updates.aiSummary !== undefined) {
+    updateParts.push('#aiSummary = :aiSummary');
+    expressionAttributeNames['#aiSummary'] = 'aiSummary';
+    expressionAttributeValues[':aiSummary'] = updates.aiSummary;
+  }
+
+  if (updates.aiSummaryStatus !== undefined) {
+    updateParts.push('#aiSummaryStatus = :aiSummaryStatus');
+    expressionAttributeNames['#aiSummaryStatus'] = 'aiSummaryStatus';
+    expressionAttributeValues[':aiSummaryStatus'] = updates.aiSummaryStatus;
+  }
+
+  if (updateParts.length === 0) {
+    // No fields to update
+    return;
+  }
+
+  const updateExpression = `SET ${updateParts.join(', ')}, #version = #version + :inc`;
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: updateExpression,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
+  }));
+}
+
+/**
  * Get recent activity (both broadcasts and hangouts)
  * Returns all ended sessions with full metadata in reverse chronological order
  *

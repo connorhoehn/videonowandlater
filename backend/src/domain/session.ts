@@ -64,6 +64,8 @@ export interface Session {
   reactionSummary?: Record<string, number>;
   // Hangout participant tracking (populated at session end)
   participantCount?: number;
+  // Chat activity (tracked atomically in send-message handler)
+  messageCount?: number;
 }
 
 /**

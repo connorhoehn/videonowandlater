@@ -466,3 +466,52 @@ export async function updateParticipantCount(
     },
   }));
 }
+
+/**
+ * Get recent activity (both broadcasts and hangouts)
+ * Returns all ended sessions with full metadata in reverse chronological order
+ *
+ * @param tableName DynamoDB table name
+ * @param limit Maximum number of sessions to return (default 20)
+ * @returns Array of Session objects with activity metadata
+ */
+export async function getRecentActivity(
+  tableName: string,
+  limit: number = 20
+): Promise<Session[]> {
+  const docClient = getDocumentClient();
+
+  const result = await docClient.send(new ScanCommand({
+    TableName: tableName,
+    FilterExpression: '#status IN (:ended, :ending) AND begins_with(PK, :pk)',
+    ExpressionAttributeNames: {
+      '#status': 'status',
+    },
+    ExpressionAttributeValues: {
+      ':ended': 'ended',
+      ':ending': 'ending',
+      ':pk': 'SESSION#',
+    },
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return [];
+  }
+
+  // Extract session fields (remove DynamoDB keys)
+  const sessions = result.Items
+    .map(item => {
+      const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
+      return session as Session;
+    });
+
+  // Sort descending by endedAt (most recent first), fall back to createdAt
+  sessions.sort((a, b) => {
+    const aTime = new Date(a.endedAt ?? a.createdAt).getTime();
+    const bTime = new Date(b.endedAt ?? b.createdAt).getTime();
+    return bTime - aTime;
+  });
+
+  // Return limited number of sessions
+  return sessions.slice(0, limit);
+}

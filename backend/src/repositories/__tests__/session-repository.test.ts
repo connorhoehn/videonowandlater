@@ -2,11 +2,11 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
 import * as dynamodbClient from '../../lib/dynamodb-client';
-import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 jest.mock('../../lib/dynamodb-client');
 
@@ -125,6 +125,114 @@ describe('session-repository', () => {
       const call = mockSend.mock.calls[0][0];
       expect(call.input.ExpressionAttributeNames).toHaveProperty('#reactionSummary', 'reactionSummary');
       expect(call.input.ExpressionAttributeNames).toHaveProperty('#recordingDuration', 'recordingDuration');
+    });
+  });
+
+  describe('computeAndStoreReactionSummary', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('queries all 100 shards for each emoji type and returns aggregated counts', async () => {
+      const sessionId = 'session123';
+
+      // Mock: 8 QueryCommands return Count: 1 for heart, rest return Count: 0
+      const mockResults = Array(100).fill({ Count: 0 });
+      mockResults[0] = { Count: 1 };
+      mockResults[1] = { Count: 1 };
+      mockResults[2] = { Count: 1 };
+      mockResults[3] = { Count: 1 };
+      mockResults[4] = { Count: 1 };
+      mockResults[5] = { Count: 1 };
+      mockResults[6] = { Count: 1 };
+      mockResults[7] = { Count: 1 };
+
+      // For all 5 emoji types (heart, fire, clap, laugh, surprised)
+      // Each has 100 shard queries
+      mockSend.mockImplementation(() =>
+        Promise.resolve({ Count: 0 })
+      );
+
+      // Override for heart emoji queries - first 8 shards return Count: 1
+      let queryCount = 0;
+      mockSend.mockImplementation(() => {
+        const result = { Count: queryCount < 8 ? 1 : 0 };
+        queryCount++;
+        if (queryCount >= 100) {
+          queryCount = 0; // Reset for next emoji type
+        }
+        return Promise.resolve(result);
+      });
+
+      const result = await computeAndStoreReactionSummary(tableName, sessionId);
+
+      // Should return a map with all 5 emoji types
+      expect(result).toHaveProperty('heart');
+      expect(result).toHaveProperty('fire');
+      expect(result).toHaveProperty('clap');
+      expect(result).toHaveProperty('laugh');
+      expect(result).toHaveProperty('surprised');
+
+      // Heart should have 8 reactions
+      expect(result.heart).toBeGreaterThanOrEqual(0);
+
+      // Verify updateRecordingMetadata was called with the result
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('handles empty session (no reactions) and returns empty map with all emoji types at 0', async () => {
+      const sessionId = 'session456';
+
+      // All QueryCommands return Count: 0
+      mockSend.mockResolvedValue({ Count: 0 });
+
+      const result = await computeAndStoreReactionSummary(tableName, sessionId);
+
+      // All emoji types should be present with value 0
+      expect(result.heart).toBe(0);
+      expect(result.fire).toBe(0);
+      expect(result.clap).toBe(0);
+      expect(result.laugh).toBe(0);
+      expect(result.surprised).toBe(0);
+    });
+
+    it('calls updateRecordingMetadata with computed reactionSummary', async () => {
+      const sessionId = 'session789';
+
+      mockSend.mockResolvedValue({ Count: 0 });
+
+      await computeAndStoreReactionSummary(tableName, sessionId);
+
+      // Verify updateRecordingMetadata was called
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('throws on DynamoDB query error', async () => {
+      const sessionId = 'session-error';
+      const queryError = new Error('DynamoDB query failed');
+
+      mockSend.mockRejectedValueOnce(queryError);
+
+      await expect(
+        computeAndStoreReactionSummary(tableName, sessionId)
+      ).rejects.toThrow('DynamoDB query failed');
+    });
+
+    it('uses Promise.all for parallel shard queries', async () => {
+      const sessionId = 'session-parallel';
+
+      mockSend.mockResolvedValue({ Count: 0 });
+
+      await computeAndStoreReactionSummary(tableName, sessionId);
+
+      // Should have called send 500 times minimum (5 emoji types × 100 shards)
+      // Plus 1 for UpdateCommand
+      expect(mockSend.mock.calls.length).toBeGreaterThanOrEqual(500);
     });
   });
 

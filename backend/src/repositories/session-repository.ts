@@ -2,10 +2,11 @@
  * Session repository - session persistence operations
  */
 
-import { PutCommand, GetCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, UpdateCommand, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Session } from '../domain/session';
 import { SessionStatus, RecordingStatus } from '../domain/session';
+import { EmojiType, SHARD_COUNT } from '../domain/reaction';
 
 /**
  * Create a new session in DynamoDB
@@ -204,6 +205,70 @@ export async function updateRecordingMetadata(
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
   }));
+}
+
+/**
+ * Compute per-emoji reaction counts for a session and store on session record
+ * Queries all shards for each emoji type and aggregates counts
+ * Called at session end (recording-ended handler) to pre-compute summaries
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID
+ * @returns Promise resolving to reactionSummary map { emojiType: count, ... }
+ */
+export async function computeAndStoreReactionSummary(
+  tableName: string,
+  sessionId: string
+): Promise<Record<string, number>> {
+  const docClient = getDocumentClient();
+  const reactionSummary: Record<string, number> = {};
+
+  try {
+    // For each emoji type, count reactions across all shards
+    for (const emojiType of Object.values(EmojiType)) {
+      let emojiCount = 0;
+      const queryPromises = [];
+
+      for (let shardId = 1; shardId <= SHARD_COUNT; shardId++) {
+        const pk = `REACTION#${sessionId}#${emojiType}#SHARD${shardId}`;
+        queryPromises.push(
+          docClient.send(
+            new QueryCommand({
+              TableName: tableName,
+              KeyConditionExpression: 'PK = :pk',
+              ExpressionAttributeValues: {
+                ':pk': pk,
+              },
+              Select: 'COUNT',
+            })
+          )
+        );
+      }
+
+      // Execute all shard queries in parallel
+      const results = await Promise.all(queryPromises);
+
+      // Sum up counts across all shards
+      for (const result of results) {
+        emojiCount += result.Count || 0;
+      }
+
+      // Store count in summary (include even if 0 for completeness)
+      reactionSummary[emojiType] = emojiCount;
+    }
+
+    console.log('Computed reaction summary:', { sessionId, reactionSummary });
+
+    // Update session record with reaction summary
+    await updateRecordingMetadata(tableName, sessionId, {
+      reactionSummary,
+    });
+
+    return reactionSummary;
+  } catch (error) {
+    console.error('Error computing reaction summary:', error);
+    throw error;  // Caller (recording-ended) handles with try/catch
+  }
 }
 
 /**

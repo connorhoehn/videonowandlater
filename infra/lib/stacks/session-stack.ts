@@ -728,6 +728,39 @@ export class SessionStack extends Stack {
       sourceArn: mediaConvertCompleteRule.ruleArn,
     });
 
+    // Lambda function for start-transcribe (EventBridge-triggered from Upload Recording Available)
+    const startTranscribeFn = new nodejs.NodejsFunction(this, 'StartTranscribe', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/start-transcribe.ts'),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
+      },
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+    });
+
+    // Grant necessary permissions to start-transcribe handler
+    transcriptionBucket.grantReadWrite(startTranscribeFn);
+    this.recordingsBucket.grantRead(startTranscribeFn);
+
+    // Grant Transcribe permissions to start-transcribe handler
+    startTranscribeFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['transcribe:StartTranscriptionJob'],
+      resources: ['*'],
+    }));
+
+    // EventBridge rule for Upload Recording Available events
+    const uploadRecordingAvailableRule = new events.Rule(this, 'UploadRecordingAvailableRule', {
+      eventPattern: {
+        source: ['vnl.upload'],
+        detailType: ['Upload Recording Available'],
+      },
+      targets: [new targets.LambdaFunction(startTranscribeFn)],
+      description: 'Start Transcribe job when recording is available',
+    });
+
     // S3 lifecycle rule for orphaned multipart uploads (clean up after 24 hours)
     this.recordingsBucket.addLifecycleRule({
       id: 'AbortIncompleteMultipartUploads',

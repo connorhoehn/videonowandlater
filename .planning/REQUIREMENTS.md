@@ -13,7 +13,7 @@
 - [x] **QUAL-04**: Dashboard displays network status (Connected/Unstable/Disconnected) with visual indicator
 - [x] **QUAL-05**: Dashboard displays health score (0-100%) based on bitrate stability and FPS consistency
 - [ ] **QUAL-06**: Dashboard alerts broadcaster when bitrate drops >30% below target (warning badge)
-- [ ] **QUAL-07**: Dashboard is non-intrusive overlay on broadcast page (does not block stream preview)
+- [x] **QUAL-07**: Dashboard is non-intrusive overlay on broadcast page (does not block stream preview)
 - [x] **QUAL-08**: Metrics update every 1-2 seconds with no API latency impact on broadcast
 
 ### Creator Spotlight
@@ -85,7 +85,7 @@
 | QUAL-04 | Phase 23 | Complete |
 | QUAL-05 | Phase 23 | Complete |
 | QUAL-06 | Phase 23 | Pending |
-| QUAL-07 | Phase 23 | Pending |
+| QUAL-07 | Phase 23 | Complete |
 | QUAL-08 | Phase 23 | Complete |
 | SPOT-01 | Phase 24 | Pending |
 | SPOT-02 | Phase 24 | Pending |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Video Uploads (Phase 21) + Live Broadcast with Secure Viewer Links (Phase 22)
-status: Completed Phase 22 Plan 04 (Integration tests and documentation). End-to-end integration tests verify private broadcast playback token flow with ES384 JWT, token expiration, activity feed filtering, and backward compatibility. Comprehensive PRIVATE_CHANNELS.md documentation covers architecture, API usage, security considerations, and troubleshooting. All 339 backend tests passing. Phase 22 production-ready. All phases complete.
-stopped_at: Completed 22-04-PLAN.md (Integration tests and documentation for private channels)
-last_updated: "2026-03-06T02:00:00Z"
-last_activity: 2026-03-06 — Completed 22-04-PLAN.md (Integration tests and developer documentation)
+status: Completed Phase 21 Plan 05 (API Gateway integration for upload handlers). Three upload endpoints wired into API Gateway with Lambda function definitions, Cognito authorization, and IAM permissions. CloudFormation outputs added. All 339 backend tests passing. Upload API accessible from frontend.
+stopped_at: Completed 21-05-PLAN.md (API Gateway integration for upload handlers)
+last_updated: "2026-03-06T01:57:27Z"
+last_activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway integration for three upload endpoints)
 progress:
   total_phases: 22
-  completed_phases: 22
+  completed_phases: 21
   total_plans: 54
-  completed_plans: 50
-  percent: 93
+  completed_plans: 51
+  percent: 94
 ---
 
 # Project State

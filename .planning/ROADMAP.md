@@ -48,7 +48,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 **Phases:**
 
-- [ ] **Phase 22.1: Pipeline Fixes & UI Enhancements** - Urgent fixes and enhancements from v1.2 completion
+- ✅ **Phase 22.1: Pipeline Fixes & UI Enhancements** - Urgent fixes and enhancements from v1.2 completion [3/3 plans complete]
 - 🚧 **Phase 23: Stream Quality Monitoring Dashboard** - Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters [1/3 plans complete]
 - [ ] **Phase 24: Creator Spotlight Selection & Display** - Feature another live creator during broadcast with elegant overlay UI
 
@@ -70,7 +70,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 22.1-01-PLAN.md — Add CDK custom resource for IVS cleanup on stack deletion
+- [x] 22.1-01-PLAN.md — Add CDK custom resource for IVS cleanup on stack deletion ✅
 - [x] 22.1-02-PLAN.md — Switch AI processing from Claude to Nova Pro model ✅
 - [x] 22.1-03-PLAN.md — Create upload activity card variant for activity feed ✅
 
@@ -111,8 +111,8 @@ Plans:
 ## Progress
 
 **Latest Milestone:** v1.4 Creator Studio & Stream Quality
-- **Status:** 🚧 Phase 22.1 planned, ready for execution
-- **Phases:** 3 (22.1, 23, 24)
+- **Status:** 🚧 Phase 23 in progress
+- **Phases:** 3 (22.1 ✅, 23, 24)
 - **Plans:** 3/3 complete (Phase 22.1), 2/3 complete (Phase 23)
 - **Tests:** 343/343 backend tests passing (from v1.3)
 

@@ -219,7 +219,7 @@ Plans:
 - [x] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
 - [x] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint (completed 2026-03-06)
 - [x] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events (completed 2026-03-06)
-- [ ] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries
+- [x] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries (completed 2026-03-06)
 
 ## Phase Details
 
@@ -325,7 +325,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 18. Homepage Redesign & Activity Feed | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
 | 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | - |
-| 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
+| 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | - |
 
 | 21. Video Uploads | v1.2 | 4/4 | Planned | - |
 

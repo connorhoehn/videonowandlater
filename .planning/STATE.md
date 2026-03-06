@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: executing
-stopped_at: Completed 19-01-PLAN.md (transcription pipeline setup)
-last_updated: "2026-03-06T01:05:00.000Z"
-last_activity: 2026-03-06 — Completed 19-01-PLAN.md (transcription pipeline domain, handlers, and repository)
+stopped_at: Completed 20-01-PLAN.md (AI summary pipeline backend)
+last_updated: "2026-03-06T01:18:00.000Z"
+last_activity: 2026-03-06 — Completed 20-01-PLAN.md (Bedrock integration, EventBridge routing, 223 tests passing)
 progress:
   total_phases: 20
   completed_phases: 14
   total_plans: 40
-  completed_plans: 33
-  percent: 82.5
+  completed_plans: 34
+  percent: 85
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 19 of 20 (Transcription Pipeline) -- IN PROGRESS
-Plan: 01 of 02 (Transcription Pipeline Setup) -- COMPLETE
-Status: Plan 19-01 complete, awaiting 19-02 (Infrastructure & EventBridge Wiring)
-Last activity: 2026-03-06 — Completed 19-01-PLAN.md (transcription pipeline domain, handlers, and repository)
+Phase: 20 of 20 (AI Summary Pipeline) -- IN PROGRESS
+Plan: 01 of 02 (Backend AI Summary Integration) -- COMPLETE
+Status: Plan 20-01 complete, proceeding to 20-02 (Frontend display)
+Last activity: 2026-03-06 — Completed 20-01-PLAN.md (Bedrock integration with EventBridge routing)
 
-Progress: [████████░░] 82.5% (33/40 plans complete)
+Progress: [█████████░] 85% (34/40 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6 (v1.2)
-- Average duration: 3.2 min
-- Total execution time: 31 min
+- Total plans completed: 7 (v1.2)
+- Average duration: 3.4 min
+- Total execution time: 49 min
 
 **By Phase:**
 
@@ -46,7 +46,8 @@ Progress: [████████░░] 82.5% (33/40 plans complete)
 | 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
-| 19 | 2 | 1 | 6 min (so far) |
+| 19 | 2 | 1 | 6 min |
+| 20 | 2 | 1 | 22 min (so far) |
 
 *Updated after each plan completion*
 
@@ -85,8 +86,12 @@ v1.2 decisions from Phase 19:
 - **Optional transcript fields** - updateTranscriptStatus() accepts optional s3Path and plainText parameters for partial updates (follows updateRecordingMetadata pattern).
 - **Graceful transcript parsing** - Missing/empty transcripts logged as warnings; session still updated to 'available' with empty plainText for Phase 20 to handle gracefully.
 
-v1.2 decisions pending:
-- Phase 20: Bedrock model ID and regional availability confirmation
+v1.2 decisions from Phase 20:
+- **Bedrock non-blocking pattern** - Bedrock/DynamoDB failures set aiSummaryStatus='failed' without touching aiSummary field (transcript preservation critical)
+- **Claude Sonnet 4.5 model** - Best price/performance for 1-paragraph summaries; model ID: anthropic.claude-sonnet-4-5-20250929-v1:0
+- **Lambda timeout 60s** - Accommodates Bedrock latency (5-10s typical) with buffer
+- **Selective UpdateExpression** - updateSessionAiSummary only touches intended fields, never modifies transcriptText
+- **EventBridge trigger on Transcript Stored** - Automatic coupling of Phase 19 → Phase 20 pipeline
 
 ### Roadmap Evolution
 
@@ -104,8 +109,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 19-01-PLAN.md (transcription pipeline setup - domain, handlers, repository)
+Stopped at: Completed 20-01-PLAN.md (AI summary backend - Bedrock integration, EventBridge routing, 223 tests passing)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 19-01 complete (transcription pipeline domain extended, updateTranscriptStatus() repository function, recording-ended MediaConvert submission, transcode-completed and transcribe-completed handlers)*
+*Last updated: 2026-03-06 — 20-01 complete (Session domain extended with aiSummary fields, updateSessionAiSummary repository function, store-summary Bedrock handler with 9 test cases, CDK wiring for StoreSummary Lambda and TranscriptStoreRule, Bedrock IAM permissions)*

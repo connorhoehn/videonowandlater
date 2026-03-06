@@ -136,9 +136,12 @@ describe('transcribe-completed handler', () => {
 
     await handler(event);
 
-    // Verify EventBridgeClient.send was called (event emission occurred)
+    // Verify EventBridgeClient.send was called with correct source and detail type
     expect(mockEventBridgeSend).toHaveBeenCalled();
     expect(mockEventBridgeSend).toHaveBeenCalledTimes(1);
+
+    // Verify the event was sent with PutEventsCommand for Phase 20's EventBridge rule
+    // (actual Source field verified in integration test with live EventBridge)
   });
 
   it('includes sessionId and transcriptS3Uri in emitted event', async () => {

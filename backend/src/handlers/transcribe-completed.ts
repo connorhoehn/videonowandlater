@@ -94,7 +94,7 @@ export const handler = async (
           new PutEventsCommand({
             Entries: [
               {
-                Source: 'transcription-pipeline',
+                Source: 'custom.vnl',
                 DetailType: 'Transcript Stored',
                 Detail: JSON.stringify({
                   sessionId,
@@ -132,7 +132,7 @@ export const handler = async (
         new PutEventsCommand({
           Entries: [
             {
-              Source: 'transcription-pipeline',
+              Source: 'custom.vnl',
               DetailType: 'Transcript Stored',
               Detail: JSON.stringify({
                 sessionId,

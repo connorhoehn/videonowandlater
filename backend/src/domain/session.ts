@@ -98,6 +98,60 @@ export interface Session {
 }
 
 /**
+ * Processing event types - represents distinct steps in video processing pipeline
+ */
+export enum ProcessingEventType {
+  // Session lifecycle
+  SESSION_CREATED = 'SESSION_CREATED',
+  SESSION_STARTED = 'SESSION_STARTED',
+  SESSION_ENDED = 'SESSION_ENDED',
+
+  // Recording events
+  RECORDING_STARTED = 'RECORDING_STARTED',
+  RECORDING_ENDED = 'RECORDING_ENDED',
+
+  // MediaConvert processing
+  MEDIACONVERT_SUBMITTED = 'MEDIACONVERT_SUBMITTED',
+  MEDIACONVERT_COMPLETED = 'MEDIACONVERT_COMPLETED',
+  MEDIACONVERT_FAILED = 'MEDIACONVERT_FAILED',
+
+  // Transcription pipeline
+  TRANSCRIBE_SUBMITTED = 'TRANSCRIBE_SUBMITTED',
+  TRANSCRIBE_COMPLETED = 'TRANSCRIBE_COMPLETED',
+  TRANSCRIBE_FAILED = 'TRANSCRIBE_FAILED',
+
+  // AI Summary generation
+  AI_SUMMARY_STARTED = 'AI_SUMMARY_STARTED',
+  AI_SUMMARY_COMPLETED = 'AI_SUMMARY_COMPLETED',
+  AI_SUMMARY_FAILED = 'AI_SUMMARY_FAILED',
+
+  // Upload events
+  UPLOAD_COMPLETED = 'UPLOAD_COMPLETED',
+}
+
+/**
+ * Processing event entity - represents a timestamped event in the video processing pipeline
+ * Stored as separate items in DynamoDB with PK: SESSION#{sessionId}, SK: EVENT#{timestamp}#{eventId}
+ */
+export interface ProcessingEvent {
+  sessionId: string;
+  eventId: string;
+  eventType: ProcessingEventType;
+  eventStatus: 'started' | 'completed' | 'failed';
+  timestamp: string; // ISO 8601 timestamp
+  entityType: 'PROCESSING_EVENT';
+  details?: {
+    // Event-specific metadata
+    jobId?: string;
+    jobName?: string;
+    duration?: number;
+    errorMessage?: string;
+    s3Path?: string;
+    [key: string]: any; // Allow additional event-specific fields
+  };
+}
+
+/**
  * Validates whether a status transition is allowed
  * @param from Current status
  * @param to Target status

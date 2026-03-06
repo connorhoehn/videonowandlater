@@ -478,6 +478,190 @@ describe('store-summary handler', () => {
     expect(mockBedrockSend).toHaveBeenCalled();
   });
 
+  it('should use Nova Pro model ID by default', async () => {
+    delete process.env.BEDROCK_MODEL_ID;
+
+    const testTranscript = 'Test with Nova Pro model';
+    const testSummary = 'Nova Pro generated summary';
+
+    // Mock S3 fetch
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce(testTranscript),
+      },
+    });
+
+    // Mock Bedrock invocation - Nova Pro response format
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          output: {
+            message: {
+              content: [{ text: testSummary }],
+            },
+          },
+        })
+      ),
+    });
+
+    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+      version: '0',
+      id: 'test-nova-default',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-nova-default',
+        transcriptS3Uri: 's3://transcription-bucket/session-nova-default/transcript.json',
+      },
+    };
+
+    await handler(event);
+
+    // Verify Nova Pro model ID was used
+    const invokeCall = mockBedrockSend.mock.calls[0][0];
+    expect(invokeCall.input.modelId).toBe('amazon.nova-pro-v1:0');
+
+    // Verify summary was correctly extracted from Nova format
+    expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
+      'test-table',
+      'session-nova-default',
+      expect.objectContaining({
+        aiSummary: testSummary,
+        aiSummaryStatus: 'available',
+      })
+    );
+  });
+
+  it('should format payload correctly for Nova Pro model', async () => {
+    process.env.BEDROCK_MODEL_ID = 'amazon.nova-pro-v1:0';
+
+    const testTranscript = 'Transcript for Nova Pro payload test';
+    const testSummary = 'Nova Pro summary';
+
+    // Mock S3 fetch
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce(testTranscript),
+      },
+    });
+
+    // Mock Bedrock invocation
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          output: {
+            message: {
+              content: [{ text: testSummary }],
+            },
+          },
+        })
+      ),
+    });
+
+    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+      version: '0',
+      id: 'test-nova-payload',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-nova-payload',
+        transcriptS3Uri: 's3://transcription-bucket/session-nova-payload/transcript.json',
+      },
+    };
+
+    await handler(event);
+
+    // Verify Nova Pro payload format
+    const invokeCall = mockBedrockSend.mock.calls[0][0];
+    const payload = JSON.parse(invokeCall.input.body);
+
+    // Nova Pro format expectations
+    expect(payload).toHaveProperty('messages');
+    expect(payload).toHaveProperty('inferenceConfig');
+    expect(payload.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            text: expect.stringContaining('Generate a concise one-paragraph summary'),
+          },
+        ],
+      },
+    ]);
+    expect(payload.inferenceConfig).toEqual({
+      maxTokens: 500,
+      temperature: 0.7,
+    });
+  });
+
+  it('should support backward compatibility with Claude models', async () => {
+    process.env.BEDROCK_MODEL_ID = 'anthropic.claude-3-haiku-20240307-v1:0';
+
+    const testTranscript = 'Transcript for Claude model';
+    const testSummary = 'Claude generated summary';
+
+    // Mock S3 fetch
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce(testTranscript),
+      },
+    });
+
+    // Mock Bedrock invocation - Claude response format
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          content: [{ type: 'text', text: testSummary }],
+        })
+      ),
+    });
+
+    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+      version: '0',
+      id: 'test-claude-compat',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-claude-compat',
+        transcriptS3Uri: 's3://transcription-bucket/session-claude-compat/transcript.json',
+      },
+    };
+
+    await handler(event);
+
+    // Verify Claude model ID was used
+    const invokeCall = mockBedrockSend.mock.calls[0][0];
+    expect(invokeCall.input.modelId).toBe('anthropic.claude-3-haiku-20240307-v1:0');
+
+    // Verify Claude payload format was used
+    const payload = JSON.parse(invokeCall.input.body);
+    expect(payload).toHaveProperty('anthropic_version');
+    expect(payload).toHaveProperty('max_tokens');
+    expect(payload).toHaveProperty('messages');
+
+    // Verify summary was correctly extracted
+    expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
+      'test-table',
+      'session-claude-compat',
+      expect.objectContaining({
+        aiSummary: testSummary,
+        aiSummaryStatus: 'available',
+      })
+    );
+  });
+
   it('should fallback to AWS_REGION when BEDROCK_REGION not set', async () => {
     delete process.env.BEDROCK_REGION;
     process.env.AWS_REGION = 'ap-southeast-1';

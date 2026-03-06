@@ -2,13 +2,23 @@
   "name": "@vnl/infra",
   "version": "0.0.1",
   "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
   "dependencies": {
     "aws-cdk-lib": "^2.170.0",
     "constructs": "^10.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
+    "@aws-sdk/client-ivs": "^3.1003.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
+    "aws-sdk-client-mock": "^4.1.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.5.0"
   }
 }

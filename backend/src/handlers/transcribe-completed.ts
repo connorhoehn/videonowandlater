@@ -90,6 +90,7 @@ export const handler = async (
       // Emit "Transcript Stored" event for Phase 20 (AI Summary Pipeline) even with empty text
       try {
         const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+        const s3Uri = `s3://${transcriptionBucket}/${transcriptJsonPath}`;
         await eventBridgeClient.send(
           new PutEventsCommand({
             Entries: [
@@ -98,7 +99,7 @@ export const handler = async (
                 DetailType: 'Transcript Stored',
                 Detail: JSON.stringify({
                   sessionId,
-                  transcriptText: '',
+                  transcriptS3Uri: s3Uri,
                 }),
               },
             ],
@@ -135,7 +136,7 @@ export const handler = async (
               DetailType: 'Transcript Stored',
               Detail: JSON.stringify({
                 sessionId,
-                transcriptText: plainText,
+                transcriptS3Uri: s3Uri,
               }),
             },
           ],

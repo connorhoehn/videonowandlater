@@ -217,7 +217,7 @@ Plans:
 
 - [x] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services (completed 2026-03-06)
 - [x] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
-- 🚧 **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint (2/3 plans complete)
+- [ ] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint
 - [ ] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events
 - [ ] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries
 
@@ -235,7 +235,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 16-01-PLAN.md — Domain model + repository functions + handler integration for participant tracking (PTCP-01, PTCP-02, PTCP-03)
+- [x] 16-01-PLAN.md — Domain model + repository functions + handler integration for participant tracking (PTCP-01, PTCP-02, PTCP-03)
 
 ### Phase 17: Reaction Summary at Session End
 **Goal**: Per-emoji reaction counts are pre-computed and stored on the session record when a session ends, so the homepage never needs to aggregate counts at read time
@@ -265,8 +265,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [x] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03) - Complete
-- [x] 18-02-PLAN.md — Homepage layout redesign, activity feed, recording slider (ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05) - Complete
+- [x] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03)
+- [x] 18-02-PLAN.md — Homepage layout redesign, activity feed, recording slider (ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05)
 - [ ] 18-03-PLAN.md — ReplayViewer reaction summary display (RSUMM-03)
 
 ### Phase 19: Transcription Pipeline
@@ -278,14 +278,11 @@ Plans:
   2. The Transcribe job name encodes the session ID (format: vnl-{sessionId}-{epochMs}) so job completion events can be correlated to sessions without additional DynamoDB reads
   3. When a Transcribe job completes successfully, the transcript text is stored on the session record in DynamoDB
   4. When a Transcribe job fails, a transcriptStatus field on the session record is set to "failed" and no other session data is affected — pool release and recording metadata are unaffected
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: Resolve HLS/MediaConvert input format question (research-phase required — see notes)
-- [ ] 19-02: start-transcription.ts Lambda, TranscribeJobCompleteRule EventBridge rule, CDK IAM wiring
-- [ ] 19-03: store-transcript.ts Lambda — transcript fetch and DynamoDB write
-
-**CRITICAL: Research-phase required before plan-phase.** The HLS/MediaConvert conflict (whether Amazon Transcribe accepts IVS HLS M3U8 directly) must be resolved before writing the Phase 19 implementation plan. Default assumption per SUMMARY.md: MediaConvert conversion is required before Transcribe. If true, scope expands to include a MediaConvert job Lambda, MediaConvertCompleteRule EventBridge rule, and MediaConvert IAM role. Run `/gsd:research phase-19` before `/gsd:plan-phase 19`.
+- [x] 19-01-PLAN.md — Domain model + repository + handler logic (recording-ended MediaConvert, transcode-completed, transcribe-completed)
+- [x] 19-02-PLAN.md — CDK EventBridge rules + Lambda infrastructure (MediaConvert/Transcribe pipelines)
 
 ### Phase 20: AI Summary Pipeline
 **Goal**: Every session with a stored transcript automatically receives an AI-generated one-paragraph summary via Bedrock/Claude, displayed on recording cards and the replay info panel
@@ -324,10 +321,10 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
-| 16. Hangout Participant Tracking | 1/1 | Complete    | 2026-03-06 | - |
-| 17. Reaction Summary at Session End | v1.2 | Complete    | 2026-03-06 | - |
-| 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Planned | - |
-| 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |
+| 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
+| 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 2/3 | In Progress | - |
+| 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
 | 20. AI Summary Pipeline | v1.2 | 0/2 | Not started | - |
 
 ### Phase 21: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
@@ -342,4 +339,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-05 — Phase 18 planned*
+*Last updated: 2026-03-06 — Phase 19 planned*

@@ -6,11 +6,12 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 import { StreamQualityOverlay } from '../StreamQualityOverlay';
 import { StreamMetrics, HealthScoreResult } from '../../../domain/metrics';
 
 // Mock the StreamQualityDashboard component
-jest.mock('../StreamQualityDashboard', () => ({
+vi.mock('../StreamQualityDashboard', () => ({
   StreamQualityDashboard: ({ metrics, healthScore, isLive }: any) => (
     <div data-testid="stream-quality-dashboard">
       Dashboard: {isLive ? 'live' : 'not-live'}

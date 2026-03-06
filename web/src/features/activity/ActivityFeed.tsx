@@ -1,10 +1,11 @@
 /**
  * ActivityFeed - Vertical activity feed displaying all recent sessions in reverse chronological order
- * Shows both broadcast and hangout sessions
+ * Shows broadcast, hangout, and upload sessions
  */
 
 import { BroadcastActivityCard } from './BroadcastActivityCard';
 import { HangoutActivityCard } from './HangoutActivityCard';
+import { UploadActivityCard } from './UploadActivityCard';
 import type { ActivitySession } from './RecordingSlider';
 
 interface ActivityFeedProps {
@@ -30,13 +31,19 @@ export function ActivityFeed({ sessions }: ActivityFeedProps) {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
       <div className="space-y-4">
-        {sortedSessions.map((session) =>
-          session.sessionType === 'BROADCAST' ? (
-            <BroadcastActivityCard key={session.sessionId} session={session} />
-          ) : (
-            <HangoutActivityCard key={session.sessionId} session={session} />
-          )
-        )}
+        {sortedSessions.map((session) => {
+          switch (session.sessionType) {
+            case 'BROADCAST':
+              return <BroadcastActivityCard key={session.sessionId} session={session} />;
+            case 'HANGOUT':
+              return <HangoutActivityCard key={session.sessionId} session={session} />;
+            case 'UPLOAD':
+              return <UploadActivityCard key={session.sessionId} session={session} />;
+            default:
+              // Fallback for unknown session types
+              return null;
+          }
+        })}
       </div>
     </div>
   );

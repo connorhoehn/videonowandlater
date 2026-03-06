@@ -3,6 +3,8 @@
  * Defines the lifecycle and data structure for video sessions
  */
 
+import type { StreamMetrics } from './metrics';
+
 /**
  * Session status enum - represents the lifecycle states
  * State machine: creating -> live -> ending -> ended
@@ -95,6 +97,18 @@ export interface Session {
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   // Privacy control (Phase 22)
   isPrivate?: boolean; // true = private channel with JWT auth, false/undefined = public (backward compatible)
+  // Stream quality metrics (Phase 23+)
+  /**
+   * Optional stream quality metrics captured during live streaming
+   * Only populated for sessions created after Phase 23
+   * Contains WebRTC stats like bitrate, FPS, resolution
+   */
+  streamMetrics?: StreamMetrics;
+  /**
+   * Unix timestamp (ms) of last metrics poll
+   * Used to track freshness of streamMetrics data
+   */
+  lastMetricsUpdate?: number;
 }
 
 /**

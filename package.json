@@ -10,6 +10,7 @@
   "scripts": {
     "deploy": "./scripts/deploy.sh",
     "destroy": "./scripts/destroy.sh",
-    "dev": "cd web && npm run dev"
+    "dev": "./scripts/dev.sh",
+    "dev:direct": "cd web && npm run dev"
   }
 }

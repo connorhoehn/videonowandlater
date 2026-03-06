@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Creator Studio & Stream Quality
-status: defining-requirements
+status: roadmap-defined
 stopped_at: null
-last_updated: "2026-03-06T02:15:00.000Z"
-last_activity: 2026-03-06 — Starting v1.4 milestone planning
+last_updated: "2026-03-06T02:30:00.000Z"
+last_activity: 2026-03-06 — v1.4 roadmap created
 progress:
-  total_phases: null
+  total_phases: 2
   completed_phases: 0
   total_plans: null
   completed_plans: 0
@@ -21,145 +21,96 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
+
 **Current focus:** v1.4 Milestone — Creator Studio & Stream Quality
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Gathering requirements for v1.4 milestone. Focus: stream quality dashboard during broadcasts and creator spotlight feature.
-Last activity: 2026-03-06 — Started v1.4 milestone planning
-
-Progress: [████████████████████████] 100% (64/64 plans complete)
+**Active Phase:** Phase 23 — Stream Quality Monitoring Dashboard
+**Active Plan:** Not started
+**Status:** Roadmap defined, ready for phase planning
+**Progress:** `░░░░░░░░░░░░░░░░░░░░` 0% (0/2 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 64 (v1.1 + v1.2 + v1.3 + gap closures)
-- Average duration: 2.8 min
-- Total execution time: ~180 min (including all phase executions)
+- Plans completed (v1.4): 0
+- Tasks completed (v1.4): 0
+- Phases completed (v1.4): 0/2
 
-**By Phase:**
+**Quality:**
+- Test coverage: 169/169 backend tests passing (from v1.3)
+- Breaking changes: 0 (all additions backward compatible)
+- Load test gates: 2 required (Phase 23, Phase 24)
 
-| Phase | Plans | Completed | Avg/Plan |
-|-------|-------|-----------|----------|
-| 16 | 1 | 1 | 4 min |
-| 17 | 1 | 1 | 3 min |
-| 18 | 3 | 3 | 3.5 min |
-| 19 | 5 | 5 | 4.5 min (01-04: 4.5 min avg, 05 gap closure: 1 min) |
-| 20 | 2 | 2 | 4 min (01: 4 min, 05 gap closure: 15 min) |
-| 21 | 6 | 6 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min, api: 4min, eb: 2min) |
-| 22 | 5 | 5 | 2.4 min avg (01-05: 2 min avg, 01 gap closure: 3 min) |
-
-*Updated after each plan completion*
-| Phase 18 P04 | 3min | 2 tasks | 5 files |
+**Milestone History:**
+- v1.0 Gap Closure: 6 phases, 13 plans (shipped 2026-03-02)
+- v1.1 Replay, Reactions & Hangouts: 15 phases, 27 plans (shipped 2026-03-05)
+- v1.2 Activity Feed & Intelligence: 7 phases, 19 plans (shipped 2026-03-06)
+- v1.3 Secure Sharing: 1 phase, 5 plans (shipped 2026-03-06)
 
 ## Accumulated Context
 
-### Decisions
+### Key Decisions
 
-Key decisions carried forward from v1.1:
-- Single-table DynamoDB with GSI — reaction sharding uses GSI2SK lexicographic sort
+**Phase 23 — Stream Quality Dashboard:**
+- Metrics sourced from IVS Web Broadcast SDK `getStatus()` API (no external infrastructure needed)
+- Recharts library for visualization (40KB gzipped, mature library)
+- Backend caching layer with 4-5 second TTL to prevent API storms under load
+- Load test gate mandatory: 50 concurrent broadcasters, API latency < 200ms, no throttling
+- All Session model fields optional for backward compatibility with Phase 1-22 recordings
+
+**Phase 24 — Creator Spotlight:**
+- Single optional field `featuredUid?: string` on Session (backward compatible)
+- HTTP polling strategy (5-10s cadence) acceptable for v1.4 MVP; WebSocket deferred to v1.5
+- Featured creator search scoped to viewers of THIS broadcast only (not global search)
+- Featured data pre-fetched in list-activity response to prevent N+1 query explosion
+- Private broadcasts cannot feature creators or be featured (privacy constraint)
+
+**Carried Forward from v1.3:**
 - cognito:username (not sub) as userId consistently across all handlers
-- player.getPosition() * 1000 for syncTime (elapsed playback ms relative to stream start)
-- CloudFront OAC for S3 origins (recording playback)
-- Public /recordings endpoint with no auth (content discoverability)
+- Single-table DynamoDB with optional fields for backward compatibility
+- Conditional writes for atomic operations (prevent race conditions)
+- Non-blocking error handling — failures logged but don't block critical operations
 
-v1.2 decisions from Phase 17:
-- **Reaction summary as optional field** - reactionSummary is Record<string, number>? on Session to maintain backward compatibility
-- **Empty map for zero reactions** - Sessions with no reactions store {} not undefined (type consistency)
-- **Non-blocking error handling** - computeAndStoreReactionSummary errors never block pool release (critical invariant)
-- **Parallel shard aggregation** - Promise.all used to query all 100 shards per emoji type concurrently
+### Known Risks
 
-v1.2 decisions from Phase 16:
-- **PutCommand for participant upserts** - addHangoutParticipant uses PutCommand (not UpdateCommand) so re-joins overwrite without ConditionalCheckFailedException
-- **displayName = cognito:username** - No separate display name exists in auth context; field is future-proof for enhancement
-- **Count-at-end strategy** - participantCount computed at session end (recording-ended) not maintained as atomic counter during joins
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| Unbounded metrics polling creates API storms | CRITICAL | Min 5s polling cadence; backend cache 4-5s; load test with 50 concurrent broadcasters |
+| Featured broadcast N×M query explosion | CRITICAL | Featured data only on detail views, not lists; pre-fetch in list-activity response |
+| Metrics polling overwhelms IVS Chat | MODERATE | Separate API transport for metrics; don't mix with chat messages |
+| Featured field breaks backward compatibility | MODERATE | All new fields optional (`?`); test loading Phase 1-22 sessions |
 
-v1.2 decisions from Phase 18:
-- **Atomic messageCount in send-message** - messageCount incremented with `if_not_exists(messageCount, 0) + 1` pattern in send-message handler (not count-at-end or queried at read time)
-- **GET /activity is public** - No auth required, matching /recordings endpoint pattern (content discoverability)
-- **Single API call** - All metadata (reactionSummary, participantCount, messageCount) fetched in one query (eliminates N+1 on frontend)
-- **Scan + Sort** - Uses ScanCommand for ended sessions, sorts in app memory (acceptable for activity feed with ~100 sessions)
-- **Vitest for web component testing** (18-03) - Chose vitest over Jest for ESM-native testing, better Vite integration, and faster test runs. Excludes test files from TypeScript build via tsconfig pattern.
+### Todos
 
-v1.2 decisions from Phase 19:
-- **Non-blocking transcription pipeline** - Transcription job failures logged but don't throw or block session cleanup. Pool resources always released, sessions always transition to ENDED.
-- **Job naming format vnl-{sessionId}-{epochMs}** - Enables sessionId extraction without DynamoDB queries; epochMs ensures uniqueness across retries.
-- **Optional transcript fields** - updateTranscriptStatus() accepts optional s3Path and plainText parameters for partial updates (follows updateRecordingMetadata pattern).
-- **Graceful transcript parsing** - Missing/empty transcripts logged as warnings; session still updated to 'available' with empty plainText for Phase 20 to handle gracefully.
+- [ ] Phase 23 planning: Run `/gsd:plan-phase 23` to derive plans from success criteria
+- [ ] Phase 23 implementation: Metrics collection hook + dashboard component + caching layer
+- [ ] Phase 23 verification: Load test with 50 concurrent broadcasters; validate gates
+- [ ] Phase 24 planning: Design featured creator selection modal; create query audit checklist
+- [ ] Phase 24 implementation: Backend handler + frontend polling + viewer page integration
+- [ ] Phase 24 verification: Homepage performance test; query audit; privacy audit
 
-v1.2 decisions from Phase 19-02 (Infrastructure Wiring):
-- **AWS_REGION is reserved by Lambda** - Removed from environment variables; Lambda runtime provides automatically
-- **DLQ resource policy deferred** - Moved to after transcription rule declarations to avoid TypeScript forward reference errors
-- **Single DLQ for all rules** - recordingEventsDlq used for recording, transcode, and transcribe failures (unified error handling)
-- **MediaConvertRole in CDK stack** - Created in TypeScript for safe reference in recordingEndedFn PolicyStatement
-
-v1.2 decisions from Phase 20-01 (Backend):
-- **Bedrock non-blocking pattern** - Bedrock/DynamoDB failures set aiSummaryStatus='failed' without touching aiSummary field (transcript preservation critical)
-- **Claude Sonnet 4.5 model** - Best price/performance for 1-paragraph summaries; model ID: anthropic.claude-sonnet-4-5-20250929-v1:0
-- **Lambda timeout 60s** - Accommodates Bedrock latency (5-10s typical) with buffer
-- **Selective UpdateExpression** - updateSessionAiSummary only touches intended fields, never modifies transcriptText
-- **EventBridge trigger on Transcript Stored** - Automatic coupling of Phase 19 → Phase 20 pipeline
-
-v1.2 decisions from Phase 20-02 (Frontend):
-- **Reusable SummaryDisplay component** - Encapsulates all status-based rendering logic (pending/available/failed) in single component
-- **Nullish coalescing for backward compatibility** - Undefined aiSummaryStatus treated as 'pending' via `?? 'pending'` operator
-- **Truncate prop controls line-clamp** - `truncate={true}` adds `line-clamp-2` for cards, `truncate={false}` for full text in replay panel
-- **Data flow unchanged** - Frontend passes summary fields as-is from backend; no transformation in getRecentActivity
-- **Summary positioning** - Below reactions on activity cards, above reactions on replay viewer for logical information hierarchy
-
-v1.3 decisions from Phase 21-01 (Backend Domain Models):
-- **UPLOAD sessions use existing Session model** - Reuse DynamoDB schema and GSI pattern rather than separate collection, maintaining backward compatibility
-- **Field isolation via selective UpdateExpression** - uploadStatus/uploadProgress updated together; mediaConvertJobName/convertStatus updated separately to prevent accidental overwrites
-- **No IVS resource claims for UPLOAD sessions** - Skip channel/stage claiming to reduce pool contention; chatRoom initialized as empty string for future chat feature
-- **Session stays in CREATING status** - UPLOAD sessions remain in status='creating' until convertStatus='available' (unlike BROADCAST/HANGOUT which transition to live→ending→ended). Prevents "session status confusion" pitfall where frontend thinks session is ready before HLS URL populated.
-- **Version field incrementation on all updates** - Following Phase 16-20 pattern, all UpdateCommand calls include `#version = #version + :inc` for optimistic locking
-- [Phase 18]: Mock child components as passthrough divs to isolate parent component tests
-
-v1.3 decisions from Phase 22-01 (Private Broadcast Foundation):
-- **isPrivate as optional field** - Session.isPrivate?: boolean maintains backward compatibility with existing sessions (undefined treated as false/public)
-- **Private channel pool suffix pattern** - STATUS#AVAILABLE#PRIVATE_CHANNEL and STATUS#CLAIMED#PRIVATE_CHANNEL differentiate private channels from public CHANNEL resources (consistent with ResourceType pattern)
-- **claimPrivateChannel return signature** - Returns { channelArn, isPrivate: true } or null on unavailability; ConditionalCheckFailedException returns null (allows caller to retry)
-- **Zero coupling with existing fields** - Adding isPrivate field does not affect any other Session fields or existing update patterns
-
-v1.3 decisions from Phase 22-03 (Activity Feed & Private Channel Infrastructure):
-- **Activity feed filtering in handler** - Private session filtering applied after getRecentActivity() returns sorted results; maintains existing sort behavior without re-sorting
-- **Public-default backward compatibility** - Sessions without isPrivate field treated as public (undefined is falsy); enables zero-migration for legacy sessions
-- **Private channel pool replenishment** - Dedicated createPrivateChannel() function mirrors createChannel() pattern; stored with GSI1PK=STATUS#AVAILABLE#PRIVATE_CHANNEL marker
-- **MIN_PRIVATE_CHANNELS configuration** - Default 5 private channels (one-fifth of public pool) assumes fewer broadcasts are private; configurable via environment variable
-- **IVS_PLAYBACK_PRIVATE_KEY bootstrap** - Read from process.env during CDK synthesis; allows flexible deployment configuration without code changes (future JWT token generation)
-
-Gap closure decisions (Phase 19-05):
-- **EventBridge event Detail contract alignment** - Emit transcriptText (plaintext content) instead of transcriptS3Uri in Transcript Stored events to match Phase 20's store-summary consumer interface expectation
-- **Payload minimalism principle** - Event Detail contains only fields downstream consumers use: { sessionId, transcriptText }; removed unused timestamp field
-- **Empty string semantics** - When plainText is empty, emit transcriptText: '' (not omitted) to maintain consistent contract structure
-
-Gap closure decisions (Phase 20-05):
-- **S3 as authoritative transcript source** - Phase 19 emits transcriptS3Uri (S3 reference), Phase 20 fetches from S3 (not EventBridge payload). Eliminates payload size limits, keeps S3 as source of truth
-- **S3 URI parsing strategy** - Regex pattern `^s3://([^/]+)/(.+)$` validates URI format before GetObjectCommand; validation errors thrown (handled by outer catch block as non-blocking)
-- **Non-blocking empty transcript** - Sessions with empty S3 transcripts get aiSummaryStatus='failed' without Bedrock invocation or throwing; prevents cascading failures
-- **transformToString for plaintext** - Use SDK's Body?.transformToString() method for UTF-8 extraction (not manual Buffer handling)
-
-### Roadmap Evolution
-
-- Phase 21 added: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
-- Phase 22 added: Live Broadcast with Secure Viewer Links — Users can broadcast a live video stream and share a secure viewing link with others for real-time engagement
-
-### Pending Todos
+### Blockers
 
 None.
 
-### Blockers/Concerns
-
-- Phase 19 (Transcription Pipeline): HLS/MediaConvert input format conflict is unresolved. Default assumption is MediaConvert required (FEATURES.md, backed by official AWS Transcribe docs). Run research-phase before plan-phase for Phase 19.
-- Phase 20 (AI Summary): Bedrock Anthropic FTU form is a manual console step — cannot be automated via CDK. Must be documented as pre-deployment step in plan 20-01. Confirm model availability in deployment region at implementation time.
-
 ## Session Continuity
 
-Last session: 2026-03-06T01:56:02Z
-Stopped at: Completed 22-01-PLAN.md (API Gateway wiring for generate-playback-token)
+**If resuming work:**
+1. Check current phase in milestones/v1.4-ROADMAP.md (Phase 23 or 24)
+2. Check active plan status in `.planning/phases/{phase}/plans/`
+3. Review most recent commit message for last task completed
+4. Continue from next incomplete task or plan
+
+**If blocked:**
+- Consult research/SUMMARY.md for architecture guidance
+- Check PITFALLS.md for known risks and prevention strategies
+- Review PROJECT.md for core constraints and key decisions
+
+**Next action:** Run `/gsd:plan-phase 23` to decompose Phase 23 into executable plans.
 
 ---
-*State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — All 64 plans complete (v1.1 14 phases + v1.2 Phase 15-20 + v1.3 Phase 21-22 + gap closures); Phase 22 gap closure executed: POST /sessions/{sessionId}/playback-token endpoint wired to API Gateway; GeneratePlaybackTokenHandler Lambda defined with environment variables and DynamoDB permissions; Phase 22 verification updated to 7/7 truths verified (100%); all 343 backend tests passing)*
+
+**Milestone started:** 2026-03-06
+**Expected completion:** TBD (after Phase 23-24 planning)

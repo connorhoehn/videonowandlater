@@ -5,7 +5,7 @@
 - ✅ **v1.0 Gap Closure** - Phases 1-4.2 (shipped 2026-03-02)
 - ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
 - ✅ **v1.2 Activity Feed & Intelligence** - Phases 16-22 (shipped 2026-03-06)
-- 🚧 **v1.3 Secure Sharing** - Phases 23+ (in progress)
+- 🚧 **v1.4 Creator Studio & Stream Quality** - Phases 23-24 (in progress)
 
 ## Phases
 
@@ -41,17 +41,23 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 </details>
 
-### v1.3 Secure Sharing (In Progress)
+### v1.4 Creator Studio & Stream Quality (In Progress)
 
-**Milestone Goal:** [Next milestone goal to be defined]
+**Milestone Goal:** Give broadcasters professional tools to monitor stream health and showcase other creators in real-time.
+
+**Phases:**
+- [ ] Phase 23: Stream Quality Monitoring Dashboard
+- [ ] Phase 24: Creator Spotlight Selection & Display
+
+See milestones/v1.4-ROADMAP.md for full details.
 
 ---
 
 ## Progress
 
-**Latest Milestone:** v1.2 Activity Feed & Intelligence
-- **Status:** ✅ Complete (shipped 2026-03-06)
-- **Phases:** 7 (16-22)
-- **Plans:** 19 total
-- **Tests:** 343/343 backend tests passing
+**Latest Milestone:** v1.4 Creator Studio & Stream Quality
+- **Status:** 🚧 Planning
+- **Phases:** 2 (23-24)
+- **Plans:** 0/? started
+- **Tests:** 169/169 backend tests passing (from v1.3)
 

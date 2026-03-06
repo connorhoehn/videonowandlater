@@ -5,6 +5,7 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
+import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import {
   updateSessionStatus,
@@ -157,6 +158,103 @@ export const handler = async (
         }
       } catch (participantCountError: any) {
         console.error('Failed to update participant count (non-blocking):', participantCountError.message);
+      }
+    }
+
+    // Submit MediaConvert job to convert HLS → MP4 for transcription (best-effort, non-blocking)
+    if (session.recordingStatus === 'available') {
+      try {
+        const mediaConvertClient = new MediaConvertClient({ region: process.env.AWS_REGION });
+        const epochMs = Date.now();
+        const jobName = `vnl-${sessionId}-${epochMs}`;
+
+        const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
+        const recordingsBucket = event.detail.recording_s3_bucket_name;
+        const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
+
+        // Build HLS input path (master.m3u8 location from IVS recording structure)
+        const hlsInputPath = `s3://${recordingsBucket}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
+        const mp4OutputPath = `s3://${transcriptionBucket}/${sessionId}/`;
+
+        const createJobCommand = new CreateJobCommand({
+          Role: process.env.MEDIACONVERT_ROLE_ARN!,
+          JobTemplate: 'Default',
+          Queue: `arn:aws:mediaconvert:${process.env.AWS_REGION}:${process.env.AWS_ACCOUNT_ID}:queues/Default`,
+          Settings: {
+            Inputs: [
+              {
+                FileInput: hlsInputPath,
+                AudioSelectors: {
+                  default: {
+                    DefaultSelection: 'DEFAULT',
+                  },
+                },
+                VideoSelectors: {
+                  default: {},
+                },
+              },
+            ],
+            OutputGroups: [
+              {
+                Name: 'File Group',
+                OutputGroupSettings: {
+                  Type: 'FILE_GROUP_SETTINGS',
+                  FileGroupSettings: {
+                    Destination: mp4OutputPath,
+                  },
+                },
+                Outputs: [
+                  {
+                    NameModifier: 'recording',
+                    ContainerSettings: {
+                      Container: 'MP4',
+                    },
+                    VideoDescription: {
+                      CodecSettings: {
+                        Codec: 'H_264',
+                        H264Settings: {
+                          MaxBitrate: 5000000,
+                          RateControlMode: 'VBR',
+                          CodecProfile: 'MAIN',
+                        },
+                      },
+                    },
+                    AudioDescriptions: [
+                      {
+                        CodecSettings: {
+                          Codec: 'AAC',
+                          AacSettings: {
+                            Bitrate: 128000,
+                            CodingMode: 'CODING_MODE_2_0',
+                            SampleRate: 48000,
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          Tags: {
+            sessionId,
+            phase: '19-transcription',
+          },
+          UserMetadata: {
+            sessionId,
+            phase: '19-transcription',
+          },
+        });
+
+        const result = await mediaConvertClient.send(createJobCommand);
+        console.log('MediaConvert job submitted:', {
+          jobId: result.Job?.Id,
+          jobName,
+          sessionId,
+        });
+      } catch (mediaConvertError: any) {
+        console.error('Failed to submit MediaConvert job (non-blocking):', mediaConvertError.message);
+        // Do NOT throw — transcription is best-effort, don't block session cleanup
       }
     }
 

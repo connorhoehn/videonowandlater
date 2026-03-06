@@ -71,9 +71,7 @@ export function stdDev(samples: number[]): number {
  */
 export function calculateHealthScore(inputs: HealthScoreInputs): HealthScoreResult {
   const {
-    currentBitrate,
     targetBitrate,
-    currentFps,
     targetFps,
     recentBitrates,
     recentFrameRates

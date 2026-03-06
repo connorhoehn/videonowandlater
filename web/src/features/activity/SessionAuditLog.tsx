@@ -3,6 +3,7 @@
  * Displays events like: session created, recording available, mediaconvert submitted, transcribed, AI processed, etc.
  */
 
+import type { ReactElement } from 'react';
 import type { ActivitySession } from './RecordingSlider';
 
 interface AuditEvent {
@@ -73,8 +74,14 @@ function buildAuditLog(session: ActivitySession): AuditEvent[] {
         title: 'MediaConvert failed',
         status: 'failed',
       });
-    } else if (session.convertStatus === 'pending' || session.mediaConvertJobName) {
-      // If we have convertStatus=pending or a mediaConvertJobName, job was submitted
+    } else if (session.convertStatus === 'pending') {
+      // If convertStatus is explicitly pending, job was submitted
+      events.push({
+        title: 'MediaConvert submitted',
+        status: 'processing',
+      });
+    } else if (session.mediaConvertJobName) {
+      // If we have a mediaConvertJobName, job was submitted
       events.push({
         title: 'MediaConvert submitted',
         status: 'processing',
@@ -114,11 +121,6 @@ function buildAuditLog(session: ActivitySession): AuditEvent[] {
         title: 'Summary generated',
         status: 'completed',
       });
-    } else if (session.aiSummaryStatus === 'processing') {
-      events.push({
-        title: 'Generating summary',
-        status: 'processing',
-      });
     } else if (session.aiSummaryStatus === 'failed') {
       events.push({
         title: 'Summary generation failed',
@@ -135,7 +137,7 @@ function buildAuditLog(session: ActivitySession): AuditEvent[] {
   return events;
 }
 
-function getStatusIcon(status: AuditEvent['status']): JSX.Element {
+function getStatusIcon(status: AuditEvent['status']): ReactElement {
   switch (status) {
     case 'completed':
       return (

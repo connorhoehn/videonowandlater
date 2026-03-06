@@ -18,12 +18,13 @@ import { EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
 import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
 import { SessionAuditLog } from '../activity/SessionAuditLog';
 import { SummaryDisplay } from './SummaryDisplay';
+import { TranscriptDisplay } from './TranscriptDisplay';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
 
 interface Session {
   sessionId: string;
   userId: string;
-  sessionType?: 'BROADCAST' | 'HANGOUT';
+  sessionType: 'BROADCAST' | 'HANGOUT' | 'UPLOAD';
   recordingHlsUrl?: string;
   recordingDuration?: number; // milliseconds
   createdAt: string;
@@ -56,6 +57,7 @@ export function ReplayViewer() {
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
   const [authToken, setAuthToken] = useState('');
   const [currentUserId, setCurrentUserId] = useState('');
+  const [activeTab, setActiveTab] = useState<'chat' | 'transcript'>('chat');
 
   useEffect(() => {
     fetchAuthSession().then(session => {
@@ -93,14 +95,19 @@ export function ReplayViewer() {
           return;
         }
 
-        const data: Session = await response.json();
+        const data = await response.json();
+        // Ensure sessionType has a default value for backward compatibility
+        const sessionWithDefaults: Session = {
+          ...data,
+          sessionType: data.sessionType || data.type || 'BROADCAST',
+        };
         console.log('[ReplayViewer] session loaded', {
-          sessionId: data.sessionId,
-          recordingStatus: (data as any).recordingStatus,
-          recordingHlsUrl: (data as any).recordingHlsUrl,
-          status: (data as any).status,
+          sessionId: sessionWithDefaults.sessionId,
+          recordingStatus: sessionWithDefaults.recordingStatus,
+          recordingHlsUrl: sessionWithDefaults.recordingHlsUrl,
+          status: (sessionWithDefaults as any).status,
         });
-        setSession(data);
+        setSession(sessionWithDefaults);
       } catch (err: any) {
         console.error('[ReplayViewer] fetch error', err);
         setError(`Error loading recording: ${err.message}`);
@@ -363,9 +370,50 @@ export function ReplayViewer() {
             </div>
           </div>
 
-          {/* Chat column (takes 1/3 width on desktop, fixed height) */}
-          <div className="lg:col-span-1 h-[600px]">
-            <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
+          {/* Chat/Transcript column (takes 1/3 width on desktop, fixed height) */}
+          <div className="lg:col-span-1 h-[600px] flex flex-col">
+            {/* Tab buttons */}
+            <div className="flex bg-white rounded-t-lg shadow-lg border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'chat'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                💬 Chat Replay
+              </button>
+              <button
+                onClick={() => setActiveTab('transcript')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'transcript'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                📝 Transcript
+                {session?.transcriptStatus === 'available' && (
+                  <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                    Ready
+                  </span>
+                )}
+                {session?.transcriptStatus === 'processing' && (
+                  <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                    Processing
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 overflow-hidden">
+              {activeTab === 'chat' ? (
+                <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
+              ) : (
+                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} />
+              )}
+            </div>
           </div>
         </div>
       </div>

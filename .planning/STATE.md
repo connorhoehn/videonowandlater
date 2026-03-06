@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
-status: completed
-stopped_at: Completed 18-03-PLAN.md (reaction summary in replay viewer)
-last_updated: "2026-03-06T00:51:37.995Z"
-last_activity: 2026-03-06 — Completed 18-03-PLAN.md (reaction summary display in ReplayViewer)
+status: executing
+stopped_at: Completed 19-01-PLAN.md (transcription pipeline setup)
+last_updated: "2026-03-06T01:05:00.000Z"
+last_activity: 2026-03-06 — Completed 19-01-PLAN.md (transcription pipeline domain, handlers, and repository)
 progress:
-  total_phases: 18
-  completed_phases: 15
-  total_plans: 39
-  completed_plans: 32
-  percent: 100
+  total_phases: 20
+  completed_phases: 14
+  total_plans: 40
+  completed_plans: 33
+  percent: 82.5
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 18 of 20 (Homepage Redesign - Activity Feed) -- COMPLETE
-Plan: 03 of 03 (Reaction Summary in Replay Viewer) -- COMPLETE
-Status: Completed (Phase 18 all plans done)
-Last activity: 2026-03-06 — Completed 18-03-PLAN.md (reaction summary display in ReplayViewer)
+Phase: 19 of 20 (Transcription Pipeline) -- IN PROGRESS
+Plan: 01 of 02 (Transcription Pipeline Setup) -- COMPLETE
+Status: Plan 19-01 complete, awaiting 19-02 (Infrastructure & EventBridge Wiring)
+Last activity: 2026-03-06 — Completed 19-01-PLAN.md (transcription pipeline domain, handlers, and repository)
 
-Progress: [██████████] 100% (32/32 plans complete)
+Progress: [████████░░] 82.5% (33/40 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5 (v1.2)
-- Average duration: 3.4 min
-- Total execution time: 25 min
+- Total plans completed: 6 (v1.2)
+- Average duration: 3.2 min
+- Total execution time: 31 min
 
 **By Phase:**
 
@@ -46,6 +46,7 @@ Progress: [██████████] 100% (32/32 plans complete)
 | 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
+| 19 | 2 | 1 | 6 min (so far) |
 
 *Updated after each plan completion*
 
@@ -78,6 +79,12 @@ v1.2 decisions from Phase 18:
 - **Scan + Sort** - Uses ScanCommand for ended sessions, sorts in app memory (acceptable for activity feed with ~100 sessions)
 - **Vitest for web component testing** (18-03) - Chose vitest over Jest for ESM-native testing, better Vite integration, and faster test runs. Excludes test files from TypeScript build via tsconfig pattern.
 
+v1.2 decisions from Phase 19:
+- **Non-blocking transcription pipeline** - Transcription job failures logged but don't throw or block session cleanup. Pool resources always released, sessions always transition to ENDED.
+- **Job naming format vnl-{sessionId}-{epochMs}** - Enables sessionId extraction without DynamoDB queries; epochMs ensures uniqueness across retries.
+- **Optional transcript fields** - updateTranscriptStatus() accepts optional s3Path and plainText parameters for partial updates (follows updateRecordingMetadata pattern).
+- **Graceful transcript parsing** - Missing/empty transcripts logged as warnings; session still updated to 'available' with empty plainText for Phase 20 to handle gracefully.
+
 v1.2 decisions pending:
 - Phase 20: Bedrock model ID and regional availability confirmation
 
@@ -97,8 +104,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 18-03-PLAN.md (reaction summary in replay viewer)
+Stopped at: Completed 19-01-PLAN.md (transcription pipeline setup - domain, handlers, repository)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 18-03 complete (ReplayViewer extended with reaction summary display, vitest infrastructure added for web testing)*
+*Last updated: 2026-03-06 — 19-01 complete (transcription pipeline domain extended, updateTranscriptStatus() repository function, recording-ended MediaConvert submission, transcode-completed and transcribe-completed handlers)*

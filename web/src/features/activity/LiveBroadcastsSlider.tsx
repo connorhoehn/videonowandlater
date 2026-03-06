@@ -24,13 +24,14 @@ export function LiveBroadcastsSlider({ sessions }: LiveBroadcastsSliderProps) {
   }
 
   return (
-    <div className="px-6 py-6 border-b border-gray-100 bg-red-50">
-      <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-        Live Now
-      </h2>
-      <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
-        <div className="flex gap-4 pb-2">
+    <div className="border-b border-gray-100 bg-red-50">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+          Live Now
+        </h2>
+        <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
+          <div className="flex gap-4 pb-2">
           {liveBroadcasts.map((session) => (
             <div
               key={session.sessionId}
@@ -82,6 +83,7 @@ export function LiveBroadcastsSlider({ sessions }: LiveBroadcastsSliderProps) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

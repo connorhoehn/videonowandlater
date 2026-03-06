@@ -1,7 +1,31 @@
-# Requirements: VideoNowAndLater v1.3
+# Requirements: VideoNowAndLater v1.4
 
 **Defined:** 2026-03-06
 **Core Value:** Users can go live instantly and every session is automatically preserved with its full context for later replay.
+
+## v1.4 Requirements: Creator Studio & Stream Quality
+
+### Stream Quality Monitoring
+
+- [ ] **QUAL-01**: Broadcaster can view real-time stream quality dashboard during live broadcast
+- [ ] **QUAL-02**: Dashboard displays current bitrate (Mbps) and target bitrate for comparison
+- [ ] **QUAL-03**: Dashboard displays current frame rate (FPS) and resolution (e.g., 1920x1080)
+- [ ] **QUAL-04**: Dashboard displays network status (Connected/Unstable/Disconnected) with visual indicator
+- [ ] **QUAL-05**: Dashboard displays health score (0-100%) based on bitrate stability and FPS consistency
+- [ ] **QUAL-06**: Dashboard alerts broadcaster when bitrate drops >30% below target (warning badge)
+- [ ] **QUAL-07**: Dashboard is non-intrusive overlay on broadcast page (does not block stream preview)
+- [ ] **QUAL-08**: Metrics update every 1-2 seconds with no API latency impact on broadcast
+
+### Creator Spotlight
+
+- [ ] **SPOT-01**: Broadcaster can feature another active broadcaster during their live stream
+- [ ] **SPOT-02**: Feature selection shows a modal with search/list of live broadcasters from their viewers
+- [ ] **SPOT-03**: Featured creator appears as a picture-in-picture overlay or elegant badge during broadcast
+- [ ] **SPOT-04**: Viewers can click featured creator link to navigate to that broadcaster's stream
+- [ ] **SPOT-05**: Featured broadcast selection is available only to public broadcasts (not private)
+- [ ] **SPOT-06**: Featured broadcast link appears on viewer's stream detail page
+- [ ] **SPOT-07**: When a broadcast ends, featured spotlight is automatically cleared
+- [ ] **SPOT-08**: Broadcaster can remove/change featured creator at any time mid-stream
 
 ## v1.3 Requirements: Secure Sharing
 
@@ -51,24 +75,52 @@
 
 ## Traceability
 
+### v1.4 Requirements
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARE-01 | Phase 23 | Pending |
-| SHARE-02 | Phase 23 | Pending |
-| SHARE-03 | Phase 23 | Pending |
-| SHARE-04 | Phase 24 | Pending |
-| SHARE-05 | Phase 23 | Pending |
-| COLL-01 | Phase 24 | Pending |
-| COLL-02 | Phase 24 | Pending |
-| COLL-03 | Phase 24 | Pending |
-| COLL-04 | Phase 24 | Pending |
-| COLL-05 | Phase 25 | Pending |
+| QUAL-01 | Phase 23 | Pending |
+| QUAL-02 | Phase 23 | Pending |
+| QUAL-03 | Phase 23 | Pending |
+| QUAL-04 | Phase 23 | Pending |
+| QUAL-05 | Phase 23 | Pending |
+| QUAL-06 | Phase 23 | Pending |
+| QUAL-07 | Phase 23 | Pending |
+| QUAL-08 | Phase 23 | Pending |
+| SPOT-01 | Phase 24 | Pending |
+| SPOT-02 | Phase 24 | Pending |
+| SPOT-03 | Phase 24 | Pending |
+| SPOT-04 | Phase 24 | Pending |
+| SPOT-05 | Phase 24 | Pending |
+| SPOT-06 | Phase 24 | Pending |
+| SPOT-07 | Phase 24 | Pending |
+| SPOT-08 | Phase 24 | Pending |
 
 **Coverage:**
+- v1.4 requirements: 16 total
+- Mapped to phases: 16 ✓
+- Unmapped: 0 ✓
+
+### v1.3 Requirements (Previous Milestone — Archived)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| SHARE-01 | Phase 23 (v1.3) | Pending |
+| SHARE-02 | Phase 23 (v1.3) | Pending |
+| SHARE-03 | Phase 23 (v1.3) | Pending |
+| SHARE-04 | Phase 24 (v1.3) | Pending |
+| SHARE-05 | Phase 23 (v1.3) | Pending |
+| COLL-01 | Phase 24 (v1.3) | Pending |
+| COLL-02 | Phase 24 (v1.3) | Pending |
+| COLL-03 | Phase 24 (v1.3) | Pending |
+| COLL-04 | Phase 24 (v1.3) | Pending |
+| COLL-05 | Phase 25 (v1.3) | Pending |
+
+**v1.3 Coverage:**
 - v1.3 requirements: 10 total
 - Mapped to phases: 10 ✓
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-06*
-*Last updated: 2026-03-06 after roadmap creation*
+*Last updated: 2026-03-06 after v1.4 milestone planning and plan checker feedback*

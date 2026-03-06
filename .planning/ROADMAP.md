@@ -5,7 +5,8 @@
 - ✅ **v1.0 Gap Closure** - Phases 1-4.2 (shipped 2026-03-02)
 - ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
 - ✅ **v1.2 Activity Feed & Intelligence** - Phases 16-22 (shipped 2026-03-06)
-- 🚧 **v1.3 Secure Sharing** - Phases 23-25 (in progress)
+- ✅ **v1.3 Secure Sharing** - Phases 21-22 (shipped 2026-03-06 as part of v1.2)
+- 🚧 **v1.4 Creator Studio & Stream Quality** - Phases 23-24 (in progress)
 
 ## Phases
 
@@ -41,62 +42,46 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 </details>
 
-### v1.3 Secure Sharing (In Progress)
+### v1.4 Creator Studio & Stream Quality (In Progress)
 
-**Milestone Goal:** Enable users to share broadcasts and recordings via permanent links and organize sessions into private collections with granular access control.
+**Milestone Goal:** Give broadcasters professional tools to monitor stream health and showcase other creators in real-time.
 
 **Phases:**
 
-- [ ] **Phase 23: Shareable Links** - Generate time-limited share links with copy-to-clipboard UI and expiration countdown
-- [ ] **Phase 24: Collections Core** - Create named collections, add/remove sessions, and view collections with privacy controls
-- [ ] **Phase 25: Collections Management** - Delete collections with cascading cleanup, edit metadata, and revoke specific sessions from collections
+- [ ] **Phase 23: Stream Quality Monitoring Dashboard** - Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters
+- [ ] **Phase 24: Creator Spotlight Selection & Display** - Feature another live creator during broadcast with elegant overlay UI
 
 ## Phase Details
 
-### Phase 23: Shareable Links
-**Goal:** Users can generate permanent shareable links for any broadcast or recording, with expiration countdown and one-click copy-to-clipboard, accessible without account creation.
+### Phase 23: Stream Quality Monitoring Dashboard
+**Goal:** Broadcaster can monitor stream health in real-time without disrupting broadcast experience.
 
-**Depends on:** Phase 22 (v1.2) — JWT token patterns established
+**Depends on:** Phase 22 (v1.3) — WebRTC stats API patterns established
 
-**Requirements:** SHARE-01, SHARE-02, SHARE-03, SHARE-05
+**Requirements:** QUAL-01, QUAL-02, QUAL-03, QUAL-04, QUAL-05, QUAL-06, QUAL-07, QUAL-08
 
 **Success Criteria** (what must be TRUE):
-  1. User can click "Share" button and generate a shareable link with title, duration, and thumbnail metadata in URL
-  2. Shareable link is accessible from any browser without user login (anonymous viewer can watch)
-  3. Shareable link displays full video player with reaction summary and chat history synced to replay
-  4. User can copy share link to clipboard with one click and see confirmation
+  1. Broadcaster can view real-time dashboard overlay showing bitrate, frame rate, resolution, and network status during live broadcast
+  2. Dashboard displays health score (0-100%) that updates every 1-2 seconds with visual indicators for connection quality
+  3. Dashboard shows warning badge when bitrate drops more than 30% below target, alerting broadcaster to quality degradation
+  4. Dashboard overlay does not obstruct stream preview or interfere with broadcast controls (non-intrusive positioning)
+  5. Metrics collection and display operates with no perceptible API latency impact on broadcast performance
 
 **Plans:** TBD
 
-### Phase 24: Collections Core
-**Goal:** Users can organize sessions into named collections (playlists) with privacy controls, view all their collections, and add/remove sessions atomically.
+### Phase 24: Creator Spotlight Selection & Display
+**Goal:** Broadcaster can feature another live creator during broadcast; viewers can discover and navigate to featured stream.
 
-**Depends on:** Phase 23 (shareable links proven stable)
+**Depends on:** Phase 23 (Stream Quality Dashboard validation gates pass)
 
-**Requirements:** SHARE-04, COLL-01, COLL-02, COLL-03, COLL-04
-
-**Success Criteria** (what must be TRUE):
-  1. User can create a named collection from profile modal with title, description, and privacy toggle (default private)
-  2. User can add any session from homepage or replay page to one or more collections with one click
-  3. User can remove session from collection without affecting collection or other sessions
-  4. User can view all their collections on homepage with session counts and privacy status visible
-  5. User can view collection detail page showing all sessions inside with full replay player for each
-
-**Plans:** TBD
-
-### Phase 25: Collections Management
-**Goal:** Users can delete collections and modify collection metadata (title, description, privacy), with safe cascading cleanup of membership records and orphan prevention.
-
-**Depends on:** Phase 24 (collection queries working correctly)
-
-**Requirements:** COLL-05
+**Requirements:** SPOT-01, SPOT-02, SPOT-03, SPOT-04, SPOT-05, SPOT-06, SPOT-07, SPOT-08
 
 **Success Criteria** (what must be TRUE):
-  1. User can delete collection from collection detail or collection list with confirmation dialog
-  2. All sessions in deleted collection remain intact and appear in other collections and homepage
-  3. No orphaned collection-session records remain after deletion (cascading cleanup verified)
-  4. User can edit collection title, description, and privacy setting from collection detail page
-  5. Collection privacy changes (private ↔ public) reflect immediately in homepage and activity feeds
+  1. Broadcaster can open featured creator selection modal and search/browse live broadcasters from their viewer list
+  2. Featured creator appears as picture-in-picture overlay or elegant badge on broadcast page with name and avatar
+  3. Viewers can see featured creator link on stream detail page and click to navigate to that broadcaster's stream
+  4. Featured creator selection is restricted to public broadcasts only (private broadcasts cannot feature or be featured)
+  5. When broadcast ends or broadcaster removes featured creator, spotlight is automatically cleared with no stale data persisting
 
 **Plans:** TBD
 
@@ -104,14 +89,13 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 ## Progress
 
-**Latest Milestone:** v1.3 Secure Sharing
-- **Status:** 🚧 Planning
-- **Phases:** 3 (23-25)
+**Latest Milestone:** v1.4 Creator Studio & Stream Quality
+- **Status:** 🚧 Planning Phase 23
+- **Phases:** 2 (23-24)
 - **Plans:** 0/? started
-- **Tests:** 169/169 backend tests passing (from v1.2)
+- **Tests:** 343/343 backend tests passing (from v1.3)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 23 - Shareable Links | 0/? | Not started | - |
-| 24 - Collections Core | 0/? | Not started | - |
-| 25 - Collections Management | 0/? | Not started | - |
+| 23 - Stream Quality Monitoring Dashboard | 0/? | Planning | - |
+| 24 - Creator Spotlight Selection & Display | 0/? | Not started | - |

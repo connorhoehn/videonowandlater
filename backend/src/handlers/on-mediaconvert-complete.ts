@@ -1,10 +1,11 @@
 /**
  * Lambda handler for EventBridge MediaConvert job completion events
  * Updates session recording metadata when MediaConvert encoding completes
- * The transcription pipeline is triggered automatically based on recordingStatus field
+ * Publishes an explicit EventBridge event to trigger Phase 19 transcription pipeline
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { getSessionById, updateSessionRecording } from '../repositories/session-repository';
 
 interface MediaConvertJobDetail {
@@ -59,6 +60,33 @@ export const handler = async (
       });
 
       console.log(`Session updated with HLS URL and marked as ended: ${sessionId}`);
+
+      // Publish event to trigger Phase 19 transcription pipeline
+      const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+
+      try {
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: 'vnl.upload',
+                DetailType: 'Upload Recording Available',
+                Detail: JSON.stringify({
+                  sessionId,
+                  recordingHlsUrl,
+                }),
+                EventBusName: eventBusName,
+              },
+            ],
+          })
+        );
+
+        console.log(`Transcription pipeline triggered for session: ${sessionId}`);
+      } catch (error) {
+        console.error(`Failed to publish transcription event for ${sessionId}:`, error);
+        // Don't rethrow; session is already updated with HLS URL
+        // Store-transcript handler can still work if it queries session.recordingStatus='available'
+      }
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed
       console.error(`MediaConvert job failed: ${jobName} (${jobId})`);

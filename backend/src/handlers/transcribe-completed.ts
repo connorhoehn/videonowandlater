@@ -98,8 +98,7 @@ export const handler = async (
                 DetailType: 'Transcript Stored',
                 Detail: JSON.stringify({
                   sessionId,
-                  transcriptS3Uri: s3Uri,
-                  timestamp: new Date().toISOString(),
+                  transcriptText: '',
                 }),
               },
             ],
@@ -136,8 +135,7 @@ export const handler = async (
               DetailType: 'Transcript Stored',
               Detail: JSON.stringify({
                 sessionId,
-                transcriptS3Uri: s3Uri,
-                timestamp: new Date().toISOString(),
+                transcriptText: plainText,
               }),
             },
           ],

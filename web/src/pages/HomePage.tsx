@@ -4,6 +4,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
 import { RecordingSlider, type ActivitySession } from '../features/activity/RecordingSlider';
+import { LiveBroadcastsSlider } from '../features/activity/LiveBroadcastsSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 
@@ -171,6 +172,7 @@ export function HomePage() {
           </div>
         ) : (
           <>
+            <LiveBroadcastsSlider sessions={sessions} />
             <RecordingSlider sessions={sessions} />
             <ActivityFeed sessions={sessions} />
           </>

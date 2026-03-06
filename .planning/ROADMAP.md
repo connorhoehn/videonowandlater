@@ -245,10 +245,10 @@ Plans:
   1. After a broadcast or hangout session ends, the session record in DynamoDB contains a reactionSummary map with per-type counts (e.g., { heart: 42, fire: 17, clap: 8 })
   2. Pool release always completes even when reaction aggregation fails — reaction summary computation is wrapped in try/catch and never gates pool resource availability
   3. Sessions with no reactions store an empty reactionSummary map (not undefined) so downstream consumers can always read the field without null checks
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 17-01: Add computeAndStoreReactionSummary to recording-ended.ts and session-repository.ts
+- [x] 17-01-PLAN.md — Reaction Summary at Session End (3 tasks, domain + repository + handler integration)
 
 ### Phase 18: Homepage Redesign & Activity Feed
 **Goal**: The homepage is redesigned with a two-zone layout — a horizontal scrollable recording slider and an activity feed below it — and a GET /activity API endpoint returns all session types with full activity metadata
@@ -329,11 +329,11 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
 | 16. Hangout Participant Tracking | v1.2 | 0/1 | Not started | - |
-| 17. Reaction Summary at Session End | v1.2 | 0/1 | Not started | - |
+| 17. Reaction Summary at Session End | v1.2 | 1/1 | Planned | - |
 | 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Not started | - |
 | 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |
 | 20. AI Summary Pipeline | v1.2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-05 — v1.2 phases 16-20 added*
+*Last updated: 2026-03-05 — Phase 17 planned*

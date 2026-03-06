@@ -176,6 +176,9 @@ export class SessionStack extends Stack {
       name: 'vnl-recording-config',
     });
 
+    // Ensure cleanup resource is deleted AFTER recording configuration
+    recordingConfiguration.node.addDependency(cleanupResource);
+
     // Export RecordingConfiguration ARN and CloudFront domain
     new CfnOutput(this, 'RecordingConfigArn', {
       value: recordingConfiguration.attrArn,

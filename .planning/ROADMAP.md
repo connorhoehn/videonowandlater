@@ -67,7 +67,7 @@ See milestones/v1.2-ROADMAP.md for full details.
   3. All todos from recent work are captured and addressed
   4. System remains stable and performant after changes
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 22.1-01-PLAN.md — Add CDK custom resource for IVS cleanup on stack deletion ✅
@@ -118,6 +118,6 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | ✅ Complete | 2026-03-06 |
+| 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 2/3 | In Progress | - |
 | 24 - Creator Spotlight Selection & Display | 0/? | Not started | - |

@@ -5,12 +5,17 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { usePlayer } from './usePlayer';
 import { VideoPlayer } from './VideoPlayer';
 import { ChatPanel } from '../chat/ChatPanel';
 import { useChatRoom } from '../chat/useChatRoom';
 import { ChatRoomProvider } from '../chat/ChatRoomProvider';
+import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
+import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
+import { useReactionSender } from '../reactions/useReactionSender';
+import { useReactionListener } from '../reactions/useReactionListener';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -32,6 +37,7 @@ export function ViewerPage() {
   const [sessionLoading, setSessionLoading] = React.useState(true);
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  const [floatingReactions, setFloatingReactions] = React.useState<FloatingEmoji[]>([]);
 
   // Fetch session data to get sessionOwnerId — guard against empty authToken
   React.useEffect(() => {
@@ -83,6 +89,35 @@ export function ViewerPage() {
     apiBaseUrl,
   });
 
+  const { sendReaction, sending } = useReactionSender(sessionId ?? '', authToken);
+
+  // Handle sending reaction
+  const handleReaction = async (emoji: EmojiType) => {
+    await sendReaction(emoji);
+    // Optimistic UI: immediately add to floatingReactions
+    setFloatingReactions((prev) => [
+      ...prev,
+      {
+        id: uuidv4(),
+        emoji: EMOJI_MAP[emoji],
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  // Listen for reactions from IVS Chat
+  useReactionListener(room, (reaction) => {
+    const emoji = EMOJI_MAP[reaction.emojiType];
+    setFloatingReactions((prev) => [
+      ...prev,
+      {
+        id: uuidv4(),
+        emoji,
+        timestamp: Date.now(),
+      },
+    ]);
+  });
+
   // The session owner (broadcaster) ID — used for chat ownership display
   const sessionOwnerId = session?.userId ?? userId;
 
@@ -129,11 +164,16 @@ export function ViewerPage() {
         {/* Video section */}
         <div className={isMobile ? 'w-full flex flex-col' : 'w-[70%] border-r flex flex-col'}>
           <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-            <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} />
+            {/* Video player with reactions overlay */}
+            <div className="relative">
+              <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} />
+              {/* Floating reactions overlay */}
+              <FloatingReactions reactions={floatingReactions} />
+            </div>
 
-            {/* Broadcaster info + status row */}
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3">
+            {/* Broadcaster info + status row + reaction picker */}
+            <div className="flex items-center justify-between text-sm gap-3">
+              <div className="flex items-center gap-3 flex-1">
                 {session?.userId && (
                   <div className="flex items-center gap-2 text-gray-700">
                     <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-700">
@@ -151,8 +191,14 @@ export function ViewerPage() {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-gray-400 font-mono hidden sm:block" title={sessionId}>
-                {sessionId.slice(0, 12)}…
+              <div className="flex items-center gap-3">
+                <ReactionPicker
+                  onReaction={handleReaction}
+                  disabled={sending}
+                />
+                <div className="text-xs text-gray-400 font-mono hidden sm:block" title={sessionId}>
+                  {sessionId.slice(0, 12)}…
+                </div>
               </div>
             </div>
           </div>

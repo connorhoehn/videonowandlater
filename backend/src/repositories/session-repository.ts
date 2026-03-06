@@ -827,3 +827,68 @@ export async function updateSessionRecording(
     ExpressionAttributeValues: values,
   }));
 }
+
+/**
+ * Claim a private channel from the pre-warmed pool for a private broadcast session
+ * Private channels require JWT tokens for playback authentication
+ * Returns null if no private channels available; caller should retry or fail gracefully
+ *
+ * @param tableName DynamoDB table name
+ * @returns Object with channelArn and isPrivate=true, or null if no channels available
+ */
+export async function claimPrivateChannel(
+  tableName: string
+): Promise<{ channelArn: string; isPrivate: boolean } | null> {
+  const docClient = getDocumentClient();
+
+  // Query GSI1 for available private channels
+  const queryResult = await docClient.send(
+    new QueryCommand({
+      TableName: tableName,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk',
+      ExpressionAttributeValues: {
+        ':pk': 'STATUS#AVAILABLE#PRIVATE_CHANNEL',
+      },
+      Limit: 1,
+    })
+  );
+
+  if (!queryResult.Items?.length) {
+    return null; // No available private channels
+  }
+
+  const poolItem = queryResult.Items[0];
+  const channelArn = poolItem.channelArn as string;
+
+  // Transition pool item to CLAIMED state
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: poolItem.PK as string,
+          SK: poolItem.SK as string,
+        },
+        UpdateExpression: 'SET GSI1PK = :claimed',
+        ExpressionAttributeValues: {
+          ':claimed': 'STATUS#CLAIMED#PRIVATE_CHANNEL',
+          ':expected': 'STATUS#AVAILABLE#PRIVATE_CHANNEL',
+        },
+        ConditionExpression: 'GSI1PK = :expected',
+      })
+    );
+  } catch (err: any) {
+    if (err.name === 'ConditionalCheckFailedException') {
+      // Pool item was claimed by another concurrent request; retry by calling again
+      return null;
+    }
+    throw err;
+  }
+
+  // Return claimed channel with isPrivate flag
+  return {
+    channelArn,
+    isPrivate: true,
+  };
+}

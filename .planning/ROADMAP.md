@@ -5,6 +5,7 @@
 - ✅ **v1.0 Gap Closure** - Phases 1-4.2 (shipped 2026-03-02)
 - ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
 - 🚧 **v1.2 Activity Feed & Intelligence** - Phases 16-21 (in progress)
+- 🚧 **v1.3 Secure Sharing** - Phase 22+ (upcoming)
 
 ## Phases
 
@@ -220,8 +221,7 @@ Plans:
 - [x] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint (completed 2026-03-06)
 - [x] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events (completed 2026-03-06)
 - [x] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries (completed 2026-03-06)
-
-## Phase Details
+- [x] **Phase 21: Video Uploads** - Users can upload pre-recorded videos with automatic processing, transcription, and AI summaries (in progress)
 
 ### Phase 16: Hangout Participant Tracking
 **Goal**: Each hangout participant join is durably recorded in DynamoDB so activity cards can display who was in a session
@@ -262,7 +262,7 @@ Plans:
   5. Reaction summary counts (per emoji type) are visible on recording cards in the slider
   6. Reaction summary counts are displayed in the replay info panel when viewing a recording
   7. GET /activity returns recent sessions with all activity metadata in a single API call — the frontend does not aggregate counts at read time
-**Plans**: 4 plans
+**Plans**: 3 plans (1 gap closure remaining)
 
 Plans:
 - [x] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03)
@@ -298,37 +298,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 20-01-PLAN.md — Bedrock integration, store-summary handler, domain model, repository function, CDK wiring (AI-01, AI-02) - Planned
-- [ ] 20-02-PLAN.md — AI summary display on recording cards and replay info panel (AI-03, AI-04, AI-05) - Planned
-
-**Manual prerequisite:** Anthropic models require a one-time First Time Use (FTU) form in the Bedrock console before InvokeModel succeeds. This cannot be automated via CDK. Document as a pre-deployment step in plan 20-01. Confirm model availability in deployment region and whether the FTU form is still required at implementation time.
-
-## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 5. Recording Foundation | v1.1 | 2/2 | Complete | 2026-03-03 |
-| 6. Replay Viewer | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete | 2026-03-03 |
-| 8. RealTime Hangouts | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 09.1. TypeScript Build Fixes | v1.1 | 4/4 | Complete | 2026-03-03 |
-| 10. Integration Wiring Fixes | v1.1 | 2/2 | Complete | 2026-03-04 |
-| 11. Hangout Recording Lifecycle Fix | v1.1 | 1/1 | Complete | 2026-03-04 |
-| 12. Hangout Creation UI | v1.1 | 1/1 | Complete | 2026-03-04 |
-| 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
-| 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
-| 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
-| 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
-| 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
-| 18. Homepage Redesign & Activity Feed | 4/4 | Complete    | 2026-03-06 | 2026-03-06 |
-| 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | - |
-| 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | - |
-
-| 21. Video Uploads | v1.2 | 4/4 | Planned | - |
+- [x] 20-01-PLAN.md — Bedrock integration, store-summary handler, domain model, repository function, CDK wiring (AI-01, AI-02)
+- [x] 20-02-PLAN.md — AI summary display on recording cards and replay info panel (AI-03, AI-04, AI-05)
 
 ### Phase 21: Video Uploads
 **Goal**: Users can upload pre-recorded videos (mov/mp4 from phone or computer) with automatic adaptive bitrate encoding, integration with transcription and AI summary pipelines
@@ -346,21 +317,65 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 **Plans**: 4 plans
 
 Plans:
-- [ ] 21-01-PLAN.md — Backend domain models and repository functions (UPLOAD-01, UPLOAD-02, UPLOAD-03)
-- [ ] 21-02-PLAN.md — Upload handlers: init, chunk URLs, multipart completion (UPLOAD-04, UPLOAD-05, UPLOAD-06)
+- [x] 21-01-PLAN.md — Backend domain models and repository functions (UPLOAD-01, UPLOAD-02, UPLOAD-03)
+- [x] 21-02-PLAN.md — Upload handlers: init, chunk URLs, multipart completion (UPLOAD-04, UPLOAD-05, UPLOAD-06)
 - [ ] 21-03-PLAN.md — MediaConvert integration, CDK infrastructure, EventBridge wiring (UPLOAD-07, UPLOAD-08, UPLOAD-09)
 - [ ] 21-04-PLAN.md — Frontend upload UI, HomePage integration, integration tests (UPLOAD-10, UPLOAD-11, UPLOAD-12)
 
-### Phase 22: Live Broadcast with Secure Viewer Links
+</details>
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 21
-**Plans:** 4/4 plans complete
+### v1.3 Secure Sharing (Upcoming)
+
+**Milestone Goal:** Enable broadcasters to share access-controlled streams with selected viewers via time-limited JWT tokens, maintaining privacy while enabling secure collaboration.
+
+### Phase 22: Live Broadcast with Secure Viewer Links
+**Goal**: Users can broadcast a live video stream and share a secure viewing link with others for real-time engagement
+**Depends on**: Phase 21
+**Requirements**: TBD (to be defined)
+**Success Criteria** (what must be TRUE):
+  1. Broadcaster can create a live broadcast with optional privacy setting (public or private)
+  2. If private, only viewers with a valid playback token can watch the stream
+  3. Broadcaster can generate shareable viewing links (tokens) to send to specific viewers
+  4. Tokens have configurable expiration time (default 24 hours, max 7 days)
+  5. Private broadcasts do not appear in public activity feed
+  6. Token generation is server-side via ES384 JWT signing
+  7. IVS verifies token signature on playback requests
+**Plans**: 4 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 22 to break down)
+- [ ] 22-01-PLAN.md — Backend Domain Model & Pool Extension (Session.isPrivate, private channel pool management, claimPrivateChannel)
+- [ ] 22-02-PLAN.md — Playback Token Handler (POST /sessions/{id}/playback-token with ES384 JWT signing)
+- [ ] 22-03-PLAN.md — Activity Feed Filtering & CDK Wiring (Filter private sessions, bootstrap ES384 private key, private channel pool)
+- [ ] 22-04-PLAN.md — Integration Tests & Documentation (End-to-end playback, token validation, security guide)
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
+
+| Phase | Milestone | Plans | Status | Completed |
+|-------|-----------|-------|--------|-----------|
+| 5. Recording Foundation | v1.1 | 2/2 | Complete | 2026-03-03 |
+| 6. Replay Viewer | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 7. Reactions & Chat Sync | v1.1 | 4/4 | Complete | 2026-03-03 |
+| 8. RealTime Hangouts | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 9. Developer CLI v1.1 | v1.1 | 3/3 | Complete | 2026-03-03 |
+| 09.1. TypeScript Build Fixes | v1.1 | 4/4 | Complete | 2026-03-03 |
+| 10. Integration Wiring Fixes | v1.1 | 2/2 | Complete | 2026-03-04 |
+| 11. Hangout Recording Lifecycle Fix | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 12. Hangout Creation UI | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
+| 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
+| 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
+| 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 3/4 | In Progress | 2026-03-06 |
+| 19. Transcription Pipeline | v1.2 | 2/2 | Complete | 2026-03-06 |
+| 20. AI Summary Pipeline | v1.2 | 2/2 | Complete | 2026-03-06 |
+| 21. Video Uploads | v1.2 | 2/4 | In Progress | 2026-03-06 |
+| 22. Live Broadcast with Secure Viewer Links | v1.3 | 4/4 | Planned | - |
 
 ---
+
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-06 — Phase 18 gap closure plan added (18-04: missing frontend test files)*
+*Last updated: 2026-03-06 — Phase 22 planning complete (4 plans: domain model, token handler, activity filtering, integration tests)*

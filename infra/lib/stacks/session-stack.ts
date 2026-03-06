@@ -11,6 +11,8 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ivs from 'aws-cdk-lib/aws-ivs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as path from 'path';
 import { Construct } from 'constructs';
 
@@ -601,6 +603,98 @@ export class SessionStack extends Stack {
     storeSummaryFn.addPermission('AllowEBTranscriptStoreInvoke', {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
       sourceArn: transcriptStoreRule.ruleArn,
+    });
+
+    // ============================================================
+    // Upload MediaConvert Pipeline (Phase 21)
+    // SNS topic for upload completion notifications, Lambda for job submission,
+    // EventBridge rule for job state changes
+    // ============================================================
+
+    // SNS topic for upload completion notifications
+    const mediaConvertTopic = new sns.Topic(this, 'MediaConvertTopic', {
+      displayName: 'MediaConvert Job Submission Topic',
+      topicName: 'vnl-mediaconvert-jobs',
+    });
+
+    // Lambda function for start-mediaconvert (SNS-triggered)
+    const startMediaConvertFunction = new nodejs.NodejsFunction(this, 'StartMediaConvert', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/start-mediaconvert.ts'),
+      timeout: Duration.seconds(60),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        RECORDINGS_BUCKET: recordingsBucket.bucketName,
+        MEDIACONVERT_ROLE_ARN: mediaConvertRole.roleArn,
+        AWS_ACCOUNT_ID: this.account,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB access to start-mediaconvert
+    this.table.grantReadWriteData(startMediaConvertFunction);
+
+    // Grant MediaConvert permissions to start-mediaconvert
+    startMediaConvertFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['mediaconvert:CreateJob'],
+      resources: ['*'],
+    }));
+
+    // Subscribe start-mediaconvert Lambda to SNS topic
+    mediaConvertTopic.addSubscription(new sns_subscriptions.LambdaSubscription(startMediaConvertFunction));
+
+    // Lambda function for on-mediaconvert-complete (EventBridge-triggered)
+    const onMediaConvertCompleteFunction = new nodejs.NodejsFunction(this, 'OnMediaConvertComplete', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/on-mediaconvert-complete.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        RECORDINGS_BUCKET: recordingsBucket.bucketName,
+        EVENT_BUS_NAME: 'default',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB access to on-mediaconvert-complete
+    this.table.grantReadWriteData(onMediaConvertCompleteFunction);
+
+    // EventBridge rule for MediaConvert job state changes (Phase 21)
+    const mediaConvertCompleteRule = new events.Rule(this, 'MediaConvertCompleteRule', {
+      eventPattern: {
+        source: ['aws.mediaconvert'],
+        detailType: ['MediaConvert Job State Change'],
+        detail: {
+          'status': ['COMPLETE', 'ERROR', 'CANCELED'],
+        },
+      },
+      description: 'Handle MediaConvert job completion for upload video encoding',
+    });
+
+    mediaConvertCompleteRule.addTarget(new targets.LambdaFunction(onMediaConvertCompleteFunction, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+
+    // Grant EventBridge permission to invoke on-mediaconvert-complete
+    onMediaConvertCompleteFunction.addPermission('AllowEBMediaConvertCompleteInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: mediaConvertCompleteRule.ruleArn,
+    });
+
+    // S3 lifecycle rule for orphaned multipart uploads (clean up after 24 hours)
+    recordingsBucket.addLifecycleRule({
+      id: 'AbortIncompleteMultipartUploads',
+      abortIncompleteMultipartUploadAfter: Duration.days(1),
+      prefix: 'uploads/',
+    });
+
+    // Export environment variables for API handlers
+    new CfnOutput(this, 'MediaConvertTopicArn', {
+      value: mediaConvertTopic.topicArn,
+      description: 'SNS Topic ARN for MediaConvert job submissions',
     });
 
     // ============================================================

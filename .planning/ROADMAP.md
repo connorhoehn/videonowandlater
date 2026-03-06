@@ -48,10 +48,25 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 **Phases:**
 
-- [ ] **Phase 23: Stream Quality Monitoring Dashboard** - Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters
+- 🚧 **Phase 23: Stream Quality Monitoring Dashboard** - Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters [1/3 plans complete]
 - [ ] **Phase 24: Creator Spotlight Selection & Display** - Feature another live creator during broadcast with elegant overlay UI
 
 ## Phase Details
+
+### Phase 22.1: Pipeline Fixes & UI Enhancements with all the todos (INSERTED)
+**Goal:** Address urgent fixes and enhancements discovered during v1.2 milestone completion.
+
+**Depends on:** Phase 22 (completed)
+
+**Requirements:** TBD
+
+**Success Criteria** (what must be TRUE):
+  1. All identified pipeline fixes are implemented and tested
+  2. UI enhancements are integrated without breaking existing functionality
+  3. All todos from recent work are captured and addressed
+  4. System remains stable and performant after changes
+
+**Plans:** TBD
 
 ### Phase 23: Stream Quality Monitoring Dashboard
 **Goal:** Broadcaster can monitor stream health in real-time without disrupting broadcast experience.

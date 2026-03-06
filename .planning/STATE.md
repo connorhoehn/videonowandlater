@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Secure Sharing
-status: roadmap-defined
-stopped_at: null
-last_updated: "2026-03-06T02:30:00.000Z"
-last_activity: 2026-03-06 — v1.3 roadmap created
+milestone: v1.4
+milestone_name: Creator Studio & Stream Quality
+status: executing
+stopped_at: "Completed 23-01-PLAN.md"
+last_updated: "2026-03-06T14:58:00.000Z"
+last_activity: 2026-03-06 — Phase 23 Plan 01 completed
 progress:
-  total_phases: 3
+  total_phases: 2
   completed_phases: 0
-  total_plans: null
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 16
 ---
 
 # Project State
@@ -22,26 +22,26 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-**Current focus:** v1.3 Milestone — Secure Sharing
+**Current focus:** v1.4 Milestone — Creator Studio & Stream Quality
 
 ## Current Position
 
-**Active Phase:** Phase 23 — Shareable Links
-**Active Plan:** Not started
-**Status:** Roadmap defined, ready for phase planning
-**Progress:** `░░░░░░░░░░░░░░░░░░░░` 0% (0/3 phases complete)
+**Active Phase:** Phase 23 — Stream Quality Monitoring Dashboard
+**Active Plan:** 23-02 (next)
+**Status:** Executing
+**Progress:** `███░░░░░░░░░░░░░░░░░` 16% (1/3 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Plans completed (v1.3): 0
-- Tasks completed (v1.3): 0
-- Phases completed (v1.3): 0/3
+- Plans completed (v1.4): 1
+- Tasks completed (v1.4): 3
+- Phases completed (v1.4): 0/2
 
 **Quality:**
-- Test coverage: 169/169 backend tests passing (from v1.2)
+- Test coverage: 169/169 backend tests passing + 17 new tests (Phase 23-01)
 - Breaking changes: 0 (all additions backward compatible)
-- Security tests required: Phase 23 (token validation), Phase 24 (permission checks), Phase 25 (cascading deletes)
+- New dependencies: recharts@2.15.4 for visualization
 
 **Milestone History:**
 - v1.0 Gap Closure: 6 phases, 13 plans (shipped 2026-03-02)
@@ -52,27 +52,14 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 ### Key Decisions
 
-**Phase 23 — Shareable Links:**
-- Extend ES384 JWT pattern from v1.2 Phase 22 (playback tokens)
-- Add custom `link_id` claim for tracking and revocation
-- 7-day default TTL for share links (vs 24h for owner tokens)
-- SHARE_LINK# DynamoDB entity type stores token metadata + revoked flag
-- Short, copy-paste URLs (not long JWT strings) for UX
-- Anonymous viewers require no login (token-based access only)
-
-**Phase 24 — Collections Core:**
-- New COLLECTION# entity type for metadata (title, description, privacy, owner)
-- Private by default (`isPrivate: true` with explicit confirmation to publish)
-- SESSION# membership records (no JSON arrays; enables atomic operations)
-- GSI2 index (OWNER#{userId}) for efficient "all user's collections" queries
-- Cursor-based pagination for large collections (identified as pitfall in research)
-- Owner check on every write endpoint (POST/DELETE) to prevent permission bypass
-
-**Phase 25 — Collections Management:**
-- Safe cascading delete: query all memberships → delete each → delete metadata
-- Verify membership count before returning success (orphan prevention)
-- bcrypt for optional password hashing (standard OWASP practice)
-- Permission checks consistent with Phase 24 (owner-only modifications)
+**Phase 23-01 — Stream Metrics Domain Model:**
+- 60/40 weighting for bitrate/FPS in health score calculation
+- 5-second polling interval for WebRTC stats extraction
+- 60-sample rolling window maintains 5 minutes of history
+- Instantaneous bitrate calculated from byte deltas between samples
+- Health score penalties: 100x multiplier for bitrate deviation, 100x for variance
+- Warning thresholds: >30% bitrate drop or <50% FPS on-target rate
+- recharts library selected for visualization (40KB gzipped, React 19 compatible)
 
 **Carried Forward from v1.2:**
 - cognito:username (not sub) as userId consistently across all handlers
@@ -93,20 +80,16 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 | Non-owner session deletion cascades | MODERATE | Soft delete sessions (mark archived); verify collections handle missing sessions gracefully |
 | Token caching performance | LOW | Target 10K users for v1.3; profile during phase execution; add Redis cache only if DynamoDB bottleneck |
 
-### Pending Todos (12)
+### Roadmap Evolution
+
+- Phase 22.1 inserted after Phase 22: Pipeline Fixes & UI Enhancements with all the todos (URGENT)
+
+### Pending Todos (4)
 
 - [ ] Add CDK hooks to clean up IVS resources before stack deletion (infra)
 - [ ] Switch to Nova Pro for AI generative processing (backend)
-- [ ] Phase 23 planning: Run `/gsd:plan-phase 23` to derive plans from success criteria
-- [ ] Phase 23 implementation: Create-share-link handler + revoke handler + frontend Share button + copy-to-clipboard UI
-- [ ] Phase 23 security tests: Token tampering (modify link_id claim), revocation race condition, permission bypass
-- [ ] Phase 24 planning: Run `/gsd:plan-phase 24` to derive plans from success criteria
-- [ ] Phase 24 implementation: Collection CRUD handlers + GSI2 index + membership queries + permission checks
-- [ ] Phase 24 security tests: Permission model edge cases (non-owner modification, session deletion cascading)
-- [ ] Phase 24 performance: Query audit for N+1 scenarios, cursor pagination validation
-- [ ] Phase 25 planning: Run `/gsd:plan-phase 25` to derive plans from success criteria
-- [ ] Phase 25 implementation: Delete handler with cascading cleanup + metadata update handler + revocation
-- [ ] Phase 25 security tests: Orphan prevention (verify cleanup), cascading deletes through membership records
+- [ ] Phase 23-02: Dashboard UI with real-time charts integration
+- [ ] Phase 23-03: Broadcaster preferences and dashboard controls
 
 ### Blockers
 
@@ -115,20 +98,19 @@ None.
 ## Session Continuity
 
 **If resuming work:**
-1. Check current phase in .planning/ROADMAP.md (Phase 23, 24, or 25)
-2. Check active plan status in `.planning/phases/{phase}/plans/`
-3. Review most recent commit message for last task completed
-4. Continue from next incomplete task or plan
+1. Check current phase in .planning/ROADMAP.md (Phase 23 or 24)
+2. Next plan: `.planning/phases/23-stream-quality-monitoring-dashboard/23-02-PLAN.md`
+3. Review 23-01-SUMMARY.md for context on completed work
+4. Continue with dashboard UI implementation
 
 **If blocked:**
-- Consult research/SUMMARY.md for architecture guidance
-- Check research/PITFALLS.md for known risks and prevention strategies
-- Review PROJECT.md for core constraints and key decisions
-- Review REQUIREMENTS.md for v1.3 requirement definitions
+- Consult 23-RESEARCH.md for WebRTC stats API patterns
+- Check useStreamMetrics hook implementation in 23-01-SUMMARY.md
+- Review REQUIREMENTS.md for QUAL-* requirement definitions
 
-**Next action:** Run `/gsd:plan-phase 23` to decompose Phase 23 into executable plans.
+**Next action:** Execute `.planning/phases/23-stream-quality-monitoring-dashboard/23-02-PLAN.md`
 
 ---
 
 **Milestone started:** 2026-03-06
-**Expected completion:** TBD (after Phase 23-25 planning)
+**Expected completion:** 2026-03-06 (Phase 23-24 execution)

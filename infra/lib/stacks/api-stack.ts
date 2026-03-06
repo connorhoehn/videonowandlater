@@ -418,7 +418,13 @@ export class ApiStack extends Stack {
     }
     props.sessionsTable.grantReadWriteData(initUploadFunction);
 
-    const uploadInitResource = uploadResource.addResource('init');
+    const uploadInitResource = uploadResource.addResource('init', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
     uploadInitResource.addMethod('POST', new apigateway.LambdaIntegration(initUploadFunction), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
@@ -441,7 +447,13 @@ export class ApiStack extends Stack {
     }
     props.sessionsTable.grantReadWriteData(getPartPresignedUrlFunction);
 
-    const uploadPartUrlResource = uploadResource.addResource('part-url');
+    const uploadPartUrlResource = uploadResource.addResource('part-url', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
     uploadPartUrlResource.addMethod('POST', new apigateway.LambdaIntegration(getPartPresignedUrlFunction), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
@@ -469,7 +481,13 @@ export class ApiStack extends Stack {
       props.mediaConvertTopic.grantPublish(completeUploadFunction);
     }
 
-    const uploadCompleteResource = uploadResource.addResource('complete');
+    const uploadCompleteResource = uploadResource.addResource('complete', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
     uploadCompleteResource.addMethod('POST', new apigateway.LambdaIntegration(completeUploadFunction), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,

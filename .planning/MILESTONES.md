@@ -2,10 +2,17 @@
 
 ## v1.2 Activity Feed & Intelligence (Shipped: 2026-03-06)
 
-**Phases completed:** 19 phases, 50 plans, 48 tasks
+**Phases completed:** 7 phases (16-22), 19 plans, 20 tasks
 
 **Key accomplishments:**
-- (none recorded)
+- Hangout participant tracking — durably record participant joins with participantCount on session (Phase 16)
+- Reaction summary aggregation — pre-compute per-emoji counts when sessions end (Phase 17)
+- Homepage redesign with activity feed — two-zone layout with recording slider and activity list (Phase 18)
+- Automatic transcription pipeline — S3 recording → Amazon Transcribe → transcript stored on session (Phase 19)
+- AI summary generation — Bedrock/Claude Sonnet generates one-paragraph summaries for all recordings (Phase 20)
+- Video upload support — users can upload pre-recorded videos (MOV/MP4) with automatic adaptive bitrate encoding (Phase 21)
+- Secure sharing — private broadcasts with ES384 JWT tokens for granular access control (Phase 22)
+- Test coverage: 343/343 backend tests passing
 
 ---
 

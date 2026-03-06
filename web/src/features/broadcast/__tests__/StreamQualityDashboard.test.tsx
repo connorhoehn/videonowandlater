@@ -49,7 +49,7 @@ describe('StreamQualityDashboard', () => {
       />
     );
 
-    const scoreCircle = screen.getByText('85%').parentElement;
+    const scoreCircle = screen.getByText('85%').closest('div');
     expect(scoreCircle).toHaveClass('bg-green-600/20', 'text-green-400', 'border-green-600');
   });
 
@@ -62,7 +62,7 @@ describe('StreamQualityDashboard', () => {
       />
     );
 
-    const scoreCircle = screen.getByText('70%').parentElement;
+    const scoreCircle = screen.getByText('70%').closest('div');
     expect(scoreCircle).toHaveClass('bg-yellow-600/20', 'text-yellow-400', 'border-yellow-600');
   });
 
@@ -75,7 +75,7 @@ describe('StreamQualityDashboard', () => {
       />
     );
 
-    const scoreCircle = screen.getByText('45%').parentElement;
+    const scoreCircle = screen.getByText('45%').closest('div');
     expect(scoreCircle).toHaveClass('bg-red-600/20', 'text-red-400', 'border-red-600');
   });
 

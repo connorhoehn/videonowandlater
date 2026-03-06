@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 21 of 21 (Video Uploads Support) -- IN PROGRESS
-Plan: 04 of 04 (Frontend Upload UI & HomePage Integration) -- COMPLETE
-Status: All four Phase 21 plans complete. Complete upload pipeline: domain models (21-01), Lambda handlers with S3 multipart (21-02), MediaConvert/transcription integration (21-03), frontend UI with retry logic and HomePage integration (21-04). 16 new web tests added. Next: Phase 22 launch.
-Last activity: 2026-03-06 — Completed 21-04-PLAN.md (useVideoUpload hook, VideoUploadForm component, HomePage modal overlay, vitest setup)
+Phase: 19 of 21 (Transcription Pipeline) -- GAP CLOSURE
+Plan: 04 of 04 (EventBridge Integration) -- COMPLETE
+Status: Closed critical Phase 19→20 dependency gap. transcribe-completed handler now emits "Transcript Stored" event after successful transcript storage. Event includes sessionId and transcriptS3Uri for Phase 20's AI summary pipeline. Non-blocking event emission ensures transcript persistence even if event fails. Fixed pre-existing on-mediaconvert-complete blocking issue. All 305 backend tests passing.
+Last activity: 2026-03-06 — Completed 19-04-PLAN.md (EventBridge event emission, Phase 20 integration ready)
 
-Progress: [███████████████░░░░] 91% (40/44 plans complete)
+Progress: [██████████████████░] 93% (41/44 plans complete)
 
 ## Performance Metrics
 

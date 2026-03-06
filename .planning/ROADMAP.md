@@ -211,7 +211,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.2 Activity Feed & Intelligence (In Progress)
+### v1.2 Activity Feed & Intelligence (In Progress)
 
 **Milestone Goal:** Surface richer session context on the homepage — hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed — and add an automated transcription and AI summary pipeline to every recording.
 
@@ -232,10 +232,10 @@ Plans:
   2. After a hangout session ends, the session record includes a participantCount field reflecting the total number of unique participants
   3. Given a session ID, the participant list is retrievable via a repository function (used by GET /activity in Phase 18)
   4. Two participants joining within the same second do not cause a ConditionalCheckFailedException — each participant is stored as a separate item, not appended to the version-locked session METADATA item
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 16-01: Add participant tracking to join-hangout.ts and session-repository.ts
+- [ ] 16-01-PLAN.md — Domain model + repository functions + handler integration for participant tracking (PTCP-01, PTCP-02, PTCP-03)
 
 ### Phase 17: Reaction Summary at Session End
 **Goal**: Per-emoji reaction counts are pre-computed and stored on the session record when a session ends, so the homepage never needs to aggregate counts at read time
@@ -328,7 +328,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
-| 16. Hangout Participant Tracking | v1.2 | 0/1 | Not started | - |
+| 16. Hangout Participant Tracking | v1.2 | 0/1 | Planned | - |
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Planned | - |
 | 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Not started | - |
 | 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |
@@ -336,4 +336,4 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-05 — Phase 17 planned*
+*Last updated: 2026-03-05 — Phase 16 planned*

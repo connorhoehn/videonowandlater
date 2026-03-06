@@ -323,7 +323,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
 | 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
-| 18. Homepage Redesign & Activity Feed | 3/3 | Complete   | 2026-03-06 | - |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 3/3 | Complete | 2026-03-06 |
 | 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
 | 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
 

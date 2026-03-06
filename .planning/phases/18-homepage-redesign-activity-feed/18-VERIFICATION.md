@@ -1,369 +1,175 @@
 ---
 phase: 18-homepage-redesign-activity-feed
-verified: 2026-03-06T20:15:00Z
-status: passed
-score: 23/23 must-haves verified
-re_verification: false
+verified: 2026-03-05T19:52:00Z
+status: gaps_found
+score: 7/7 truths verified, 1 gap (missing frontend test files declared in plan)
+re_verification:
+  previous_status: passed
+  previous_score: 23/23
+  gaps_closed: []
+  gaps_remaining:
+    - "Plan 18-02 declared 5 frontend test files in files_modified but none were created"
+  regressions: []
+gaps:
+  - truth: "All activity components have declared test coverage from Plan 18-02"
+    status: failed
+    reason: "Plan 18-02 declared 5 test files in files_modified but none were created. The web/src/features/activity/__tests__/ directory exists but is empty."
+    artifacts:
+      - path: web/src/features/activity/__tests__/ReactionSummaryPills.test.tsx
+        issue: "MISSING - declared in plan 18-02 files_modified but does not exist"
+      - path: web/src/features/activity/__tests__/RecordingSlider.test.tsx
+        issue: "MISSING - declared in plan 18-02 files_modified but does not exist"
+      - path: web/src/features/activity/__tests__/ActivityFeed.test.tsx
+        issue: "MISSING - declared in plan 18-02 files_modified but does not exist"
+      - path: web/src/features/activity/__tests__/BroadcastActivityCard.test.tsx
+        issue: "MISSING - declared in plan 18-02 files_modified but does not exist"
+      - path: web/src/features/activity/__tests__/HangoutActivityCard.test.tsx
+        issue: "MISSING - declared in plan 18-02 files_modified but does not exist"
+    missing:
+      - "Create unit tests for ReactionSummaryPills (renders pills, empty state, correct counts)"
+      - "Create unit tests for RecordingSlider (broadcasts only filter, scroll-snap class, navigation)"
+      - "Create unit tests for ActivityFeed (sort order, card type dispatch, empty state)"
+      - "Create unit tests for BroadcastActivityCard (all fields rendered, duration format, navigation)"
+      - "Create unit tests for HangoutActivityCard (all fields rendered, participant/message counts, navigation)"
 ---
 
-# Phase 18: Homepage Redesign & Activity Feed — Verification Report
+# Phase 18: Homepage Redesign & Activity Feed Verification Report
 
-**Phase Goal:** Rebuild the homepage with a two-zone activity feed layout (recording slider + activity feed) and extend the replay viewer to surface reaction summaries. Support filtering by session type (broadcast/hangout) and enable users to discover and join sessions from the homepage.
+**Phase Goal:** The homepage is redesigned with a two-zone layout -- a horizontal scrollable recording slider and an activity feed below it -- and a GET /activity API endpoint returns all session types with full activity metadata
+**Verified:** 2026-03-05T19:52:00Z
+**Status:** gaps_found
+**Re-verification:** Yes -- correcting previous verification that marked as passed but missed 5 missing test files
 
-**Verified:** 2026-03-06T20:15:00Z
-**Status:** PASSED — All must-haves verified across all three sub-plans
-**Verification Type:** Initial
+## Previous Verification Correction
 
-## Executive Summary
+The previous verification (2026-03-06T20:15:00Z) marked this phase as "passed" with 23/23 must-haves verified. Upon re-verification, I found that the previous verifier did not verify the existence of 5 frontend test files declared in Plan 18-02's `files_modified` frontmatter. The `web/src/features/activity/__tests__/` directory exists but is empty. The 5 test files were never created despite being listed in the plan.
 
-Phase 18 consists of three tightly integrated sub-plans:
-1. **18-01:** Backend API (GET /activity endpoint with activity metadata aggregation)
-2. **18-02:** Frontend UI (homepage two-zone layout with activity components)
-3. **18-03:** Extended replay viewer (reaction summary display)
+## Goal Achievement
 
-All 23 must-haves are verified as working:
-- 8 truths verified in 18-01 (activity API)
-- 6 truths verified in 18-02 (homepage UI)
-- 3 truths verified in 18-03 (replay viewer reactions)
-- 6 artifact files fully implemented and wired
-- All key links verified as connected
-
-Requirements coverage: 8/8 (100%) — RSUMM-02, RSUMM-03, ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05, ACTV-06
-
----
-
-## Plan 18-01: Activity Feed API Verification
-
-### Observable Truths
+### Observable Truths (from ROADMAP.md Success Criteria)
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | GET /activity returns recent sessions (broadcasts + hangouts) with full activity metadata in a single API call | ✓ VERIFIED | `backend/src/handlers/list-activity.ts` implements public endpoint; returns 20 most recent sessions with all metadata fields |
-| 2 | Broadcast entries include title (userId), duration, reactionSummary per emoji type, and endedAt timestamp | ✓ VERIFIED | GET /activity calls `getRecentActivity()` which returns Session[] with userId, recordingDuration, reactionSummary, endedAt fields intact |
-| 3 | Hangout entries include participant count, message count, duration, and endedAt timestamp | ✓ VERIFIED | Session interface includes participantCount (from Phase 16) and messageCount (Phase 18-01); returned by getRecentActivity() |
-| 4 | Reaction summary is pre-computed by Phase 17 and stored on session record (not aggregated at read time) | ✓ VERIFIED | getRecentActivity() reads session.reactionSummary field directly; no aggregation at read time; field computed by Phase 17 recording-ended handler |
-| 5 | Message count is tracked atomically in send-message.ts via DynamoDB ADD counter | ✓ VERIFIED | send-message.ts line 127: `SET messageCount = if_not_exists(messageCount, :zero) + :inc`; atomic operation using DynamoDB UpdateExpression |
-| 6 | Sessions are returned in reverse chronological order (most recent first) | ✓ VERIFIED | getRecentActivity() line 568-572 sorts by endedAt DESC: `sessions.sort((a, b) => bTime - aTime)` |
-| 7 | GET /activity is public (no Authorization header required), matching GET /recordings pattern | ✓ VERIFIED | list-activity.ts has no auth validation; CDK api-stack.ts line 355-368 creates public endpoint with no Cognito authorizer |
-| 8 | ActivitySession type defined with all required fields | ✓ VERIFIED | Session interface in backend/src/domain/session.ts includes: sessionId, userId, sessionType, createdAt, endedAt, recordingDuration, reactionSummary, participantCount, messageCount |
+| 1 | The homepage displays broadcast recordings in a horizontal slider with 3-4 cards visible and peek-scrolling -- hangout sessions do not appear in this slider | VERIFIED | `RecordingSlider.tsx` line 38 filters `sessionType === 'BROADCAST'`; line 49 uses `overflow-x-auto snap-x snap-mandatory scroll-smooth`; cards are `w-56 flex-shrink-0 snap-center` (line 54). `HomePage.tsx` line 150 renders `<RecordingSlider sessions={sessions} />`. |
+| 2 | Below the slider, a unified activity feed lists all recent sessions (broadcasts and hangouts) in reverse chronological order | VERIFIED | `ActivityFeed.tsx` lines 16-19 sort by `endedAt` DESC. Lines 33-38 render `BroadcastActivityCard` for BROADCAST and `HangoutActivityCard` for HANGOUT. `HomePage.tsx` line 151 renders `<ActivityFeed sessions={sessions} />` immediately after RecordingSlider. |
+| 3 | Broadcast entries in the activity feed show title, duration, reaction summary counts by emoji type, and a relative timestamp ("2 hours ago") | VERIFIED | `BroadcastActivityCard.tsx`: line 49 renders `session.userId` (title), line 51 renders `formatDuration` + `formatDate` (duration and relative timestamp), line 56 renders `<ReactionSummaryPills reactionSummary={session.reactionSummary} />`. `formatDate()` returns "just now", "2m", "2h", "3d" etc. (lines 20-33). |
+| 4 | Hangout entries in the activity feed show participant list, message count, duration, and a relative timestamp | VERIFIED | `HangoutActivityCard.tsx`: line 52 renders `participantCount` with plural handling, line 53 renders `messageCount` with plural handling, `formatDuration()` and `formatDate()` (line 54). |
+| 5 | Reaction summary counts (per emoji type) are visible on recording cards in the slider | VERIFIED | `RecordingSlider.tsx` line 79: `<ReactionSummaryPills reactionSummary={session.reactionSummary} />` inside each broadcast card. `ReactionSummaryPills.tsx` line 21 maps `EMOJI_MAP[emojiType]` + count. |
+| 6 | Reaction summary counts are displayed in the replay info panel when viewing a recording | VERIFIED | `ReplayViewer.tsx` line 18 imports `ReactionSummaryPills`; lines 328-331 render "Reactions" heading + `<ReactionSummaryPills reactionSummary={session?.reactionSummary} />` in the metadata panel. Session interface at line 28 includes `reactionSummary?: Record<string, number>`. 4 vitest tests confirm behavior. |
+| 7 | GET /activity returns recent sessions with all activity metadata in a single API call -- the frontend does not aggregate counts at read time | VERIFIED | `list-activity.ts` line 25 calls `getRecentActivity(tableName, 20)`, line 34 returns `{ sessions }`. `getRecentActivity()` in `session-repository.ts` (lines 596-635) scans ended sessions, sorts DESC by endedAt, returns Session[] with reactionSummary, participantCount, messageCount fields. `HomePage.tsx` line 26 fetches from `/activity`, line 29 sets `sessions` state. No frontend aggregation logic present. |
 
-**Score: 8/8 truths verified**
+**Score:** 7/7 truths verified
 
-### Required Artifacts (Plan 18-01)
+### Required Artifacts
 
-| Artifact | Status | Details |
-|----------|--------|---------|
-| `backend/src/handlers/list-activity.ts` | ✓ VERIFIED | 49 lines; exports APIGatewayProxyHandler; calls getRecentActivity(tableName, 20); returns 200 with CORS headers and error handling |
-| `backend/src/handlers/__tests__/list-activity.test.ts` | ✓ VERIFIED | 247 lines; 9 test cases all passing; covers ordering, metadata inclusion, error handling |
-| `backend/src/repositories/session-repository.ts` | ✓ VERIFIED | getRecentActivity() function exists at line 537; queries ScanCommand with status filter; returns sorted Session[] |
-| `backend/src/handlers/send-message.ts` | ✓ VERIFIED | messageCount increment at line 127; atomic DynamoDB UpdateExpression with if_not_exists pattern |
-| `infra/lib/stacks/api-stack.ts` | ✓ VERIFIED | ListActivityHandler created at line 355; GET /activity route at line 368; read-only DynamoDB grant at line 365 |
-| `backend/src/domain/session.ts` | ✓ VERIFIED | messageCount?: number field added to Session interface |
+#### Plan 18-01: Activity Feed API
 
-**All 6 artifacts exist and are substantive (not stubs)**
+| Artifact | Expected | Status | Details |
+|----------|----------|--------|---------|
+| `backend/src/handlers/list-activity.ts` | GET /activity Lambda handler | VERIFIED | 48 lines; imports getRecentActivity; returns { sessions }; CORS headers; error handling for 500 and missing TABLE_NAME |
+| `backend/src/handlers/__tests__/list-activity.test.ts` | Unit tests for list-activity | VERIFIED | 247 lines; 9 tests all passing (ordering, reactionSummary, participantCount, messageCount, limit, empty, error, env var, CORS) |
+| `backend/src/repositories/session-repository.ts` | getRecentActivity() function | VERIFIED | Lines 596-635; ScanCommand with filter for ended/ending sessions; sorts DESC by endedAt; slices to limit |
+| `backend/src/handlers/send-message.ts` | messageCount atomic increment | VERIFIED | Lines 119-132; UpdateCommand with `SET messageCount = if_not_exists(messageCount, :zero) + :inc` |
+| `backend/src/domain/session.ts` | messageCount field on Session | VERIFIED | Line 72: `messageCount?: number` with comment "Chat activity (tracked atomically in send-message handler)" |
+| `infra/lib/stacks/api-stack.ts` | GET /activity CDK route | VERIFIED | Lines 352-368; NodejsFunction for list-activity.ts; public endpoint (no authorizer); grantReadData |
 
-### Key Link Verification (Plan 18-01)
+#### Plan 18-02: Homepage UI Components
 
-| From | To | Via | Status | Evidence |
-|------|----|----|--------|----------|
-| list-activity.ts | getRecentActivity() | import + invoke | ✓ WIRED | Line 6 imports; line 25 calls `getRecentActivity(tableName, 20)` |
-| getRecentActivity() | DynamoDB scan | ScanCommand with filter | ✓ WIRED | Line 543 ScanCommand; line 545 FilterExpression for status='ended' |
-| send-message.ts | session.messageCount | UpdateExpression | ✓ WIRED | Line 127 UpdateExpression: `messageCount = if_not_exists(messageCount, :zero) + :inc` |
-| api-stack.ts | list-activity handler | Lambda integration | ✓ WIRED | Line 355 NodejsFunction; line 368 LambdaIntegration creates route |
+| Artifact | Expected | Status | Details |
+|----------|----------|--------|---------|
+| `web/src/features/activity/ReactionSummaryPills.tsx` | Emoji + count pill component | VERIFIED | 27 lines; accepts `reactionSummary?: Record<string, number>`; renders EMOJI_MAP pills; "No reactions" empty state |
+| `web/src/features/activity/RecordingSlider.tsx` | Horizontal broadcast slider | VERIFIED | 88 lines; exports ActivitySession interface; filters BROADCAST; CSS scroll-snap; cards navigate to /replay/:sessionId |
+| `web/src/features/activity/ActivityFeed.tsx` | Vertical activity feed | VERIFIED | 43 lines; sorts DESC; dispatches BroadcastActivityCard vs HangoutActivityCard; "No activity yet" empty state |
+| `web/src/features/activity/BroadcastActivityCard.tsx` | Broadcast activity card | VERIFIED | 60 lines; renders userId, formatDuration, ReactionSummaryPills, formatDate; navigates on click |
+| `web/src/features/activity/HangoutActivityCard.tsx` | Hangout activity card | VERIFIED | 60 lines; renders userId, participantCount, messageCount (with plural), formatDuration, formatDate; navigates on click |
+| `web/src/pages/HomePage.tsx` | Homepage with two-zone layout | VERIFIED | 157 lines; fetches GET /activity; renders RecordingSlider + ActivityFeed; loading spinner; error handling |
+| `web/src/features/activity/__tests__/ReactionSummaryPills.test.tsx` | Component tests | MISSING | Declared in plan 18-02 files_modified but file does not exist |
+| `web/src/features/activity/__tests__/RecordingSlider.test.tsx` | Component tests | MISSING | Declared in plan 18-02 files_modified but file does not exist |
+| `web/src/features/activity/__tests__/ActivityFeed.test.tsx` | Component tests | MISSING | Declared in plan 18-02 files_modified but file does not exist |
+| `web/src/features/activity/__tests__/BroadcastActivityCard.test.tsx` | Component tests | MISSING | Declared in plan 18-02 files_modified but file does not exist |
+| `web/src/features/activity/__tests__/HangoutActivityCard.test.tsx` | Component tests | MISSING | Declared in plan 18-02 files_modified but file does not exist |
 
-**All 4 key links verified as wired**
+#### Plan 18-03: Replay Viewer Reaction Summary
 
----
+| Artifact | Expected | Status | Details |
+|----------|----------|--------|---------|
+| `web/src/features/replay/ReplayViewer.tsx` | Extended info panel with reactions | VERIFIED | Line 18 imports ReactionSummaryPills; lines 328-331 render in info panel with "Reactions" heading |
+| `web/src/features/replay/__tests__/ReplayViewer.test.tsx` | Unit tests for reaction display | VERIFIED | 225 lines; 4 tests passing (reaction display, empty state, broadcaster info, duration) |
 
-## Plan 18-02: Homepage UI Verification
+### Key Link Verification
 
-### Observable Truths
+| From | To | Via | Status | Details |
+|------|----|-----|--------|---------|
+| list-activity.ts | getRecentActivity() | import and invoke | WIRED | Line 6 import; line 25 `getRecentActivity(tableName, 20)` |
+| getRecentActivity() | DynamoDB | ScanCommand with filter | WIRED | Lines 602-613: ScanCommand; FilterExpression `#status IN (:ended, :ending) AND begins_with(PK, :pk)` |
+| send-message.ts | session.messageCount | UpdateCommand atomic increment | WIRED | Lines 121-132: `SET messageCount = if_not_exists(messageCount, :zero) + :inc` |
+| api-stack.ts | list-activity.ts | CDK LambdaIntegration | WIRED | Line 355 NodejsFunction entry; line 365 grantReadData; line 368 GET method with no authorizer |
+| HomePage.tsx | GET /activity | fetch in useEffect | WIRED | Line 26 `fetch(\`${config.apiUrl}/activity\`)`; line 29 `setSessions(data.sessions)` |
+| RecordingSlider.tsx | BROADCAST filter | filter in render | WIRED | Line 38: `sessions.filter((s) => s.sessionType === 'BROADCAST')` |
+| BroadcastActivityCard.tsx | ReactionSummaryPills | import and render | WIRED | Line 7 import; line 56 `<ReactionSummaryPills reactionSummary={session.reactionSummary} />` |
+| ReplayViewer.tsx | ReactionSummaryPills | import and render | WIRED | Line 18 import; line 330 `<ReactionSummaryPills reactionSummary={session?.reactionSummary} />` |
+| ReplayViewer.tsx | session.reactionSummary | existing GET /sessions/:id fetch | WIRED | Line 28 Session interface includes reactionSummary; line 94 setSession(data) from fetch |
 
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | HomePage displays a horizontal recording slider showing 3-4 broadcast cards with peek-scrolling | ✓ VERIFIED | RecordingSlider.tsx renders `<div className="overflow-x-auto snap-x snap-mandatory">`; cards are w-56 (14rem); snap-center enables peek effect |
-| 2 | Recording slider filters out hangout sessions (broadcasts only) | ✓ VERIFIED | RecordingSlider.tsx line 38: `const broadcasts = sessions.filter((s) => s.sessionType === 'BROADCAST')` |
-| 3 | Below the slider, an activity feed displays all recent sessions in reverse chronological order | ✓ VERIFIED | HomePage.tsx renders RecordingSlider then ActivityFeed; ActivityFeed.tsx line 16-20 sorts by endedAt DESC |
-| 4 | Broadcast activity cards display userId, duration, reaction summary pills, and relative timestamp | ✓ VERIFIED | BroadcastActivityCard.tsx renders session.userId, formatDuration(), ReactionSummaryPills, formatDate() |
-| 5 | Hangout activity cards display participant list, message count, duration, and relative timestamp | ✓ VERIFIED | HangoutActivityCard.tsx renders participantCount, messageCount, formatDuration(), formatDate() with plural handling |
-| 6 | Reaction summary pills show emoji + count for each reaction type | ✓ VERIFIED | ReactionSummaryPills.tsx maps EMOJI_MAP[emojiType] + count; renders as pill div with gray background |
+### Requirements Coverage
 
-**Score: 6/6 truths verified**
-
-### Required Artifacts (Plan 18-02)
-
-| Artifact | Status | Details |
-|----------|--------|---------|
-| `web/src/features/activity/ReactionSummaryPills.tsx` | ✓ VERIFIED | 28 lines; accepts reactionSummary prop; renders emoji + count pills using EMOJI_MAP from ReactionPicker |
-| `web/src/features/activity/RecordingSlider.tsx` | ✓ VERIFIED | 89 lines; exports ActivitySession interface; filters to BROADCAST only; uses CSS snap-x snap-mandatory |
-| `web/src/features/activity/ActivityFeed.tsx` | ✓ VERIFIED | 44 lines; imports BroadcastActivityCard and HangoutActivityCard; sorts DESC by endedAt |
-| `web/src/features/activity/BroadcastActivityCard.tsx` | ✓ VERIFIED | 61 lines; displays userId, formatDuration, ReactionSummaryPills, formatDate; navigates to /replay/:sessionId |
-| `web/src/features/activity/HangoutActivityCard.tsx` | ✓ VERIFIED | 61 lines; displays userId, participantCount, messageCount, formatDuration, formatDate; plural handling |
-| `web/src/pages/HomePage.tsx` | ✓ VERIFIED | Imports RecordingSlider and ActivityFeed; fetches GET /activity at line 26; renders both components with sessions state |
-
-**All 6 artifacts exist and are substantive (not stubs)**
-
-### Key Link Verification (Plan 18-02)
-
-| From | To | Via | Status | Evidence |
-|------|----|----|--------|----------|
-| HomePage.tsx | GET /activity | fetch in useEffect | ✓ WIRED | Line 26: `fetch(\`${config.apiUrl}/activity\`)` |
-| RecordingSlider.tsx | sessionType filter | filter in render | ✓ WIRED | Line 38 filters to BROADCAST; component accepts sessions array |
-| BroadcastActivityCard.tsx | ReactionSummaryPills | import + render | ✓ WIRED | Line 7 imports; line 56 renders `<ReactionSummaryPills reactionSummary={session.reactionSummary} />` |
-| HomePage.tsx | RecordingSlider + ActivityFeed | render in JSX | ✓ WIRED | Lines 150-151 render both components with sessions prop |
-
-**All 4 key links verified as wired**
-
----
-
-## Plan 18-03: Reaction Summary in Replay Verification
-
-### Observable Truths
-
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | ReplayViewer displays reaction summary counts in the info panel when viewing a recording | ✓ VERIFIED | ReplayViewer.tsx lines 328-331 render "Reactions" section with ReactionSummaryPills in info panel |
-| 2 | Reaction summary shows emoji + count for each reaction type (from GET /sessions/:id response) | ✓ VERIFIED | ReplayViewer.tsx line 28 includes reactionSummary in Session interface; passed to ReactionSummaryPills at line 330 |
-| 3 | Replay info panel displays reactionSummary alongside existing metadata (duration, broadcaster, viewer count) | ✓ VERIFIED | Info panel (lines 294-337) displays broadcaster, duration, recorded, ended, reactions (new), sessionId in structured layout |
-
-**Score: 3/3 truths verified**
-
-### Required Artifacts (Plan 18-03)
-
-| Artifact | Status | Details |
-|----------|--------|---------|
-| `web/src/features/replay/ReplayViewer.tsx` | ✓ VERIFIED | Extended Session interface at line 28 to include reactionSummary; imported ReactionSummaryPills at line 18; renders in info panel at lines 328-331 |
-| `web/src/features/replay/__tests__/ReplayViewer.test.tsx` | ✓ VERIFIED | Created; 4 test cases covering reaction display, empty state, metadata fields |
-
-**All 2 artifacts exist and are substantive (not stubs)**
-
-### Key Link Verification (Plan 18-03)
-
-| From | To | Via | Status | Evidence |
-|------|----|----|--------|----------|
-| ReplayViewer.tsx | ReactionSummaryPills | import + render | ✓ WIRED | Line 18 imports; line 330 renders component with reactionSummary prop |
-| ReplayViewer.tsx | GET /sessions/:id response | fetch already exists | ✓ WIRED | Lines 66-72 fetch session including reactionSummary from Phase 17 |
-
-**All 2 key links verified as wired**
-
----
-
-## Requirements Coverage
-
-**Phase 18 declared requirements:** 8 IDs across 3 plans
-
-| Requirement | Phase Plan | Description | Status | Evidence |
-|-------------|-----------|-------------|--------|----------|
-| ACTV-01 | 18-02 | Homepage displays broadcast recordings in horizontal scrollable slider (3–4 visible with peek) | ✓ SATISFIED | RecordingSlider.tsx implements CSS scroll-snap with w-56 cards; peek effect visible |
-| ACTV-02 | 18-02 | Homepage displays unified activity feed below slider showing all recent sessions | ✓ SATISFIED | HomePage.tsx renders RecordingSlider + ActivityFeed; ActivityFeed shows all sessions |
-| ACTV-03 | 18-02 | Broadcast entries show title, duration, reaction summary counts, timestamp | ✓ SATISFIED | BroadcastActivityCard.tsx renders userId, formatDuration, ReactionSummaryPills, formatDate |
-| ACTV-04 | 18-02 | Hangout entries show participant list, message count, duration, timestamp | ✓ SATISFIED | HangoutActivityCard.tsx renders participantCount, messageCount, formatDuration, formatDate |
-| ACTV-05 | 18-02 | Hangout sessions filtered out of recording slider | ✓ SATISFIED | RecordingSlider.tsx filters to sessionType === 'BROADCAST' only |
-| ACTV-06 | 18-01 | GET /activity endpoint returns recent sessions with all activity metadata | ✓ SATISFIED | list-activity.ts handler returns 200 with sessions array from getRecentActivity() |
-| RSUMM-02 | 18-02 | Reaction summary counts displayed on recording cards on homepage | ✓ SATISFIED | BroadcastActivityCard renders ReactionSummaryPills; RecordingSlider renders ReactionSummaryPills |
-| RSUMM-03 | 18-03 | Reaction summary counts displayed in replay info panel | ✓ SATISFIED | ReplayViewer.tsx renders ReactionSummaryPills in "Reactions" section of info panel |
+| Requirement | Source Plan | Description | Status | Evidence |
+|-------------|------------|-------------|--------|----------|
+| ACTV-01 | 18-02 | Homepage displays broadcast recordings in horizontal scrollable slider (3-4 visible with peek) | SATISFIED | RecordingSlider.tsx with scroll-snap CSS, w-56 cards, BROADCAST filter |
+| ACTV-02 | 18-02 | Homepage displays unified activity feed below slider showing all recent sessions | SATISFIED | ActivityFeed.tsx rendered after RecordingSlider in HomePage.tsx |
+| ACTV-03 | 18-02 | Broadcast entries show title, duration, reaction summary counts, relative timestamp | SATISFIED | BroadcastActivityCard.tsx renders userId, formatDuration, ReactionSummaryPills, formatDate |
+| ACTV-04 | 18-02 | Hangout entries show participant list, message count, duration, relative timestamp | SATISFIED | HangoutActivityCard.tsx renders participantCount, messageCount, formatDuration, formatDate |
+| ACTV-05 | 18-02 | Hangout sessions filtered out of recording slider | SATISFIED | RecordingSlider.tsx line 38: `sessions.filter(s => s.sessionType === 'BROADCAST')` |
+| ACTV-06 | 18-01 | GET /activity API endpoint returns recent sessions with all activity metadata | SATISFIED | list-activity.ts handler + getRecentActivity repo + CDK wiring; 9 backend tests pass |
+| RSUMM-02 | 18-02 | Reaction summary counts displayed on recording cards on homepage | SATISFIED | RecordingSlider.tsx line 79 and BroadcastActivityCard.tsx line 56 both render ReactionSummaryPills |
+| RSUMM-03 | 18-03 | Reaction summary counts displayed in replay info panel | SATISFIED | ReplayViewer.tsx lines 328-331 render ReactionSummaryPills in metadata panel |
 
 **Coverage: 8/8 requirements satisfied (100%)**
 
----
+No orphaned requirements found -- all 8 IDs from REQUIREMENTS.md assigned to Phase 18 are claimed by plans.
 
-## Anti-Patterns Check
+### Anti-Patterns Found
 
-Scanned all modified files for anti-patterns:
-- No TODO/FIXME/HACK comments found
-- No placeholder components (all components render substantive content)
-- No console.log-only handlers
-- No empty return values or stubs
-- No orphaned components (all are imported and used)
+| File | Line | Pattern | Severity | Impact |
+|------|------|---------|----------|--------|
+| (none) | - | - | - | No TODO, FIXME, placeholder, or empty implementation patterns found in any Phase 18 files |
 
-**Result: ✓ No blocker anti-patterns found**
+### Test Results
 
----
+**Backend:** 214/214 tests passing (includes 9 list-activity tests)
+**Frontend vitest:** 4/4 ReplayViewer tests passing
+**Frontend build:** Succeeds in 1.93s with no errors
 
-## Test Results
+### Human Verification Required
 
-### Backend Tests (Plan 18-01)
-```
-Test Files: 1 passed (list-activity.test.ts)
-Tests: 9 passed, 0 failed
-Duration: 4.14s
-```
+### 1. Recording Slider Visual Layout
+**Test:** Navigate to homepage with at least 3-4 ended broadcast sessions. Scroll the horizontal slider.
+**Expected:** 3-4 cards visible with partial peek of next card. CSS scroll-snap aligns cards smoothly on scroll release. Thumbnails display if available.
+**Why human:** CSS scroll-snap visual behavior and peek-scrolling effect cannot be verified programmatically.
 
-Test coverage:
-- ✓ Returns sessions in reverse chronological order
-- ✓ Includes reactionSummary for broadcasts
-- ✓ Includes participantCount for hangouts
-- ✓ Includes messageCount for both types
-- ✓ Returns 20 most recent sessions
-- ✓ Handles empty session list
-- ✓ Returns 500 on repository error
-- ✓ CORS headers present
-- ✓ Environment variable validation
+### 2. Activity Feed Card Differentiation
+**Test:** With both broadcast and hangout sessions ended, view the activity feed below the slider.
+**Expected:** Broadcast cards show reaction summary pills with emoji counts. Hangout cards show participant and message counts with correct plural handling. Both show relative timestamps.
+**Why human:** Visual distinction, spacing, and readability between card types require human judgment.
 
-### Frontend Build (Plans 18-02, 18-03)
-```
-Build: ✓ built in 1.99s
-Bundle: 1,176.86 kB (gzip: 343.71 kB)
-Errors: 0
-```
+### 3. Card Navigation
+**Test:** Click a broadcast card in the slider and a hangout card in the activity feed.
+**Expected:** Both navigate to `/replay/:sessionId` page. Back button returns to homepage.
+**Why human:** Navigation flow and route transitions need interactive testing.
 
-### Frontend Tests (Plan 18-03)
-```
-Test Files: 1 passed (ReplayViewer.test.tsx)
-Tests: 4 passed, 0 failed
-Duration: 55ms
-```
+### 4. Replay Info Panel Reactions
+**Test:** View a replay of a session that has reaction data. Check the metadata panel below the video.
+**Expected:** "Reactions" heading visible with emoji pills showing per-type counts (e.g., heart: 42, fire: 17). Sessions with no reactions show "No reactions" text.
+**Why human:** Visual placement within the info panel alongside existing metadata.
+
+### Gaps Summary
+
+All 7 ROADMAP success criteria are verified in the codebase. All 8 requirements are satisfied. The core phase goal is achieved: the homepage has a functioning two-zone layout (recording slider + activity feed) and GET /activity returns all session types with full activity metadata.
+
+**One gap identified:** Plan 18-02 declared 5 frontend test files in its `files_modified` frontmatter (ReactionSummaryPills.test.tsx, RecordingSlider.test.tsx, ActivityFeed.test.tsx, BroadcastActivityCard.test.tsx, HangoutActivityCard.test.tsx), but none were created. The `web/src/features/activity/__tests__/` directory exists but is empty. The 18-02 SUMMARY claims "All 3 tasks completed successfully" but the test files from Tasks 1 and 2 are absent. This is an incomplete plan execution issue rather than a phase goal blocker -- the components themselves are substantive, wired, and the web build succeeds. However, declared artifacts should exist.
+
+The previous verification incorrectly marked this phase as "passed" without checking for the existence of these test files.
 
 ---
 
-## Component Integration Map
-
-```
-HomePage.tsx
-├── Fetches GET /activity (public endpoint)
-├── Stores sessions in state
-├── RecordingSlider
-│   ├── Filters sessions to BROADCAST only
-│   ├── Renders horizontal scroll with snap-x snap-mandatory
-│   ├── Cards show thumbnail, userId, duration, reactions
-│   └── ReactionSummaryPills (per card)
-│       └── Maps EMOJI_MAP[type] + count
-└── ActivityFeed
-    ├── Sorts sessions by endedAt DESC
-    ├── Renders BroadcastActivityCard for BROADCAST
-    │   ├── Shows userId, duration, reactions, timestamp
-    │   └── ReactionSummaryPills with reactionSummary prop
-    └── Renders HangoutActivityCard for HANGOUT
-        └── Shows userId, participants, messages, duration, timestamp
-
-ReplayViewer.tsx
-├── Fetches GET /sessions/:id (includes reactionSummary from Phase 17)
-└── Info Panel
-    ├── Broadcaster name
-    ├── Duration (MM:SS format)
-    ├── Recorded/Ended timestamps
-    ├── Reactions Section (NEW)
-    │   └── ReactionSummaryPills (reactionSummary from Phase 17)
-    └── Session ID
-```
-
----
-
-## Data Flow Verification
-
-### Path 1: Activity Feed (Plans 18-01 + 18-02)
-```
-send-message.ts (Phase 18-01)
-  ↓ (increments messageCount atomically)
-  Session record in DynamoDB (messageCount = if_not_exists(0) + 1)
-  ↓
-getRecentActivity() (Phase 18-01)
-  ↓ (scans ended sessions, includes messageCount)
-  list-activity.ts handler
-  ↓ (returns { sessions: [...] })
-  GET /activity endpoint
-  ↓
-HomePage.tsx (Phase 18-02)
-  ↓ (fetch, parse, store in state)
-  RecordingSlider + ActivityFeed (render with messageCount)
-```
-
-### Path 2: Replay Reactions (Plans 17 + 18-03)
-```
-recording-ended handler (Phase 17)
-  ↓ (computes reactionSummary, stores on session)
-  Session record: { reactionSummary: { heart: 42, fire: 17 } }
-  ↓
-GET /sessions/:id (existing endpoint)
-  ↓ (returns session with reactionSummary)
-  ReplayViewer.tsx (Phase 18-03)
-  ↓ (passes to ReactionSummaryPills)
-  Info panel displays emoji pills with counts
-```
-
----
-
-## Edge Cases & Empty States
-
-| Scenario | Handling | Status |
-|----------|----------|--------|
-| No sessions ended yet | GET /activity returns `{ sessions: [] }`; ActivityFeed shows "No activity yet" | ✓ VERIFIED |
-| Broadcast with no reactions | ReactionSummaryPills shows "No reactions" | ✓ VERIFIED |
-| Hangout with 0 participants | HangoutActivityCard renders "0 participants" (plural handled) | ✓ VERIFIED |
-| Hangout with 0 messages | HangoutActivityCard renders "0 messages" (plural handled) | ✓ VERIFIED |
-| Missing recordingDuration | formatDuration handles undefined; shows "unknown" | ✓ VERIFIED |
-| Missing endedAt timestamp | ActivityFeed falls back to createdAt for sorting | ✓ VERIFIED |
-
----
-
-## Deviations from Plans
-
-None. All three plans executed exactly as specified:
-- 18-01: Created list-activity, getRecentActivity, messageCount tracking
-- 18-02: Created activity components and homepage redesign
-- 18-03: Extended ReplayViewer with reaction summary display
-
----
-
-## Wiring Verification Summary
-
-### Artifacts Created: 8 files
-
-**Backend (18-01):**
-- list-activity.ts ✓
-- list-activity.test.ts ✓
-- getRecentActivity() function in session-repository.ts ✓
-- messageCount tracking in send-message.ts ✓
-
-**Frontend (18-02):**
-- ReactionSummaryPills.tsx ✓
-- RecordingSlider.tsx ✓
-- ActivityFeed.tsx ✓
-- BroadcastActivityCard.tsx ✓
-- HangoutActivityCard.tsx ✓
-
-**Frontend (18-03):**
-- ReplayViewer.tsx (extended) ✓
-- ReplayViewer.test.tsx ✓
-
-**Infrastructure (18-01):**
-- api-stack.ts (GET /activity route) ✓
-
-### All Critical Wiring Verified
-
-1. **API → Data Layer**: list-activity imports and calls getRecentActivity() ✓
-2. **Data Layer → Database**: getRecentActivity uses ScanCommand + FilterExpression ✓
-3. **Message Tracking → Database**: send-message.ts atomically increments messageCount ✓
-4. **API → Frontend**: HomePage fetches from GET /activity ✓
-5. **Frontend → Activity Components**: RecordingSlider and ActivityFeed receive sessions prop ✓
-6. **Activity Cards → Reactions**: BroadcastActivityCard passes reactionSummary to ReactionSummaryPills ✓
-7. **Replay → Reactions**: ReplayViewer passes reactionSummary to ReactionSummaryPills ✓
-8. **CDK → API**: api-stack.ts creates ListActivityHandler and GET /activity route ✓
-
----
-
-## Performance & Scale
-
-- **Activity endpoint limit:** 20 sessions (configurable)
-- **Message counter:** Atomic DynamoDB operation (no race conditions)
-- **Frontend fetch:** Single API call (eliminates N+1 queries)
-- **Scroll performance:** CSS scroll-snap (native browser, no JS overhead)
-- **Component rendering:** React memoization potential for future optimization
-
----
-
-## Conclusion
-
-**Phase 18 goal achieved.** All three sub-plans (18-01, 18-02, 18-03) have been successfully implemented and integrated:
-
-1. **Backend API (18-01):** GET /activity endpoint fully functional with message counting and all metadata aggregation
-2. **Homepage UI (18-02):** Two-zone layout with recording slider (broadcasts only) and activity feed (all sessions) displaying full metadata
-3. **Replay Viewer (18-03):** Extended info panel now displays reaction summary counts for each reaction type
-
-All 8 requirements (ACTV-01 through ACTV-06, RSUMM-02, RSUMM-03) are satisfied. All tests passing. Build succeeds. No anti-patterns detected. Ready for Phase 19 (transcription pipeline).
-
----
-
-**Verified by:** GSD Phase Verifier (Claude Code)
-**Verification Date:** 2026-03-06T20:15:00Z
-**Verification Method:** Code inspection, artifact existence check, wiring verification, test result analysis
+_Verified: 2026-03-05T19:52:00Z_
+_Verifier: Claude (gsd-verifier)_

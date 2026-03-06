@@ -351,6 +351,16 @@ Plans:
 - [ ] 21-03-PLAN.md — MediaConvert integration, CDK infrastructure, EventBridge wiring (UPLOAD-07, UPLOAD-08, UPLOAD-09)
 - [ ] 21-04-PLAN.md — Frontend upload UI, HomePage integration, integration tests (UPLOAD-10, UPLOAD-11, UPLOAD-12)
 
+### Phase 22: Live Broadcast with Secure Viewer Links
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 21
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 22 to break down)
+
 ---
 *Roadmap created: 2026-03-02*
 *Last updated: 2026-03-06 — Phase 18 gap closure plan added (18-04: missing frontend test files)*

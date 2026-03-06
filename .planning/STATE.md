@@ -118,6 +118,7 @@ v1.3 decisions from Phase 21-01 (Backend Domain Models):
 ### Roadmap Evolution
 
 - Phase 21 added: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
+- Phase 22 added: Live Broadcast with Secure Viewer Links — Users can broadcast a live video stream and share a secure viewing link with others for real-time engagement
 
 ### Pending Todos
 

@@ -1,139 +1,189 @@
 ---
 phase: 20-ai-summary-pipeline
-verified: 2026-03-06T20:00:00Z
-status: passed
-score: 5/5 must-haves verified
+verified: 2026-03-06T21:30:00Z
+status: gaps_found
+score: 4/5 must-haves verified
+re_verification: true
+previous_status: passed
+previous_score: 5/5
+gaps_closed: []
+gaps_remaining:
+  - "Transcript Stored event is not emitted by Phase 19's transcribe-completed handler — EventBridge rule has no trigger"
+regressions: []
 ---
 
-# Phase 20: AI Summary Pipeline Verification Report
+# Phase 20: AI Summary Pipeline — Verification Report (Re-verification)
 
 **Phase Goal:** Every session with a stored transcript automatically receives an AI-generated one-paragraph summary via Bedrock/Claude, displayed on recording cards and the replay info panel
 
-**Verified:** 2026-03-06
-**Status:** PASSED — All must-haves verified; phase goal fully achieved
-**Verification Approach:** Goal-backward from success criteria through implementation artifacts to wiring
+**Verified:** 2026-03-06T21:30:00Z
+**Status:** GAPS FOUND — Critical blocker identified in event flow
+**Previous Status:** PASSED (claimed) — Re-verification found unverified assumption
+**Re-verification:** Yes — Previous verification missed critical prerequisite from Phase 19
 
-## Goal Achievement
+## Critical Finding
+
+**THE PHASE GOAL CANNOT BE ACHIEVED** due to a broken integration point with Phase 19:
+
+The Phase 20 implementation assumes Phase 19's `transcribe-completed` handler emits a "Transcript Stored" EventBridge event after storing the transcript in DynamoDB. This event would trigger the EventBridge rule defined in session-stack.ts, which then invokes the store-summary Lambda.
+
+**However:** The `transcribe-completed` handler does NOT emit this event. It only:
+1. Fetches the transcript from S3
+2. Updates the session record with `updateTranscriptStatus()`
+3. Returns
+
+**Result:** The store-summary Lambda never receives the "Transcript Stored" event, so it never triggers, and AI summaries are never generated.
+
+## Goal Achievement Analysis
 
 ### Observable Truths Verification
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | After a transcript is stored, an AI-generated one-paragraph summary is automatically produced and stored on the session record with no manual intervention | ✓ VERIFIED | EventBridge rule `TranscriptStoreRule` (session-stack.ts) triggers on "Transcript Stored" event → `store-summary.ts` handler invokes Bedrock `InvokeModelCommand` with Claude Sonnet 4.5 → Summary stored via `updateSessionAiSummary()` with aiSummaryStatus='available' |
-| 2 | Recording cards on the homepage display a 2-line truncated AI summary (or "Summary coming soon" placeholder while the pipeline is still running) | ✓ VERIFIED | `BroadcastActivityCard.tsx` and `HangoutActivityCard.tsx` import and render `SummaryDisplay` component with `truncate={true}` prop → `line-clamp-2` Tailwind class truncates to 2 lines → Placeholder text hardcoded for pending status |
-| 3 | The full AI summary is displayed in the replay info panel when viewing a recording | ✓ VERIFIED | `ReplayViewer.tsx` (lines 334-339) renders `SummaryDisplay` with `truncate={false}` prop in metadata panel → Full summary text displayed without truncation |
-| 4 | If Bedrock fails, the transcript that was already stored is preserved — the failure sets aiSummaryStatus to "failed" but does not overwrite or lose the transcriptText field | ✓ VERIFIED | `store-summary.ts` (lines 68-72) catches Bedrock error and calls `updateSessionAiSummary(tableName, sessionId, { aiSummaryStatus: 'failed' })` WITHOUT including aiSummary field → transcriptText field never touched; updateExpression only sets specified fields |
-| 5 | "Summary coming soon" placeholder is shown on cards for sessions where the pipeline has not yet completed, rather than a blank or broken state | ✓ VERIFIED | `SummaryDisplay.tsx` (line 26-28) returns hardcoded "Summary coming soon..." text when status === 'pending' or undefined → Backward compatible with pre-Phase 20 sessions (undefined status treated as pending via `?? 'pending'`) |
+| 1 | After a transcript is stored, an AI-generated one-paragraph summary is automatically produced and stored on the session record with no manual intervention | ✗ FAILED | EventBridge rule exists and is configured correctly (session-stack.ts:591-598), BUT the "Transcript Stored" event is never emitted by Phase 19's transcribe-completed handler (verified: no EventBridgeClient import, no PutEventsCommand call). The rule matches on `source='custom.vnl'` + `detailType='Transcript Stored'`, but this event is never published. MISSING: Code in transcribe-completed.ts to emit the event after line 98 (successful transcript storage). |
+| 2 | Recording cards on the homepage display a 2-line truncated AI summary (or "Summary coming soon" placeholder while the pipeline is still running) | ✓ VERIFIED | SummaryDisplay component (lines 26-28) renders "Summary coming soon..." when status === 'pending' or undefined. BroadcastActivityCard.tsx (line 62-67) and HangoutActivityCard.tsx import and render SummaryDisplay with truncate={true}. BUT: Sessions will never have aiSummaryStatus='available' because the pipeline never completes. Sessions will always show "Summary coming soon..." indefinitely. |
+| 3 | The full AI summary is displayed in the replay info panel when viewing a recording | ✓ VERIFIED (Partial) | ReplayViewer.tsx (lines 334-339) renders SummaryDisplay with truncate={false}. Component exists and is wired correctly. BUT: aiSummary will always be undefined because the pipeline never completes, so placeholder text will always be shown. |
+| 4 | If Bedrock fails, the transcript that was already stored is preserved — the failure sets aiSummaryStatus to "failed" but does not overwrite or lose the transcriptText field | ✓ VERIFIED (Theoretically) | store-summary.ts (lines 68-72) catches Bedrock errors and calls updateSessionAiSummary() with ONLY aiSummaryStatus='failed', never touching aiSummary or transcriptText fields. updateSessionAiSummary() (session-repository.ts) uses selective UpdateExpression. BUT: This code path is unreachable because the event never triggers. |
+| 5 | "Summary coming soon" placeholder is shown on cards for sessions where the pipeline has not yet completed, rather than a blank or broken state | ✓ VERIFIED (Partial) | SummaryDisplay.tsx hardcodes placeholder text when status === 'pending'. BUT: Since the pipeline never completes, ALL sessions will show this placeholder indefinitely, even after sufficient time for summary generation to occur. This is not a graceful temporary state — it's permanent for all pre-Phase 20 sessions and all sessions generated after Phase 20-01. |
 
-**Score:** 5/5 observable truths verified ✓
+**Score:** 1/5 truths actually functional. 4/5 truths are code-verified but unreachable or non-functional due to missing event emission.
+
+### Root Cause Analysis
+
+**Phase 19 Verification Failure:** Phase 19's verification (19-VERIFICATION.md) claimed all requirements were satisfied, but it did not verify the END-TO-END event chain required by Phase 20. The TRNS requirements are:
+
+- TRNS-01: Transcribe job started when recording available ✓
+- TRNS-02: Job naming format for correlation ✓
+- TRNS-03: Transcript text stored in DynamoDB ✓
+- TRNS-04: Failures don't block pool release ✓
+
+**What's missing from Phase 19:** No requirement for Phase 19 to emit an event after TRNS-03 completes. The transcription pipeline was designed to be terminal (store and return), not to emit downstream events.
+
+**Phase 20 Planning Error:** Phase 20's plan assumes Phase 19 emits the event:
+- 20-01-PLAN.md line 137: "Detail-type: `Transcript Stored` (emitted by Phase 19 store-transcript handler)"
+- 20-01-SUMMARY.md line 137: "Transcript Stored" is "emitted by Phase 19 store-transcript handler"
+
+**But Phase 19 has no "store-transcript handler"** — it only has transcribe-completed handler, which doesn't emit events.
 
 ### Required Artifacts Verification
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `backend/src/domain/session.ts` | Session interface with aiSummary and aiSummaryStatus fields | ✓ EXISTS & SUBSTANTIVE | Lines 79-84: Both fields present with TypeScript types and JSDoc comments. Types: `aiSummary?: string`, `aiSummaryStatus?: 'pending' \| 'available' \| 'failed'`. WIRED: Used in all repository functions and handlers. |
-| `backend/src/handlers/store-summary.ts` | EventBridge-triggered Lambda with Bedrock integration | ✓ EXISTS & SUBSTANTIVE | 80 lines. Invokes Bedrock InvokeModelCommand (line 43-47) with Claude Sonnet 4.5 model ID. Parses response (line 52). Stores summary non-blocking (lines 55-64). Handles Bedrock failure with transcript preservation (lines 68-72). WIRED: Triggered by EventBridge TranscriptStoreRule (session-stack.ts line 523). |
-| `backend/src/repositories/session-repository.ts` | updateSessionAiSummary() function | ✓ EXISTS & SUBSTANTIVE | Lines 539-587: Selective UpdateExpression construction (never touches other fields). Dynamic building of SET clauses only for provided fields (lines 558-568). Returns void on success; errors propagate to caller. WIRED: Called by store-summary.ts (line 56). |
-| `backend/src/handlers/__tests__/store-summary.test.ts` | Unit tests for store-summary handler | ✓ EXISTS & SUBSTANTIVE | 9 tests all passing (verified via `npm test -- --testNamePattern="store-summary"`). Tests cover: successful invocation, response parsing, Bedrock failure with transcript preservation, failed status setting, non-blocking storage failure, double error, environment variables (model ID and region), region fallback. |
-| `infra/lib/stacks/session-stack.ts` | CDK wiring for StoreSummary Lambda and EventBridge rule | ✓ EXISTS & SUBSTANTIVE | StoreSummaryFn Lambda (60s timeout, environment vars for TABLE_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID). DynamoDB permissions via grantReadWriteData(). Bedrock IAM policy (bedrock:InvokeModel on Claude Sonnet 4.5 ARN). TranscriptStoreRule (lines 523-529) matching "Transcript Stored" detail-type. EventBridge invoke permission (lines 531-535). |
-| `web/src/features/replay/SummaryDisplay.tsx` | Reusable React component for summary display | ✓ EXISTS & SUBSTANTIVE | 51 lines. Props: summary, status, truncate, className. Status-based conditional rendering (pending → "coming soon", available → text with optional line-clamp-2, failed → "unavailable"). Backward compatible: undefined status defaults to 'pending'. WIRED: Imported by BroadcastActivityCard.tsx (line 8), HangoutActivityCard.tsx (line 5), ReplayViewer.tsx (line 19). |
-| `web/src/features/replay/SummaryDisplay.test.tsx` | Component tests | ✓ EXISTS & SUBSTANTIVE | 10 tests all passing. Tests: pending state, undefined status backward compat, available state, truncation behavior, failed state, custom className, unknown status fallback. |
-| `web/src/features/activity/BroadcastActivityCard.tsx` | Activity card with integrated summary | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered with truncation (lines 62-67). Summary section positioned below reaction counts. WIRED: Used by HomePage activity feed (verified via GET /activity endpoint return type). |
-| `web/src/features/activity/HangoutActivityCard.tsx` | Hangout card with integrated summary | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered with truncation. Consistent with BroadcastActivityCard pattern. |
-| `web/src/features/replay/ReplayViewer.tsx` | Replay viewer with full summary display | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered without truncation (lines 334-339) in metadata panel. Full summary text displayed. Section titled "AI Summary" with border separation. |
+| `backend/src/domain/session.ts` | Session interface with aiSummary and aiSummaryStatus fields | ✓ EXISTS & SUBSTANTIVE | Lines 79-84: Both fields present with proper TypeScript types. WIRED: Used in all repository functions. |
+| `backend/src/repositories/session-repository.ts` | updateSessionAiSummary() function | ✓ EXISTS & SUBSTANTIVE | Lines 539-587: Selective UpdateExpression construction. WIRED: Called by store-summary.ts. |
+| `backend/src/handlers/store-summary.ts` | EventBridge-triggered Lambda with Bedrock integration | ✓ EXISTS & SUBSTANTIVE | 80 lines. Invokes Bedrock correctly. WIRED: Lambda exists in CDK and is configured as EventBridge target. BUT: Never triggered because event is not emitted. |
+| `backend/src/handlers/__tests__/store-summary.test.ts` | Unit tests for store-summary handler | ✓ EXISTS & SUBSTANTIVE | 9 tests all passing. BUT: Tests inject the event directly; they don't verify the event is actually emitted by transcribe-completed. |
+| `infra/lib/stacks/session-stack.ts` | CDK wiring for StoreSummary Lambda and EventBridge rule | ✓ EXISTS & SUBSTANTIVE | EventBridge rule at lines 591-598 correctly configured to match `source='custom.vnl'` and `detailType='Transcript Stored'`. Targets set correctly. BUT: Listens for event that is never published. |
+| `web/src/features/replay/SummaryDisplay.tsx` | Reusable React component for summary display | ✓ EXISTS & SUBSTANTIVE | 51 lines. Status-based rendering works correctly. WIRED: Imported by activity cards and ReplayViewer. BUT: Will only ever show "pending" state since aiSummaryStatus never transitions to 'available'. |
+| `web/src/features/activity/BroadcastActivityCard.tsx` | Activity card with integrated summary | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered with truncation. WIRED: Used in HomePage. BUT: Summary will always be "coming soon...". |
+| `web/src/features/activity/HangoutActivityCard.tsx` | Hangout card with integrated summary | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered with truncation. BUT: Summary will always be "coming soon...". |
+| `web/src/features/replay/ReplayViewer.tsx` | Replay viewer with full summary display | ✓ EXISTS & SUBSTANTIVE | SummaryDisplay rendered without truncation. BUT: Summary will always be undefined. |
 
-**All 9 artifacts verified — EXISTS, SUBSTANTIVE, and WIRED.**
+**All artifacts exist and code is correct, but the triggering event is not emitted.**
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|----|--------|---------|
-| EventBridge | store-summary.ts | TranscriptStoreRule detailType match | ✓ WIRED | Rule pattern (line 525-527): source='custom.vnl', detailType='Transcript Stored'. Handler receives EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail> (line 17). |
-| store-summary.ts | Bedrock | InvokeModelCommand with Claude Sonnet 4.5 | ✓ WIRED | Line 43-46: InvokeModelCommand with modelId from env (defaults to 'anthropic.claude-sonnet-4-5-20250929-v1:0'). BedrockRuntimeClient initialized with bedrockRegion (line 24). IAM policy grants bedrock:InvokeModel to this specific model ARN. |
-| store-summary.ts | updateSessionAiSummary() | Direct function call | ✓ WIRED | Import at line 9. Called twice: on success (line 56), on failure (line 70). Correct parameters passed. |
-| updateSessionAiSummary() | Session domain | Type definitions | ✓ WIRED | Function signature (line 542-544) uses Session field types: aiSummary?: string, aiSummaryStatus?: 'pending' \| 'available' \| 'failed'. UpdateExpression SET clauses (line 559, 565) match Session field names. |
-| getRecentActivity() | Session fields | Return type | ✓ WIRED | Extracts full Session object from DynamoDB (line 622). Includes all fields: aiSummary, aiSummaryStatus. Returned to GET /activity endpoint. |
-| ActivityFeed → RecordingCard | SummaryDisplay | Component rendering | ✓ WIRED | BroadcastActivityCard imports SummaryDisplay (line 8). Renders with session.aiSummary and session.aiSummaryStatus props (lines 63-64). HangoutActivityCard identical pattern. HomePage receives sessions from getRecentActivity() via list-activity endpoint. |
-| ReplayViewer | SummaryDisplay | Component rendering | ✓ WIRED | ReplayViewer imports SummaryDisplay (line 19). Renders in metadata panel (lines 334-339) with session.aiSummary and session.aiSummaryStatus. truncate={false} ensures full text. |
+| EventBridge TranscriptStoreRule | store-summary Lambda | Lambda target configured | ✓ WIRED | Rule defined at session-stack.ts:591-598. Target added at line 596. Permission added at lines 601-604. BUT: Rule never matches because event is not emitted. |
+| Phase 19 transcribe-completed | EventBridge | Event emission | ✗ NOT_WIRED | **CRITICAL GAP**: transcribe-completed.ts has no EventBridgeClient import, no event emission code. After line 98 (successful transcript storage), handler should emit "Transcript Stored" event but does not. |
+| store-summary handler | Bedrock | InvokeModelCommand | ✓ WIRED | Code exists at lines 43-47. Imports BedrockRuntimeClient. BUT: Handler unreachable. |
+| store-summary handler | updateSessionAiSummary() | Function call | ✓ WIRED | Called at lines 56 and 70. BUT: Handler unreachable. |
+| updateSessionAiSummary() | Session domain | Type definitions | ✓ WIRED | Function signature matches Session fields. BUT: Never called in production. |
+| SummaryDisplay | Activity Cards | Component import | ✓ WIRED | Imported and rendered. BUT: Always shows pending state. |
 
-**All 7 key links verified as WIRED.**
+**Critical link NOT_WIRED:** transcribe-completed → EventBridge event emission
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| AI-01 | 20-01 | An AI-generated one-paragraph summary is automatically produced from the session transcript via Bedrock/Claude | ✓ SATISFIED | `store-summary.ts` (lines 26-52) invokes Bedrock InvokeModelCommand with system prompt "Generate a concise one-paragraph summary (2-3 sentences)..." and transcript text. Claude Sonnet 4.5 model specified. Response parsed and extracted. |
-| AI-02 | 20-01 | AI summary text is stored on the session record in DynamoDB | ✓ SATISFIED | `updateSessionAiSummary()` function (session-repository.ts lines 539-587) stores aiSummary field on session record with UpdateExpression SET. Called on successful Bedrock invocation (store-summary.ts line 56). Tests verify storage behavior. |
-| AI-03 | 20-02 | AI summary (truncated to 2 lines) is displayed on recording cards on the homepage | ✓ SATISFIED | `SummaryDisplay` component (line 34) applies `line-clamp-2` Tailwind class when truncate={true}. BroadcastActivityCard and HangoutActivityCard render with truncate={true} (lines 65, line in HangoutActivityCard). Tests verify 2-line truncation behavior. |
-| AI-04 | 20-02 | Full AI summary is displayed in the replay info panel | ✓ SATISFIED | `ReplayViewer.tsx` (lines 334-339) renders SummaryDisplay with truncate={false}. Component displays full summary text without line-clamp-2 class. Positioned in metadata panel with "AI Summary" heading. |
-| AI-05 | 20-02 | "Summary coming soon" placeholder is shown on cards while the AI pipeline is still processing | ✓ SATISFIED | `SummaryDisplay.tsx` (lines 24-28) hardcoded "Summary coming soon..." text when status === 'pending' or undefined. Backward compatible: undefined aiSummaryStatus treated as 'pending' via ?? operator (line 22). Pre-Phase 20 sessions show placeholder, not blank/broken. |
+| AI-01 | 20-01 | An AI-generated one-paragraph summary is automatically produced from the session transcript via Bedrock/Claude | ✗ NOT_SATISFIED | store-summary.ts implements Bedrock invocation correctly (lines 26-52). BUT: Handler never triggers because "Transcript Stored" event is not emitted by Phase 19. Bedrock code is unreachable. |
+| AI-02 | 20-01 | AI summary text is stored on the session record in DynamoDB | ✗ NOT_SATISFIED | updateSessionAiSummary() exists and is correctly implemented. BUT: Never called because event never triggers. |
+| AI-03 | 20-02 | AI summary (truncated to 2 lines) is displayed on recording cards on the homepage | ✗ NOT_SATISFIED | SummaryDisplay component with line-clamp-2 exists. BUT: Sessions never have aiSummaryStatus='available', so cards always show "Summary coming soon..." |
+| AI-04 | 20-02 | Full AI summary is displayed in the replay info panel | ✗ NOT_SATISFIED | ReplayViewer.tsx renders SummaryDisplay. BUT: aiSummary is always undefined. |
+| AI-05 | 20-02 | "Summary coming soon" placeholder is shown on cards while the AI pipeline is still processing | ✓ SATISFIED | SummaryDisplay shows placeholder text. But this is not a temporary state — it's permanent because the pipeline never starts. |
 
-**All 5 AI requirements satisfied — VERIFIED.**
+**Result:** 1/5 requirements satisfied. 4/5 cannot be satisfied because the triggering event is not emitted.
 
 ### Anti-Patterns Found
 
-Scan for TODO/FIXME/placeholder patterns, empty implementations, console-only patterns:
+| File | Line | Pattern | Severity | Impact |
+|------|------|---------|----------|--------|
+| transcribe-completed.ts | 98 | No event emission after transcript storage | 🛑 BLOCKER | Handler stores transcript to DynamoDB but does not emit "Transcript Stored" event to EventBridge. Phase 20 pipeline never triggers. This is the root cause of the failure. |
+| store-summary.ts | Lines 26-52 | Bedrock code unreachable due to missing trigger event | 🛑 BLOCKER | Handler and all tests are correct, but the handler never receives the triggering event. |
+| 20-01-SUMMARY.md | Line 137 | Assumption documented but not verified | ⚠️ WARNING | Summary states "emitted by Phase 19 store-transcript handler" but Phase 19 has no such handler. |
+| 20-VERIFICATION.md | Line 22 | Claimed verification of event emission without checking Phase 19 | 🛑 BLOCKER | Previous verification stated "EventBridge rule triggers on 'Transcript Stored' event" but never verified that Phase 19 emits this event. |
 
-| File | Finding | Severity | Impact |
-|------|---------|----------|--------|
-| store-summary.ts | None — handler fully implemented with proper error handling | ℹ️ INFO | Non-blocking pattern properly applied; Bedrock/storage failures don't propagate |
-| SummaryDisplay.tsx | None — component complete with all status states | ℹ️ INFO | Graceful fallback returns null for unknown states |
-| updateSessionAiSummary() | None — function selective updates only intended fields | ℹ️ INFO | Transcript preservation guaranteed by design |
-| CDK wiring | None — all required permissions and env vars configured | ℹ️ INFO | 60s timeout accommodates Bedrock latency (5-10s typical) |
-
-**No blockers found. All implementations substantive and production-ready.**
+**Blockers:** 2 critical issues prevent goal achievement.
 
 ### Test Results
 
 **Backend Test Suite:** 244/244 tests passing ✓
-- store-summary.test.ts: 9/9 passing
-- session-repository.test.ts: 6+ AI summary tests passing
-- No regressions in 34 other test suites
+- store-summary.test.ts: 9/9 passing (BUT: These are unit tests that inject the event directly, not integration tests verifying event emission)
 
 **Frontend Test Suite:** 21/21 tests passing ✓
 - SummaryDisplay.test.tsx: 10/10 passing
-- BroadcastActivityCard.test.tsx: 7+ summary-related tests passing
-- ReplayViewer tests: 4 passing
 
-**Build Status:**
-- Backend: `npm test` — 244/244 tests ✓
-- Frontend: `npm run build` — Successful, no TypeScript errors ✓
+**CAVEAT:** Tests pass because they mock inputs. Integration between Phase 19 → Phase 20 is not tested.
 
-### Manual Verification Notes
+## What Would Fix This
 
-From execution summaries (20-01-SUMMARY.md and 20-02-SUMMARY.md):
+To achieve the Phase 20 goal, Phase 19's `transcribe-completed.ts` must be updated to emit the "Transcript Stored" event after successfully storing the transcript:
 
-- **Phase 20-01 (Backend):** All 6 tasks completed. Manual pre-deployment verification checklist documented (Bedrock FTU form, model availability, CloudWatch logs, DynamoDB record validation). Backend infrastructure ready for production.
-- **Phase 20-02 (Frontend):** All 6 tasks completed. No manual steps required beyond standard testing. Component tests comprehensive; backward compatibility verified.
+```typescript
+// After line 98 in transcribe-completed.ts
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
-**Pre-deployment Note:** Bedrock Anthropic model requires FTU (First Time Use) form submission in AWS console before InvokeModel succeeds. This is documented in Phase 20-01 plan as a prerequisite but does not affect code verification.
+// After updateTranscriptStatus() succeeds:
+const ebClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+try {
+  await ebClient.send(new PutEventsCommand({
+    Entries: [{
+      Source: 'custom.vnl',
+      DetailType: 'Transcript Stored',
+      Detail: JSON.stringify({
+        sessionId,
+        transcriptText: plainText,
+      }),
+    }],
+  }));
+} catch (error: any) {
+  console.error('Failed to emit Transcript Stored event:', error.message);
+  // Non-blocking: don't throw, log for observability
+}
+```
+
+Additionally:
+1. Phase 19 VERIFICATION.md should be re-run to note the missing event emission
+2. Phase 19 must be planning-updated to include event emission in its implementation
+3. Phase 20 should NOT proceed until Phase 19's event emission is verified working
 
 ## Summary
 
-### What Works
+### What Works (Code-wise)
+- ✓ Session domain model has aiSummary and aiSummaryStatus fields
+- ✓ updateSessionAiSummary() repository function is correctly implemented
+- ✓ store-summary handler correctly invokes Bedrock and handles errors
+- ✓ EventBridge rule is configured correctly in CDK
+- ✓ Frontend components are wired to display summaries
+- ✓ All unit tests pass
 
-1. **Event-Driven Pipeline:** EventBridge rule automatically triggers store-summary Lambda when Phase 19 emits "Transcript Stored" event — no manual intervention required.
+### What Doesn't Work (Integration-wise)
+- ✗ Phase 19 does not emit "Transcript Stored" event
+- ✗ EventBridge rule has nothing to match on
+- ✗ store-summary handler never receives trigger
+- ✗ Bedrock is never invoked
+- ✗ Sessions never receive AI summaries
+- ✗ Users always see "Summary coming soon..." regardless of time passed
 
-2. **Bedrock Integration:** Claude Sonnet 4.5 invoked with proper Messages API v1.0 format; generates one-paragraph summaries (2-3 sentences) as specified. Max tokens set to 500.
+### Root Cause
+Missing event emission in Phase 19's `transcribe-completed.ts` handler after successful transcript storage.
 
-3. **Transcript Preservation:** Non-blocking error pattern ensures Bedrock failure or DynamoDB failure sets aiSummaryStatus='failed' WITHOUT modifying transcriptText field. Critical safeguard implemented.
-
-4. **Frontend Display:** SummaryDisplay component handles all three status states (pending, available, failed) with appropriate placeholders and styling. 2-line truncation on cards via Tailwind line-clamp-2, full text on replay panel.
-
-5. **Backward Compatibility:** Undefined aiSummaryStatus (pre-Phase 20 sessions) treated as 'pending' via nullish coalescing operator. Old sessions show "Summary coming soon..." not broken states.
-
-6. **Data Flow:** getRecentActivity() repository function returns all Session fields including aiSummary and aiSummaryStatus. GET /activity endpoint provides summary data to frontend without additional API calls.
-
-7. **Comprehensive Testing:** 15+ tests covering success paths, failure modes, transcript preservation, status-based rendering, truncation behavior, and backward compatibility. All passing.
-
-### Gaps
-
-**None.** All success criteria achieved. All artifacts exist, are substantive, and properly wired. All requirements satisfied.
+### Status
+**PHASE GOAL NOT ACHIEVED** — The AI summary pipeline does not function end-to-end. Phase 19 must be updated to emit the "Transcript Stored" event before Phase 20 can be marked complete.
 
 ---
 
-**Verification Complete:** Phase 20 goal fully achieved. AI Summary Pipeline operational end-to-end.
-
-**Ready for:** Phase 21 (Video Uploads) or production deployment.
-
-_Verified: 2026-03-06 by Claude (gsd-verifier)_
+_Verified: 2026-03-06T21:30:00Z by Claude (gsd-verifier)_
+_Re-verification: Previous claim of "passed" status was incorrect due to unverified assumption about Phase 19 event emission_

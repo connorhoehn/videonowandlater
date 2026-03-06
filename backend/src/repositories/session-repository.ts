@@ -2,10 +2,11 @@
  * Session repository - session persistence operations
  */
 
+import { v4 as uuidv4 } from 'uuid';
 import { PutCommand, GetCommand, UpdateCommand, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Session } from '../domain/session';
-import { SessionStatus, RecordingStatus } from '../domain/session';
+import { SessionStatus, SessionType, RecordingStatus } from '../domain/session';
 import { EmojiType, SHARD_COUNT } from '../domain/reaction';
 
 /**
@@ -632,4 +633,130 @@ export async function getRecentActivity(
 
   // Return limited number of sessions
   return sessions.slice(0, limit);
+}
+
+/**
+ * Create a new UPLOAD session with upload tracking initialized
+ * UPLOAD sessions do not claim IVS resources (channel/stage) but may have a chat room
+ *
+ * @param tableName DynamoDB table name
+ * @param userId User ID (cognito:username)
+ * @param sourceFileName Original filename of the upload
+ * @param sourceFileSize Size in bytes
+ * @param sourceCodec Optional codec (H.264, H.265, etc)
+ * @returns Session object with uploadStatus='pending'
+ */
+export async function createUploadSession(
+  tableName: string,
+  userId: string,
+  sourceFileName: string,
+  sourceFileSize: number,
+  sourceCodec?: string
+): Promise<Session> {
+  const docClient = getDocumentClient();
+  const now = new Date().toISOString();
+  const sessionId = uuidv4();
+
+  const session: Session = {
+    sessionId,
+    userId,
+    sessionType: SessionType.UPLOAD,
+    status: SessionStatus.CREATING,
+    claimedResources: { chatRoom: '' }, // Empty; may be populated later if chat is added
+    createdAt: now,
+    version: 1,
+    uploadStatus: 'pending',
+    uploadProgress: 0,
+    sourceFileName,
+    sourceFileSize,
+    sourceCodec,
+  };
+
+  await docClient.send(new PutCommand({
+    TableName: tableName,
+    Item: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+      GSI1PK: `STATUS#${session.status.toUpperCase()}`,
+      GSI1SK: session.createdAt,
+      entityType: 'SESSION',
+      ...session,
+    },
+  }));
+
+  return session;
+}
+
+/**
+ * Update upload progress after S3 multipart completion or during upload
+ * Preserves all other fields unchanged
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param uploadStatus New upload status ('pending' | 'processing' | 'converting' | 'available' | 'failed')
+ * @param uploadProgress Progress percentage 0-100
+ */
+export async function updateUploadProgress(
+  tableName: string,
+  sessionId: string,
+  uploadStatus: string,
+  uploadProgress: number
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #uploadStatus = :status, #uploadProgress = :progress, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#uploadStatus': 'uploadStatus',
+      '#uploadProgress': 'uploadProgress',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':status': uploadStatus,
+      ':progress': uploadProgress,
+      ':inc': 1,
+    },
+  }));
+}
+
+/**
+ * Update convert status after MediaConvert job submission or completion
+ * Stores job name and conversion progress
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param mediaConvertJobName Job name in format vnl-{sessionId}-{timestamp}
+ * @param convertStatus Status ('pending' | 'processing' | 'available' | 'failed')
+ */
+export async function updateConvertStatus(
+  tableName: string,
+  sessionId: string,
+  mediaConvertJobName: string,
+  convertStatus: string
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #mediaConvertJobName = :jobName, #convertStatus = :status, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#mediaConvertJobName': 'mediaConvertJobName',
+      '#convertStatus': 'convertStatus',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':jobName': mediaConvertJobName,
+      ':status': convertStatus,
+      ':inc': 1,
+    },
+  }));
 }

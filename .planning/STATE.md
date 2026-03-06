@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
-status: ready_to_plan
-stopped_at: Roadmap created — Phase 16 ready to plan
-last_updated: "2026-03-05T00:00:00.000Z"
-last_activity: 2026-03-05 — v1.2 roadmap created (Phases 16-20)
+status: in_progress
+stopped_at: Completed Phase 17 Plan 01 — Reaction Summary at Session End
+last_updated: "2026-03-06T00:31:04.000Z"
+last_activity: 2026-03-06 — Completed 17-01-PLAN.md (reaction summary computation)
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 20
 ---
 
 # Project State
@@ -25,25 +25,25 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 16 of 20 (Hangout Participant Tracking)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-03-05 — v1.2 roadmap created, Phase 16 ready to plan
+Phase: 17 of 20 (Reaction Summary at Session End)
+Plan: 01 (Complete)
+Status: In progress
+Last activity: 2026-03-06 — Completed 17-01-PLAN.md (reaction summary computation, 184 tests passing)
 
-Progress: [░░░░░░░░░░] 0% (0/5 phases complete)
+Progress: [██░░░░░░░░] 20% (1/5 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v1.2)
-- Average duration: — min
-- Total execution time: — hours
+- Total plans completed: 1 (v1.2)
+- Average duration: 3 min
+- Total execution time: 3 min
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
+| Phase | Plans | Completed | Avg/Plan |
+|-------|-------|-----------|----------|
+| 17 | 1 | 1 | 3 min |
 
 *Updated after each plan completion*
 
@@ -57,6 +57,12 @@ Key decisions carried forward from v1.1:
 - player.getPosition() * 1000 for syncTime (elapsed playback ms relative to stream start)
 - CloudFront OAC for S3 origins (recording playback)
 - Public /recordings endpoint with no auth (content discoverability)
+
+v1.2 decisions from Phase 17:
+- **Reaction summary as optional field** - reactionSummary is Record<string, number>? on Session to maintain backward compatibility
+- **Empty map for zero reactions** - Sessions with no reactions store {} not undefined (type consistency)
+- **Non-blocking error handling** - computeAndStoreReactionSummary errors never block pool release (critical invariant)
+- **Parallel shard aggregation** - Promise.all used to query all 100 shards per emoji type concurrently
 
 v1.2 decisions pending:
 - Phase 18: messageCount tracking approach (atomic counter vs count-at-end vs N/A)

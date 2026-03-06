@@ -84,7 +84,7 @@ Requirements for milestone v1.2. Each maps to roadmap phases (starting at Phase 
 
 ### Reaction Summary
 
-- [ ] **RSUMM-01**: Per-emoji reaction counts are pre-computed and stored on session record when session ends
+- [x] **RSUMM-01**: Per-emoji reaction counts are pre-computed and stored on session record when session ends (Phase 17)
 - [ ] **RSUMM-02**: Reaction summary counts are displayed on recording cards on the homepage
 - [ ] **RSUMM-03**: Reaction summary counts are displayed in the replay info panel
 
@@ -226,7 +226,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PTCP-01 | Phase 16 | Pending |
 | PTCP-02 | Phase 16 | Pending |
 | PTCP-03 | Phase 16 | Pending |
-| RSUMM-01 | Phase 17 | Pending |
+| RSUMM-01 | Phase 17 | Complete (2026-03-06) |
 | RSUMM-02 | Phase 18 | Pending |
 | RSUMM-03 | Phase 18 | Pending |
 | ACTV-01 | Phase 18 | Pending |

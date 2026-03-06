@@ -93,6 +93,15 @@ export class SessionStack extends Stack {
       autoDeleteObjects: true,
     });
 
+    // S3 bucket for transcription pipeline (MediaConvert input/output and Transcribe outputs)
+    const transcriptionBucket = new s3.Bucket(this, 'TranscriptionBucket', {
+      bucketName: `vnl-transcription-${this.stackName.toLowerCase()}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
     // CloudFront CORS policy for HLS playback
     const recordingsCorsPolicy = new cloudfront.ResponseHeadersPolicy(this, 'RecordingsCorsPolicy', {
       corsBehavior: {
@@ -374,8 +383,159 @@ export class SessionStack extends Stack {
       sourceArn: this.recordingStartRule.ruleArn,
     });
 
-    // Explicit SQS SendMessage grant so EventBridge can write delivery failures to the DLQ.
-    // CDK's targets.LambdaFunction does not auto-grant this when deadLetterQueue is set on the target.
+    // DLQ resource policy will be updated after transcription pipeline setup
+
+    // Update recording-ended function with CloudFront domain
+    recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
+
+    // Grant S3 read access to Lambda functions for recording metadata
+    recordingsBucket.grantRead(streamStartedFn);
+    recordingsBucket.grantRead(recordingEndedFn);
+    recordingsBucket.grantRead(recordingStartedFn);
+
+    // ============================================================
+    // Transcription Pipeline Infrastructure (Phase 19)
+    // MediaConvert for adaptive bitrate transcoding + Transcribe for automated transcription
+    // ============================================================
+
+    // Create MediaConvert IAM role for transcoding jobs
+    const mediaConvertRole = new iam.Role(this, 'MediaConvertRole', {
+      assumedBy: new iam.ServicePrincipal('mediaconvert.amazonaws.com'),
+      description: 'Role for MediaConvert jobs to read IVS HLS and write transcription outputs',
+    });
+
+    // Grant MediaConvert job role S3 read access to recordings bucket (for HLS master.m3u8)
+    recordingsBucket.grantRead(mediaConvertRole);
+
+    // Grant MediaConvert job role S3 write access to transcription bucket (for MP4 output)
+    transcriptionBucket.grantWrite(mediaConvertRole);
+
+    // Grant MediaConvert permissions to recording-ended handler for job submission
+    recordingEndedFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['mediaconvert:CreateJob'],
+      resources: ['*'],
+    }));
+
+    // Grant recording-ended handler S3 read access to recordings bucket (for HLS master.m3u8)
+    recordingsBucket.grantRead(recordingEndedFn);
+
+    // Grant recording-ended handler S3 write access to transcription bucket (MediaConvert outputs MP4 there)
+    transcriptionBucket.grantWrite(recordingEndedFn);
+
+    // Grant recording-ended handler IAM pass-role permission for MediaConvert job
+    recordingEndedFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['iam:PassRole'],
+      resources: ['arn:aws:iam::*:role/*'],
+      conditions: {
+        StringEquals: {
+          'iam:PassedToService': 'mediaconvert.amazonaws.com',
+        },
+      },
+    }));
+
+    // Set environment variables on recording-ended handler for MediaConvert job submission
+    recordingEndedFn.addEnvironment('MEDIACONVERT_ROLE_ARN', mediaConvertRole.roleArn);
+    recordingEndedFn.addEnvironment('TRANSCRIPTION_BUCKET', transcriptionBucket.bucketName);
+    recordingEndedFn.addEnvironment('AWS_ACCOUNT_ID', this.account);
+
+    // EventBridge rule for MediaConvert job completion
+    const transcodeCompletedRule = new events.Rule(this, 'TranscodeCompletedRule', {
+      eventPattern: {
+        source: ['aws.mediaconvert'],
+        detailType: ['MediaConvert Job State Change'],
+        detail: {
+          status: ['COMPLETE', 'ERROR', 'CANCELED'],
+          userMetadata: {
+            phase: ['19-transcription'],
+          },
+        },
+      },
+      description: 'Submit Transcribe job when MediaConvert completes',
+    });
+
+    // Create transcode-completed Lambda function
+    const transcodeCompletedFn = new nodejs.NodejsFunction(this, 'TranscodeCompleted', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/transcode-completed.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
+        AWS_ACCOUNT_ID: this.account,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB access to transcode-completed handler
+    this.table.grantReadWriteData(transcodeCompletedFn);
+
+    // Grant Transcribe permissions to transcode-completed handler
+    transcodeCompletedFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['transcribe:StartTranscriptionJob'],
+      resources: ['*'],
+    }));
+
+    // Grant S3 read access to transcription bucket (for MP4 files from MediaConvert)
+    transcriptionBucket.grantRead(transcodeCompletedFn);
+
+    // Add EventBridge target
+    transcodeCompletedRule.addTarget(new targets.LambdaFunction(transcodeCompletedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+
+    // Add Lambda permission for EventBridge invocation
+    transcodeCompletedFn.addPermission('AllowEBTranscodeCompletedInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: transcodeCompletedRule.ruleArn,
+    });
+
+    // EventBridge rule for Transcribe job completion
+    const transcribeCompletedRule = new events.Rule(this, 'TranscribeCompletedRule', {
+      eventPattern: {
+        source: ['aws.transcribe'],
+        detailType: ['Transcribe Job State Change'],
+        detail: {
+          TranscriptionJobStatus: ['COMPLETED', 'FAILED'],
+        },
+      },
+      description: 'Store transcript when Transcribe completes',
+    });
+
+    // Create transcribe-completed Lambda function
+    const transcribeCompletedFn = new nodejs.NodejsFunction(this, 'TranscribeCompleted', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/transcribe-completed.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    // Grant DynamoDB access to transcribe-completed handler
+    this.table.grantReadWriteData(transcribeCompletedFn);
+
+    // Grant S3 read access to transcription bucket (for transcript.json fetch)
+    transcriptionBucket.grantRead(transcribeCompletedFn);
+
+    // Add EventBridge target
+    transcribeCompletedRule.addTarget(new targets.LambdaFunction(transcribeCompletedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+
+    // Add Lambda permission for EventBridge invocation
+    transcribeCompletedFn.addPermission('AllowEBTranscribeCompletedInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: transcribeCompletedRule.ruleArn,
+    });
+
+    // Update DLQ resource policy to include transcription pipeline rules
+    // Explicit SQS SendMessage grant so EventBridge can write delivery failures to the DLQ
     recordingEventsDlq.addToResourcePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       principals: [new iam.ServicePrincipal('events.amazonaws.com')],
@@ -387,18 +547,12 @@ export class SessionStack extends Stack {
             this.recordingStartRule.ruleArn,
             this.recordingEndRule.ruleArn,
             stageRecordingEndRule.ruleArn,
+            transcodeCompletedRule.ruleArn,
+            transcribeCompletedRule.ruleArn,
           ],
         },
       },
     }));
-
-    // Update recording-ended function with CloudFront domain
-    recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
-
-    // Grant S3 read access to Lambda functions for recording metadata
-    recordingsBucket.grantRead(streamStartedFn);
-    recordingsBucket.grantRead(recordingEndedFn);
-    recordingsBucket.grantRead(recordingStartedFn);
 
     // ============================================================
     // AI Summary Pipeline (Phase 20)

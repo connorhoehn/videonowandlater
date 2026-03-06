@@ -7,11 +7,11 @@ stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering, pr
 last_updated: "2026-03-06T01:39:12.895Z"
 last_activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
 progress:
-  total_phases: 19
-  completed_phases: 17
-  total_plans: 50
-  completed_plans: 47
-  percent: 98
+  total_phases: 22
+  completed_phases: 20
+  total_plans: 54
+  completed_plans: 49
+  percent: 91
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 22 of 22 (Live Broadcast with Secure Viewer Links) -- IN PROGRESS
-Plan: 02 of 04 (Playback Token Handler) -- COMPLETE
-Status: Implemented POST /sessions/{sessionId}/playback-token endpoint with ES384 JWT signing for private broadcast playback. Handler validates private sessions, extracts channel ARNs, generates time-limited tokens (24-hour default), and constructs playback URLs with token parameters. Comprehensive unit test coverage (8 tests) for token generation, defaults, and all error cases. Added jsonwebtoken dependency. All 331 backend tests passing.
-Last activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
+Phase: 21 of 22 (Video Uploads) -- IN PROGRESS
+Plan: 05 of 06 (API Gateway Wiring - Gap Closure) -- COMPLETE
+Status: Successfully wired upload handlers into API Gateway with Lambda functions, Cognito auth, and complete IAM permissions. API Gateway routes created for POST /upload/init, POST /upload/part-url, POST /upload/complete. All three functions have correct environment variables and permissions (DynamoDB, S3, SNS). CDK synthesizes successfully with all handlers bundled. Upload API infrastructure ready for frontend integration.
+Last activity: 2026-03-06 — Completed 21-05-PLAN.md (API Gateway wiring for upload handlers)
 
-Progress: [████████████████████] 98% (46/48 plans complete)
+Progress: [█████████████████░░░] 91% (49/54 plans complete)
 
 ## Performance Metrics
 

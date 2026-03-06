@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Gap Closure** - Phases 1-4.2 (shipped 2026-03-02)
 - ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
-- 🚧 **v1.2 Activity Feed & Intelligence** - Phases 16-20 (in progress)
+- 🚧 **v1.2 Activity Feed & Intelligence** - Phases 16-21 (in progress)
 
 ## Phases
 
@@ -327,16 +327,29 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
 | 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
 
-### Phase 21: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
+| 21. Video Uploads | v1.2 | 4/4 | Planned | - |
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 20
-**Plans:** 3/3 plans complete
+### Phase 21: Video Uploads
+**Goal**: Users can upload pre-recorded videos (mov/mp4 from phone or computer) with automatic adaptive bitrate encoding, integration with transcription and AI summary pipelines
+**Depends on**: Phase 20
+**Requirements**: UPLOAD-01, UPLOAD-02, UPLOAD-03, UPLOAD-04, UPLOAD-05, UPLOAD-06, UPLOAD-07, UPLOAD-08, UPLOAD-09, UPLOAD-10, UPLOAD-11, UPLOAD-12
+**Success Criteria** (what must be TRUE):
+  1. User can select and upload MOV/MP4 file from device (up to 10GB)
+  2. Upload progress displayed as percentage with estimated time remaining
+  3. Resumable upload on network interruption (client-side retry with new presigned URLs)
+  4. MediaConvert automatically processes to HLS with 3-5 adaptive bitrate renditions (H.264 codec)
+  5. Uploaded videos appear in home feed and activity feed alongside IVS broadcasts and hangouts
+  6. Chat, reactions, transcription, AI summaries apply to uploaded videos like IVS recordings
+  7. S3 multipart orphans auto-aborted after 24 hours (lifecycle rule)
+  8. Upload sessions stored in DynamoDB with status tracking (pending → processing → available)
+**Plans**: 4 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 21 to break down)
+- [ ] 21-01-PLAN.md — Backend domain models and repository functions (UPLOAD-01, UPLOAD-02, UPLOAD-03)
+- [ ] 21-02-PLAN.md — Upload handlers: init, chunk URLs, multipart completion (UPLOAD-04, UPLOAD-05, UPLOAD-06)
+- [ ] 21-03-PLAN.md — MediaConvert integration, CDK infrastructure, EventBridge wiring (UPLOAD-07, UPLOAD-08, UPLOAD-09)
+- [ ] 21-04-PLAN.md — Frontend upload UI, HomePage integration, integration tests (UPLOAD-10, UPLOAD-11, UPLOAD-12)
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-06 — Phase 20 planned (2 plans: 20-01 Bedrock backend, 20-02 frontend display)*
+*Last updated: 2026-03-06 — Phase 21 planned (4 plans: domain models, upload handlers, MediaConvert integration, frontend upload UI)*

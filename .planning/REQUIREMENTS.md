@@ -245,12 +245,173 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AI-04 | Phase 20 | Pending |
 | AI-05 | Phase 20 | Pending |
 
+### Video Upload Support
+
+- [ ] **UPLOAD-01**: Session domain model includes UPLOAD as a new SessionType distinct from BROADCAST and HANGOUT
+- [ ] **UPLOAD-02**: UPLOAD sessions store uploadId, uploadStatus, uploadProgress, sourceFileName, sourceFileSize, sourceCodec fields
+- [ ] **UPLOAD-03**: UPLOAD sessions store mediaConvertJobName, convertStatus fields for tracking encoding progress
+- [ ] **UPLOAD-04**: POST /upload/init handler validates file format (MP4, MOV, AVI) and rejects unsupported formats with 400
+- [ ] **UPLOAD-05**: POST /upload/init rejects files >10GB with 413 Payload Too Large; initiates S3 multipart upload
+- [ ] **UPLOAD-06**: POST /upload/complete finalizes multipart upload, updates session status, queues MediaConvert job via SNS
+- [ ] **UPLOAD-07**: SNS-triggered start-mediaconvert Lambda submits MediaConvert jobs with HLS output and H.264 codec
+- [ ] **UPLOAD-08**: EventBridge rule triggers on-mediaconvert-complete Lambda on MediaConvert job state changes (COMPLETE/ERROR)
+- [ ] **UPLOAD-09**: on-mediaconvert-complete updates recordingHlsUrl, recordingStatus, status after HLS is ready; triggers transcription pipeline
+- [ ] **UPLOAD-10**: VideoUploadForm React component with file input, validation, and progress tracking
+- [ ] **UPLOAD-11**: useVideoUpload custom hook manages multipart upload with presigned URLs and chunk retry logic
+- [ ] **UPLOAD-12**: HomePage includes "Upload Video" button that opens modal with upload form
+
+## v2 Requirements (Future)
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Admin & Analytics
+
+- **ADMIN-01**: Admin dashboard shows active sessions with participant counts
+- **ADMIN-02**: Admin dashboard shows recent replays with view counts
+- **ADMIN-03**: Admin dashboard shows real-time reaction counts per session
+- **ADMIN-04**: Reaction analytics aggregate top reactions per session/segment
+
+### Discovery Enhancements
+
+- **DISC-01**: Profile-based recording discovery (user's recording history on their profile)
+- **DISC-02**: Interest-based algorithmic ranking in home feed (beyond chronological)
+- **DISC-03**: Thumbnail hover preview (video preview on thumbnail hover)
+- **DISC-04**: Reaction aggregation markers on replay timeline ("142 fire emojis at 2:34")
+
+### Presence & Social
+
+- **PRES-01**: Presence system shows "X is watching" indicators during live sessions
+- **PRES-02**: Viewer avatars/names displayed on sessions
+- **PRES-03**: Heartbeat API for presence tracking (POST every 30s, DynamoDB TTL auto-expiry)
+
+### Privacy & Moderation
+
+- **MOD-01**: Users can delete their own recordings
+- **MOD-02**: Recording deletion also removes metadata, chat, reactions
+- **MOD-03**: User opt-out for auto-recording (privacy control)
+
+## Out of Scope
+
+Explicitly excluded. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Custom emoji upload for reactions | Requires moderation infrastructure, storage bloat, brand consistency issues |
+| Real-time reaction counts (exact numbers) | WebSocket performance bottleneck at scale, distracts from content |
+| Unlimited hangout participants (>12) | IVS RealTime max 12 publishers; beyond that requires MCU complexity |
+| Screen sharing in hangouts | Adds complexity to grid layout, bandwidth management; defer to v2 |
+| Video clipping/highlights | Complex UX (timeline selection, transcoding); nice-to-have but not core |
+| Email/push notifications | Notification infrastructure tangential to core value; in-app only for v1.1 |
+| Mobile native app | Separate codebase, app store deployment; web-first per PROJECT.md |
+| OAuth/social login | Additional identity provider complexity; username/password sufficient |
+| Paid subscriptions/monetization | Payment processing orthogonal to core video platform |
+| Content moderation/AI filtering | Massive scope (profanity, NSFW, harassment); defer to v2 |
+| Multi-region deployment | Cross-region IVS resource management; single region for v1.1 |
+| Real-time transcription during live sessions | Requires separate SDK and separate streaming infrastructure; fundamentally different from batch transcription |
+| Full transcript text viewer in replay | 5,000+ words inline overwhelms the UI; AI summary + S3 URI sufficient for v1.2 |
+| Per-user reaction breakdown | Violates the anonymous-by-design reaction system; do not implement |
+| Speaker diarization on hangout transcripts | IVS Chat lacks speaker fidelity; hallucination risk with Bedrock |
+| Keyword search on transcripts | Requires transcript corpus to exist first (deferred until v1.2 has populated data) |
+| AI topic chapters | Requires NLP topic modeling on top of transcription; v2+ |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REC-01 | Phase 5 | Complete |
+| REC-02 | Phase 5 | Complete |
+| REC-03 | Phase 5 | Pending |
+| REC-04 | Phase 5 | Pending |
+| REC-05 | Phase 5 | Pending |
+| REC-06 | Phase 5 | Complete |
+| REC-07 | Phase 5 | Pending |
+| REC-08 | Phase 5 | Complete |
+| REPLAY-01 | Phase 14 | Complete |
+| REPLAY-02 | Phase 6 | Complete |
+| REPLAY-03 | Phase 6 | Complete |
+| REPLAY-04 | Phase 13 | Complete |
+| REPLAY-05 | Phase 6 | Complete |
+| REPLAY-06 | Phase 13 | Complete |
+| REPLAY-07 | Phase 13 | Complete |
+| REPLAY-08 | Phase 6 | Complete |
+| REPLAY-09 | Phase 13 | Complete |
+| REACT-01 | Phase 7 | Complete |
+| REACT-02 | Phase 7 | Complete |
+| REACT-03 | Phase 7 | Complete |
+| REACT-04 | Phase 7 | Complete |
+| REACT-05 | Phase 7 | Complete |
+| REACT-06 | Phase 7 | Complete |
+| REACT-07 | Phase 7 | Complete |
+| REACT-08 | Phase 7 | Complete |
+| REACT-09 | Phase 13 | Complete |
+| REACT-10 | Phase 7 | Complete |
+| HANG-01 | Phase 10 | Complete |
+| HANG-02 | Phase 12 | Complete |
+| HANG-03 | Phase 8 | Complete |
+| HANG-04 | Phase 8 | Complete |
+| HANG-05 | Phase 8 | Complete |
+| HANG-06 | Phase 8 | Complete |
+| HANG-07 | Phase 8 | Complete |
+| HANG-08 | Phase 8 | Complete |
+| HANG-09 | Phase 8 | Complete |
+| HANG-10 | Phase 8 | Complete |
+| HANG-11 | Phase 8 | Complete |
+| HANG-12 | Phase 8 | Complete |
+| HANG-13 | Phase 14 | Complete |
+| HANG-14 | Phase 11 | Complete |
+| HANG-15 | Phase 11 | Complete |
+| HANG-16 | Phase 11 | Complete |
+| DEV-03 | Phase 9 | Complete |
+| DEV-04 | Phase 9 | Complete |
+| DEV-05 | Phase 9 | Complete |
+| DEV-06 | Phase 9 | Complete |
+| DEV-08 | Phase 9 | Complete |
+| DEV-09 | Phase 9 | Complete |
+| DEV-10 | Phase 9 | Complete |
+
+| PTCP-01 | Phase 16 | Complete |
+| PTCP-02 | Phase 16 | Complete |
+| PTCP-03 | Phase 16 | Complete |
+| RSUMM-01 | Phase 17 | Complete |
+| RSUMM-02 | Phase 18 | Pending |
+| RSUMM-03 | Phase 18 | Pending |
+| ACTV-01 | Phase 18 | Pending |
+| ACTV-02 | Phase 18 | Pending |
+| ACTV-03 | Phase 18 | Pending |
+| ACTV-04 | Phase 18 | Pending |
+| ACTV-05 | Phase 18 | Pending |
+| ACTV-06 | Phase 18 | Pending |
+| TRNS-01 | Phase 19 | Pending |
+| TRNS-02 | Phase 19 | Pending |
+| TRNS-03 | Phase 19 | Pending |
+| TRNS-04 | Phase 19 | Pending |
+| AI-01 | Phase 20 | Pending |
+| AI-02 | Phase 20 | Pending |
+| AI-03 | Phase 20 | Pending |
+| AI-04 | Phase 20 | Pending |
+| AI-05 | Phase 20 | Pending |
+
+| UPLOAD-01 | Phase 21 | Pending |
+| UPLOAD-02 | Phase 21 | Pending |
+| UPLOAD-03 | Phase 21 | Pending |
+| UPLOAD-04 | Phase 21 | Pending |
+| UPLOAD-05 | Phase 21 | Pending |
+| UPLOAD-06 | Phase 21 | Pending |
+| UPLOAD-07 | Phase 21 | Pending |
+| UPLOAD-08 | Phase 21 | Pending |
+| UPLOAD-09 | Phase 21 | Pending |
+| UPLOAD-10 | Phase 21 | Pending |
+| UPLOAD-11 | Phase 21 | Pending |
+| UPLOAD-12 | Phase 21 | Pending |
+
 **Coverage:**
 - v1.1 requirements: 50 total (all complete)
-- v1.2 requirements: 21 total
-- Mapped to phases: 21/21 (100%)
+- v1.2 requirements: 33 total (12 Phase 21 upload, 21 other phases)
+- Mapped to phases: 33/33 (100%)
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-05 — v1.2 roadmap created, phases 16-20 assigned*
+*Last updated: 2026-03-06 — Phase 21 requirements added (UPLOAD-01 through UPLOAD-12, 12 total)*

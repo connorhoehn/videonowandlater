@@ -8,7 +8,18 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Latest Milestone: v1.2 Activity Feed & Intelligence (SHIPPED 2026-03-06)
+## Latest Milestone: v1.3 Secure Sharing (SHIPPED 2026-03-06)
+
+**Accomplished:** Enable private broadcasts with secure viewer links and granular access control via JWT tokens.
+
+**Delivered:**
+- ✅ Private broadcast flag: Session.isPrivate field with backward compatibility
+- ✅ Private channel pool management: isolated resource pool for private sessions
+- ✅ ES384 JWT token generation: time-limited tokens with channel ARN and access control
+- ✅ Activity feed privacy: private sessions hidden from non-owners
+- ✅ API Gateway integration: POST /sessions/{sessionId}/playback-token endpoint wired
+
+## Previous Milestone: v1.2 Activity Feed & Intelligence (SHIPPED 2026-03-06)
 
 **Accomplished:** Surface richer session context on the homepage (hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed), and add an automated transcription and AI summary pipeline to every recording.
 
@@ -19,11 +30,15 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - ✅ Transcription pipeline: automatic S3 recording → Amazon Transcribe → transcript stored on session
 - ✅ AI summary pipeline: transcript → Bedrock/Claude Sonnet → one-paragraph summary on every recording
 - ✅ Video uploads: users can upload pre-recorded videos (MOV/MP4) with automatic adaptive bitrate encoding
-- ✅ Secure sharing: private broadcasts with ES384 JWT tokens for granular access control
 
-## Current Milestone: v1.3 Secure Sharing
+## Current Milestone: v1.4 Creator Studio & Stream Quality
 
-**Goal:** [To be defined in next planning phase]
+**Goal:** Give broadcasters professional tools to monitor stream health and showcase other creators in real-time.
+
+**Target features:**
+- Stream quality dashboard during broadcast (bitrate, resolution, network status, frame rate)
+- Creator spotlight overlay feature (feature another broadcaster's stream with elegant UI)
+- Real-time metrics ingest for professional broadcast experience
 
 ## Requirements
 
@@ -52,9 +67,14 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-**v1.3 Milestone (Secure Sharing):**
+**v1.4 Milestone (Creator Studio & Stream Quality):**
 
-- [ ] [To be defined after v1.2 launch]
+- [ ] Broadcaster can view stream quality metrics during live broadcast
+- [ ] Stream quality dashboard shows bitrate, resolution, frame rate, network status
+- [ ] Broadcaster can feature another creator's broadcast as an overlay/spotlight
+- [ ] Featured broadcast selection UI with search and discovery
+- [ ] Featured broadcast link/badge displayed to viewers during broadcast
+- [ ] Viewers can click featured broadcast to navigate and watch
 
 ### Just Validated (v1.2)
 
@@ -123,4 +143,4 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-06 after completing v1.2 milestone (22 phases total, 63 plans executed)*
+*Last updated: 2026-03-06 after completing v1.3 milestone (22 phases total, 64 plans executed); now planning v1.4*

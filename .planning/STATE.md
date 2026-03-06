@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Live Broadcast with Secure Links
 status: in-progress
-stopped_at: Completed 22-03-PLAN.md (Activity feed private session filtering and private channel pool infrastructure)
-last_updated: "2026-03-06T01:27:00Z"
-last_activity: 2026-03-06 — Completed 22-03-PLAN.md (Private session visibility filtering, private channel pool initialization, IVS playback key infrastructure)
+stopped_at: Completed 20-05-PLAN.md (S3 transcript fetch integration with Bedrock)
+last_updated: "2026-03-06T01:49:00Z"
+last_activity: 2026-03-06 — Completed 20-05-PLAN.md (S3 fetch in store-summary handler, Phase 19→20 pipeline complete)
 progress:
   total_phases: 22
-  completed_phases: 22
+  completed_phases: 20
   total_plans: 48
   completed_plans: 45
   percent: 94
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.3 Phase 22 (Live Broadcast with Secure Viewer Links) — Plan 03 complete
+**Current focus:** v1.2 Phase 20 (AI Summary Pipeline) — Plan 05 complete (gap closure)
 
 ## Current Position
 
-Phase: 22 of 22 (Live Broadcast with Secure Viewer Links) -- IN PROGRESS
-Plan: 03 of 04 (Activity Feed Private Session Filtering) -- COMPLETE
-Status: Implemented private session filtering in GET /activity endpoint with comprehensive test coverage (6 new tests). Added private channel pool infrastructure to replenish-pool handler with MIN_PRIVATE_CHANNELS configuration. Wired IVS_PLAYBACK_PRIVATE_KEY environment variable through CDK for future JWT token generation. All 321 backend tests passing. Backward compatible with existing public sessions.
-Last activity: 2026-03-06 — Completed 22-03-PLAN.md (Private session visibility filtering, private channel pool initialization)
+Phase: 20 of 22 (AI Summary Pipeline) -- GAP CLOSURE
+Plan: 05 of 05 (S3 Transcript Fetch Integration) -- COMPLETE
+Status: Implemented S3 fetch logic in store-summary handler. Updated event contract: Phase 19 now emits transcriptS3Uri (S3 as source of truth) instead of transcriptText. store-summary fetches transcript from S3 via GetObjectCommand, handles empty transcripts gracefully (non-blocking), and invokes Bedrock Claude for summary generation. Phase 19→20 pipeline fully integrated. All 323 backend tests passing.
+Last activity: 2026-03-06 — Completed 20-05-PLAN.md (S3 fetch in store-summary handler)
 
-Progress: [███████████████████] 94% (45/48 plans complete)
+Progress: [████████████████████] 94% (45/48 plans complete)
 
 ## Performance Metrics
 
@@ -47,7 +47,7 @@ Progress: [███████████████████] 94% (45/48
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
 | 19 | 5 | 5 | 4.5 min (01-04: 4.5 min avg, 05 gap closure: 1 min) |
-| 20 | 2 | 2 | 4.5 min |
+| 20 | 2 | 2 | 4 min (01: 4 min, 05 gap closure: 15 min) |
 | 21 | 4 | 4 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min) |
 | 22 | 4 | 1 | 2 min (22-01 complete) |
 
@@ -134,6 +134,12 @@ Gap closure decisions (Phase 19-05):
 - **EventBridge event Detail contract alignment** - Emit transcriptText (plaintext content) instead of transcriptS3Uri in Transcript Stored events to match Phase 20's store-summary consumer interface expectation
 - **Payload minimalism principle** - Event Detail contains only fields downstream consumers use: { sessionId, transcriptText }; removed unused timestamp field
 - **Empty string semantics** - When plainText is empty, emit transcriptText: '' (not omitted) to maintain consistent contract structure
+
+Gap closure decisions (Phase 20-05):
+- **S3 as authoritative transcript source** - Phase 19 emits transcriptS3Uri (S3 reference), Phase 20 fetches from S3 (not EventBridge payload). Eliminates payload size limits, keeps S3 as source of truth
+- **S3 URI parsing strategy** - Regex pattern `^s3://([^/]+)/(.+)$` validates URI format before GetObjectCommand; validation errors thrown (handled by outer catch block as non-blocking)
+- **Non-blocking empty transcript** - Sessions with empty S3 transcripts get aiSummaryStatus='failed' without Bedrock invocation or throwing; prevents cascading failures
+- **transformToString for plaintext** - Use SDK's Body?.transformToString() method for UTF-8 extraction (not manual Buffer handling)
 
 ### Roadmap Evolution
 

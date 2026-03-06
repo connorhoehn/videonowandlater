@@ -103,6 +103,7 @@ export const handler = async (
     console.log('Session transitioned to ENDED:', sessionId);
 
     // Update recording metadata
+    let finalStatus: 'available' | 'failed' = 'failed';
     try {
       const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
       let recordingHlsUrl: string;
@@ -119,7 +120,7 @@ export const handler = async (
       }
 
       // recording_status field only exists on broadcast events; Stage "Recording End" events are always successful
-      const finalStatus = event.detail.recording_status === 'Recording End Failure'
+      finalStatus = event.detail.recording_status === 'Recording End Failure'
         ? 'failed'
         : 'available';
 
@@ -162,7 +163,7 @@ export const handler = async (
     }
 
     // Submit MediaConvert job to convert HLS → MP4 for transcription (best-effort, non-blocking)
-    if (session.recordingStatus === 'available') {
+    if (finalStatus === 'available') {
       try {
         const mediaConvertClient = new MediaConvertClient({ region: process.env.AWS_REGION });
         const epochMs = Date.now();

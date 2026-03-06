@@ -30,14 +30,14 @@ Plan: 05 of 05 (Event Payload Contract Fix) -- COMPLETE
 Status: Fixed EventBridge event Detail payload contract mismatch between Phase 19 (transcribe-completed emitter) and Phase 20 (store-summary consumer). Event now emits transcriptText (plaintext content) instead of transcriptS3Uri. Phase 19→20 integration ready: store-summary handler receives actual transcript for Bedrock invocation. All 315 backend tests passing.
 Last activity: 2026-03-06 — Completed 19-05-PLAN.md (Event payload contract fix - transcriptText field emitted correctly)
 
-Progress: [██████████████████░] 90% (43/48 plans complete)
+Progress: [████████████████████] 92% (44/48 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 43 (v1.1 + v1.2 + v1.3 start)
+- Total plans completed: 44 (v1.1 + v1.2 + v1.3 start + gap closure)
 - Average duration: 3.5 min
-- Total execution time: ~140 min (including all phase executions)
+- Total execution time: ~141 min (including all phase executions)
 
 **By Phase:**
 
@@ -46,7 +46,7 @@ Progress: [██████████████████░] 90% (43/48
 | 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
-| 19 | 2 | 2 | 4.5 min |
+| 19 | 5 | 5 | 4.5 min (01-04: 4.5 min avg, 05 gap closure: 1 min) |
 | 20 | 2 | 2 | 4.5 min |
 | 21 | 4 | 4 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min) |
 | 22 | 4 | 1 | 2 min (22-01 complete) |
@@ -122,6 +122,11 @@ v1.3 decisions from Phase 22-01 (Private Broadcast Foundation):
 - **Private channel pool suffix pattern** - STATUS#AVAILABLE#PRIVATE_CHANNEL and STATUS#CLAIMED#PRIVATE_CHANNEL differentiate private channels from public CHANNEL resources (consistent with ResourceType pattern)
 - **claimPrivateChannel return signature** - Returns { channelArn, isPrivate: true } or null on unavailability; ConditionalCheckFailedException returns null (allows caller to retry)
 - **Zero coupling with existing fields** - Adding isPrivate field does not affect any other Session fields or existing update patterns
+
+Gap closure decisions (Phase 19-05):
+- **EventBridge event Detail contract alignment** - Emit transcriptText (plaintext content) instead of transcriptS3Uri in Transcript Stored events to match Phase 20's store-summary consumer interface expectation
+- **Payload minimalism principle** - Event Detail contains only fields downstream consumers use: { sessionId, transcriptText }; removed unused timestamp field
+- **Empty string semantics** - When plainText is empty, emit transcriptText: '' (not omitted) to maintain consistent contract structure
 
 ### Roadmap Evolution
 

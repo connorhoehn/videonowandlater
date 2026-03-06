@@ -9,7 +9,8 @@ import { getDocumentClient } from '../lib/dynamodb-client';
 import {
   updateSessionStatus,
   updateRecordingMetadata,
-  findSessionByStageArn
+  findSessionByStageArn,
+  computeAndStoreReactionSummary
 } from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus } from '../domain/session';
@@ -55,16 +56,19 @@ export const handler = async (
     const docClient = getDocumentClient();
     const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
 
-    // Find session by channel ARN (existing logic)
+    // Find session by channel ARN — filter to ENDING only to avoid matching
+    // previously-ended sessions that used the same pooled channel
     const scanResult = await docClient.send(new ScanCommand({
       TableName: tableName,
-      FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn',
+      FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn AND #status = :ending',
       ExpressionAttributeNames: {
         '#channel': 'channel',
+        '#status': 'status',
       },
       ExpressionAttributeValues: {
         ':session': 'SESSION#',
         ':channelArn': resourceArn,
+        ':ending': 'ending',
       },
     }));
 
@@ -103,8 +107,8 @@ export const handler = async (
 
       if (resourceType === 'channel') {
         // IVS Low-Latency broadcast recording structure
-        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/master.m3u8`;
-        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/thumb-0.jpg`;
+        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
+        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/thumbnails/thumb0.jpg`;
       } else {
         // IVS RealTime Stage participant recording structure
         recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/multivariant.m3u8`;
@@ -131,6 +135,14 @@ export const handler = async (
     } catch (metadataError: any) {
       console.error('Failed to update recording metadata (non-blocking):', metadataError.message);
       // Don't throw - metadata update is best-effort, don't block session cleanup
+    }
+
+    // Compute and store reaction summary (best-effort, non-blocking)
+    try {
+      await computeAndStoreReactionSummary(tableName, sessionId);
+    } catch (summaryError: any) {
+      console.error('Failed to compute reaction summary (non-blocking):', summaryError.message);
+      // Don't throw - summary computation is best-effort, don't block session cleanup
     }
 
     // Release pool resources (Channel or Stage)

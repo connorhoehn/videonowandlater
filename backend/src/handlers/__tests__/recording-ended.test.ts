@@ -6,7 +6,7 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../recording-ended';
-import { updateRecordingMetadata, findSessionByStageArn } from '../../repositories/session-repository';
+import { updateRecordingMetadata, findSessionByStageArn, computeAndStoreReactionSummary } from '../../repositories/session-repository';
 
 jest.mock('../../lib/dynamodb-client', () => ({
   getDocumentClient: jest.fn(() => ({
@@ -18,6 +18,7 @@ jest.mock('../../repositories/session-repository', () => ({
   updateSessionStatus: jest.fn().mockResolvedValue(undefined),
   updateRecordingMetadata: jest.fn().mockResolvedValue(undefined),
   findSessionByStageArn: jest.fn().mockResolvedValue(null),
+  computeAndStoreReactionSummary: jest.fn().mockResolvedValue({}),
 }));
 
 jest.mock('../../repositories/resource-pool-repository', () => ({
@@ -26,6 +27,7 @@ jest.mock('../../repositories/resource-pool-repository', () => ({
 
 const mockUpdateRecordingMetadata = updateRecordingMetadata as jest.MockedFunction<typeof updateRecordingMetadata>;
 const mockFindSessionByStageArn = findSessionByStageArn as jest.MockedFunction<typeof findSessionByStageArn>;
+const mockComputeAndStoreReactionSummary = computeAndStoreReactionSummary as jest.MockedFunction<typeof computeAndStoreReactionSummary>;
 
 describe('recording-ended handler', () => {
   const originalEnv = process.env;
@@ -301,5 +303,139 @@ describe('recording-ended handler', () => {
       'hangout-session-123',
       expect.objectContaining({ recordingStatus: 'available' })
     );
+  });
+
+  // =========================================================================
+  // Reaction summary computation tests
+  // =========================================================================
+
+  it('computes and stores reaction summary after metadata update', async () => {
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'session-with-reactions',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { chatRoom: 'arn:aws:ivschat:...' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    mockComputeAndStoreReactionSummary.mockResolvedValue({
+      heart: 42,
+      fire: 17,
+      clap: 8,
+      laugh: 5,
+      surprised: 3,
+    });
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'IVS Participant Recording State Change',
+      'source': 'aws.ivs',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': ['arn:aws:ivs:us-east-1:123456789012:stage/hangout123'],
+      'detail': {
+        session_id: 'st-test-session',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/',
+        recording_duration_ms: 300000,
+      },
+    };
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(event);
+
+    expect(mockComputeAndStoreReactionSummary).toHaveBeenCalledWith('test-table', 'session-with-reactions');
+  });
+
+  it('continues to pool release if reaction summary computation fails', async () => {
+    const { releasePoolResource } = require('../../repositories/resource-pool-repository');
+    const mockReleasePoolResource = releasePoolResource as jest.MockedFunction<any>;
+
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'session-summary-error',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { chatRoom: 'arn:aws:ivschat:...' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Reaction summary computation failed'));
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'IVS Participant Recording State Change',
+      'source': 'aws.ivs',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': ['arn:aws:ivs:us-east-1:123456789012:stage/hangout123'],
+      'detail': {
+        session_id: 'st-test-session',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/',
+        recording_duration_ms: 300000,
+      },
+    };
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    // Should not throw - pool release should still happen
+    await expect(handler(event)).resolves.not.toThrow();
+
+    // Verify pool release was called despite reaction summary error
+    expect(mockReleasePoolResource).toHaveBeenCalled();
+  });
+
+  it('logs error when reaction summary computation fails', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'session-log-error',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { chatRoom: 'arn:aws:ivschat:...' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Test reaction error'));
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'IVS Participant Recording State Change',
+      'source': 'aws.ivs',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': ['arn:aws:ivs:us-east-1:123456789012:stage/hangout123'],
+      'detail': {
+        session_id: 'st-test-session',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/',
+        recording_duration_ms: 300000,
+      },
+    };
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(event);
+
+    // Check if console.error was called with a message about reaction summary failure
+    const errorCalls = consoleSpy.mock.calls.filter(call =>
+      String(call[0]).includes('Failed to compute reaction summary')
+    );
+    expect(errorCalls.length).toBeGreaterThan(0);
+
+    consoleSpy.mockRestore();
   });
 });

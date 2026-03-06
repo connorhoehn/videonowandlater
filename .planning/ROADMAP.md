@@ -348,7 +348,7 @@ Plans:
 - [x] 22-01-PLAN.md — Backend Domain Model & Pool Extension (Session.isPrivate, private channel pool management, claimPrivateChannel) — Complete 2026-03-06
 - [x] 22-02-PLAN.md — Playback Token Handler (POST /sessions/{id}/playback-token with ES384 JWT signing) — Complete 2026-03-06
 - [x] 22-03-PLAN.md — Activity Feed Filtering & CDK Wiring (Filter private sessions, bootstrap ES384 private key, private channel pool) — Complete 2026-03-06
-- [ ] 22-04-PLAN.md — Integration Tests & Documentation (End-to-end playback, token validation, security guide)
+- [x] 22-04-PLAN.md — Integration Tests & Documentation (End-to-end playback, token validation, security guide) — Complete 2026-03-06
 
 ## Progress
 
@@ -375,9 +375,9 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22
 | 19. Transcription Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
 | 20. AI Summary Pipeline | v1.2 | Complete    | 2026-03-06 | 2026-03-06 |
 | 21. Video Uploads | v1.2 | 3/6 | In Progress | 2026-03-06 |
-| 22. Live Broadcast with Secure Viewer Links | v1.3 | 3/4 | In Progress | 2026-03-06 |
+| 22. Live Broadcast with Secure Viewer Links | v1.3 | 4/4 | Complete | 2026-03-06 |
 
 ---
 
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-06 — 22-02 complete (Playback token handler with ES384 JWT signing, 8 tests, 331/331 backend tests passing)*
+*Last updated: 2026-03-06 — 22-04 complete (Integration tests and documentation, Phase 22 complete, 339/339 backend tests passing)*

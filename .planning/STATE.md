@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Creator Studio & Stream Quality
+milestone: v1.3
+milestone_name: Secure Sharing
 status: roadmap-defined
 stopped_at: null
 last_updated: "2026-03-06T02:30:00.000Z"
-last_activity: 2026-03-06 — v1.4 roadmap created
+last_activity: 2026-03-06 — v1.3 roadmap created
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 0
   total_plans: null
   completed_plans: 0
@@ -22,52 +22,59 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-**Current focus:** v1.4 Milestone — Creator Studio & Stream Quality
+**Current focus:** v1.3 Milestone — Secure Sharing
 
 ## Current Position
 
-**Active Phase:** Phase 23 — Stream Quality Monitoring Dashboard
+**Active Phase:** Phase 23 — Shareable Links
 **Active Plan:** Not started
 **Status:** Roadmap defined, ready for phase planning
-**Progress:** `░░░░░░░░░░░░░░░░░░░░` 0% (0/2 phases complete)
+**Progress:** `░░░░░░░░░░░░░░░░░░░░` 0% (0/3 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Plans completed (v1.4): 0
-- Tasks completed (v1.4): 0
-- Phases completed (v1.4): 0/2
+- Plans completed (v1.3): 0
+- Tasks completed (v1.3): 0
+- Phases completed (v1.3): 0/3
 
 **Quality:**
-- Test coverage: 169/169 backend tests passing (from v1.3)
+- Test coverage: 169/169 backend tests passing (from v1.2)
 - Breaking changes: 0 (all additions backward compatible)
-- Load test gates: 2 required (Phase 23, Phase 24)
+- Security tests required: Phase 23 (token validation), Phase 24 (permission checks), Phase 25 (cascading deletes)
 
 **Milestone History:**
 - v1.0 Gap Closure: 6 phases, 13 plans (shipped 2026-03-02)
 - v1.1 Replay, Reactions & Hangouts: 15 phases, 27 plans (shipped 2026-03-05)
 - v1.2 Activity Feed & Intelligence: 7 phases, 19 plans (shipped 2026-03-06)
-- v1.3 Secure Sharing: 1 phase, 5 plans (shipped 2026-03-06)
 
 ## Accumulated Context
 
 ### Key Decisions
 
-**Phase 23 — Stream Quality Dashboard:**
-- Metrics sourced from IVS Web Broadcast SDK `getStatus()` API (no external infrastructure needed)
-- Recharts library for visualization (40KB gzipped, mature library)
-- Backend caching layer with 4-5 second TTL to prevent API storms under load
-- Load test gate mandatory: 50 concurrent broadcasters, API latency < 200ms, no throttling
-- All Session model fields optional for backward compatibility with Phase 1-22 recordings
+**Phase 23 — Shareable Links:**
+- Extend ES384 JWT pattern from v1.2 Phase 22 (playback tokens)
+- Add custom `link_id` claim for tracking and revocation
+- 7-day default TTL for share links (vs 24h for owner tokens)
+- SHARE_LINK# DynamoDB entity type stores token metadata + revoked flag
+- Short, copy-paste URLs (not long JWT strings) for UX
+- Anonymous viewers require no login (token-based access only)
 
-**Phase 24 — Creator Spotlight:**
-- Single optional field `featuredUid?: string` on Session (backward compatible)
-- HTTP polling strategy (5-10s cadence) acceptable for v1.4 MVP; WebSocket deferred to v1.5
-- Featured creator search scoped to viewers of THIS broadcast only (not global search)
-- Featured data pre-fetched in list-activity response to prevent N+1 query explosion
-- Private broadcasts cannot feature creators or be featured (privacy constraint)
+**Phase 24 — Collections Core:**
+- New COLLECTION# entity type for metadata (title, description, privacy, owner)
+- Private by default (`isPrivate: true` with explicit confirmation to publish)
+- SESSION# membership records (no JSON arrays; enables atomic operations)
+- GSI2 index (OWNER#{userId}) for efficient "all user's collections" queries
+- Cursor-based pagination for large collections (identified as pitfall in research)
+- Owner check on every write endpoint (POST/DELETE) to prevent permission bypass
 
-**Carried Forward from v1.3:**
+**Phase 25 — Collections Management:**
+- Safe cascading delete: query all memberships → delete each → delete metadata
+- Verify membership count before returning success (orphan prevention)
+- bcrypt for optional password hashing (standard OWASP practice)
+- Permission checks consistent with Phase 24 (owner-only modifications)
+
+**Carried Forward from v1.2:**
 - cognito:username (not sub) as userId consistently across all handlers
 - Single-table DynamoDB with optional fields for backward compatibility
 - Conditional writes for atomic operations (prevent race conditions)
@@ -77,19 +84,27 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| Unbounded metrics polling creates API storms | CRITICAL | Min 5s polling cadence; backend cache 4-5s; load test with 50 concurrent broadcasters |
-| Featured broadcast N×M query explosion | CRITICAL | Featured data only on detail views, not lists; pre-fetch in list-activity response |
-| Metrics polling overwhelms IVS Chat | MODERATE | Separate API transport for metrics; don't mix with chat messages |
-| Featured field breaks backward compatibility | MODERATE | All new fields optional (`?`); test loading Phase 1-22 sessions |
+| JWT token claim tampering | CRITICAL | Always validate signature + verify link_id matches SHARE_LINK# record + check revoked flag |
+| Collection privacy escalation | CRITICAL | Default isPrivate=true; explicit confirmation dialog to publish; audit log privacy changes |
+| Cascading delete orphans | CRITICAL | Transaction: query all memberships → delete each → delete metadata; verify count before returning |
+| Race condition in revocation | HIGH | Conditional writes + always read latest record state before serving |
+| Permission bypass on modifications | HIGH | Owner check on every write endpoint (POST/DELETE); return 403 Forbidden if not owner |
+| Large collection queries | MODERATE | Implement cursor-based pagination from Phase 1; profile query latency in Phase 2 |
+| Non-owner session deletion cascades | MODERATE | Soft delete sessions (mark archived); verify collections handle missing sessions gracefully |
+| Token caching performance | LOW | Target 10K users for v1.3; profile during phase execution; add Redis cache only if DynamoDB bottleneck |
 
 ### Todos
 
 - [ ] Phase 23 planning: Run `/gsd:plan-phase 23` to derive plans from success criteria
-- [ ] Phase 23 implementation: Metrics collection hook + dashboard component + caching layer
-- [ ] Phase 23 verification: Load test with 50 concurrent broadcasters; validate gates
-- [ ] Phase 24 planning: Design featured creator selection modal; create query audit checklist
-- [ ] Phase 24 implementation: Backend handler + frontend polling + viewer page integration
-- [ ] Phase 24 verification: Homepage performance test; query audit; privacy audit
+- [ ] Phase 23 implementation: Create-share-link handler + revoke handler + frontend Share button + copy-to-clipboard UI
+- [ ] Phase 23 security tests: Token tampering (modify link_id claim), revocation race condition, permission bypass
+- [ ] Phase 24 planning: Run `/gsd:plan-phase 24` to derive plans from success criteria
+- [ ] Phase 24 implementation: Collection CRUD handlers + GSI2 index + membership queries + permission checks
+- [ ] Phase 24 security tests: Permission model edge cases (non-owner modification, session deletion cascading)
+- [ ] Phase 24 performance: Query audit for N+1 scenarios, cursor pagination validation
+- [ ] Phase 25 planning: Run `/gsd:plan-phase 25` to derive plans from success criteria
+- [ ] Phase 25 implementation: Delete handler with cascading cleanup + metadata update handler + revocation
+- [ ] Phase 25 security tests: Orphan prevention (verify cleanup), cascading deletes through membership records
 
 ### Blockers
 
@@ -98,19 +113,20 @@ None.
 ## Session Continuity
 
 **If resuming work:**
-1. Check current phase in milestones/v1.4-ROADMAP.md (Phase 23 or 24)
+1. Check current phase in .planning/ROADMAP.md (Phase 23, 24, or 25)
 2. Check active plan status in `.planning/phases/{phase}/plans/`
 3. Review most recent commit message for last task completed
 4. Continue from next incomplete task or plan
 
 **If blocked:**
 - Consult research/SUMMARY.md for architecture guidance
-- Check PITFALLS.md for known risks and prevention strategies
+- Check research/PITFALLS.md for known risks and prevention strategies
 - Review PROJECT.md for core constraints and key decisions
+- Review REQUIREMENTS.md for v1.3 requirement definitions
 
 **Next action:** Run `/gsd:plan-phase 23` to decompose Phase 23 into executable plans.
 
 ---
 
 **Milestone started:** 2026-03-06
-**Expected completion:** TBD (after Phase 23-24 planning)
+**Expected completion:** TBD (after Phase 23-25 planning)

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: executing
-stopped_at: Completed 20-01-PLAN.md (AI summary pipeline backend)
-last_updated: "2026-03-06T01:18:00.000Z"
-last_activity: 2026-03-06 — Completed 20-01-PLAN.md (Bedrock integration, EventBridge routing, 223 tests passing)
+stopped_at: Completed 19-02-PLAN.md (transcription pipeline infrastructure and EventBridge wiring)
+last_updated: "2026-03-06T00:56:00.000Z"
+last_activity: 2026-03-06 — Completed 19-02-PLAN.md (EventBridge rules, Lambda functions, IAM permissions for MediaConvert and Transcribe)
 progress:
   total_phases: 20
   completed_phases: 14
   total_plans: 40
-  completed_plans: 34
-  percent: 85
+  completed_plans: 35
+  percent: 87.5
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 20 of 20 (AI Summary Pipeline) -- IN PROGRESS
-Plan: 01 of 02 (Backend AI Summary Integration) -- COMPLETE
-Status: Plan 20-01 complete, proceeding to 20-02 (Frontend display)
-Last activity: 2026-03-06 — Completed 20-01-PLAN.md (Bedrock integration with EventBridge routing)
+Phase: 19 of 20 (Transcription Pipeline) -- IN PROGRESS
+Plan: 02 of 02 (Infrastructure & EventBridge Wiring) -- COMPLETE
+Status: Plan 19-02 complete, phase 19 complete. Next: Phase 20 (AI Summary Pipeline)
+Last activity: 2026-03-06 — Completed 19-02-PLAN.md (EventBridge rules for MediaConvert/Transcribe, Lambda handler wiring)
 
-Progress: [█████████░] 85% (34/40 plans complete)
+Progress: [██████████░] 87.5% (35/40 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7 (v1.2)
-- Average duration: 3.4 min
-- Total execution time: 49 min
+- Total plans completed: 8 (v1.2)
+- Average duration: 3.1 min
+- Total execution time: 52 min
 
 **By Phase:**
 
@@ -46,7 +46,7 @@ Progress: [█████████░] 85% (34/40 plans complete)
 | 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
 | 18 | 3 | 3 | 3.5 min |
-| 19 | 2 | 1 | 6 min |
+| 19 | 2 | 2 | 4.5 min |
 | 20 | 2 | 1 | 22 min (so far) |
 
 *Updated after each plan completion*
@@ -85,6 +85,12 @@ v1.2 decisions from Phase 19:
 - **Job naming format vnl-{sessionId}-{epochMs}** - Enables sessionId extraction without DynamoDB queries; epochMs ensures uniqueness across retries.
 - **Optional transcript fields** - updateTranscriptStatus() accepts optional s3Path and plainText parameters for partial updates (follows updateRecordingMetadata pattern).
 - **Graceful transcript parsing** - Missing/empty transcripts logged as warnings; session still updated to 'available' with empty plainText for Phase 20 to handle gracefully.
+
+v1.2 decisions from Phase 19-02 (Infrastructure Wiring):
+- **AWS_REGION is reserved by Lambda** - Removed from environment variables; Lambda runtime provides automatically
+- **DLQ resource policy deferred** - Moved to after transcription rule declarations to avoid TypeScript forward reference errors
+- **Single DLQ for all rules** - recordingEventsDlq used for recording, transcode, and transcribe failures (unified error handling)
+- **MediaConvertRole in CDK stack** - Created in TypeScript for safe reference in recordingEndedFn PolicyStatement
 
 v1.2 decisions from Phase 20:
 - **Bedrock non-blocking pattern** - Bedrock/DynamoDB failures set aiSummaryStatus='failed' without touching aiSummary field (transcript preservation critical)

@@ -36,6 +36,15 @@ describe('Session Domain Model', () => {
       expect(SessionType.BROADCAST).toBe('BROADCAST');
       expect(SessionType.HANGOUT).toBe('HANGOUT');
     });
+
+    it('should export UPLOAD', () => {
+      expect(SessionType.UPLOAD).toBe('UPLOAD');
+    });
+
+    it('should have UPLOAD as distinct value from BROADCAST and HANGOUT', () => {
+      expect(SessionType.UPLOAD).not.toBe(SessionType.BROADCAST);
+      expect(SessionType.UPLOAD).not.toBe(SessionType.HANGOUT);
+    });
   });
 
   describe('Session interface', () => {
@@ -57,6 +66,52 @@ describe('Session Domain Model', () => {
       expect(session.claimedResources).toEqual({ chatRoom: 'room-id' });
       expect(session.version).toBe(1);
       expect(session.createdAt).toBe('2026-03-02T14:00:00.000Z');
+    });
+
+    it('should support UPLOAD session with uploadStatus pending and status creating', () => {
+      const uploadSession: Session = {
+        sessionId: 'upload-session-id',
+        userId: 'test-user-id',
+        sessionType: SessionType.UPLOAD,
+        status: SessionStatus.CREATING,
+        claimedResources: { chatRoom: '' },
+        version: 1,
+        createdAt: '2026-03-02T14:00:00.000Z',
+        uploadStatus: 'pending',
+        uploadProgress: 0,
+        sourceFileName: 'video.mp4',
+        sourceFileSize: 1024000000,
+        sourceCodec: 'H.264',
+      };
+
+      expect(uploadSession.sessionType).toBe(SessionType.UPLOAD);
+      expect(uploadSession.status).toBe(SessionStatus.CREATING);
+      expect(uploadSession.uploadStatus).toBe('pending');
+      expect(uploadSession.uploadProgress).toBe(0);
+      expect(uploadSession.sourceFileName).toBe('video.mp4');
+      expect(uploadSession.sourceFileSize).toBe(1024000000);
+      expect(uploadSession.sourceCodec).toBe('H.264');
+    });
+
+    it('should support UPLOAD session with convertStatus', () => {
+      const uploadSession: Session = {
+        sessionId: 'upload-session-id',
+        userId: 'test-user-id',
+        sessionType: SessionType.UPLOAD,
+        status: SessionStatus.CREATING,
+        claimedResources: { chatRoom: '' },
+        version: 1,
+        createdAt: '2026-03-02T14:00:00.000Z',
+        uploadStatus: 'converting',
+        uploadProgress: 50,
+        sourceFileName: 'video.mp4',
+        sourceFileSize: 1024000000,
+        mediaConvertJobName: 'vnl-upload-session-id-1234567890',
+        convertStatus: 'processing',
+      };
+
+      expect(uploadSession.mediaConvertJobName).toBe('vnl-upload-session-id-1234567890');
+      expect(uploadSession.convertStatus).toBe('processing');
     });
   });
 });

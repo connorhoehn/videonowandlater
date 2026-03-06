@@ -72,7 +72,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                       CodecSettings: {
                         Codec: 'H_264',
                         H264Settings: {
-                          MaxBitrate: 5000000, // 5 Mbps
+                          Bitrate: 5000000, // 5 Mbps
+                          MaxBitrate: 5000000,
                           RateControlMode: 'VBR',
                           CodecProfile: 'MAIN',
                         },
@@ -97,7 +98,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                       CodecSettings: {
                         Codec: 'H_264',
                         H264Settings: {
-                          MaxBitrate: 2500000, // 2.5 Mbps
+                          Bitrate: 2500000, // 2.5 Mbps
+                          MaxBitrate: 2500000,
                           RateControlMode: 'VBR',
                           CodecProfile: 'MAIN',
                         },
@@ -122,7 +124,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                       CodecSettings: {
                         Codec: 'H_264',
                         H264Settings: {
-                          MaxBitrate: 1200000, // 1.2 Mbps
+                          Bitrate: 1200000, // 1.2 Mbps
+                          MaxBitrate: 1200000,
                           RateControlMode: 'VBR',
                           CodecProfile: 'MAIN',
                         },

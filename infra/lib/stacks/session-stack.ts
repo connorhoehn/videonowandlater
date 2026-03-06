@@ -488,6 +488,8 @@ export class SessionStack extends Stack {
         TABLE_NAME: this.table.tableName,
         TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
         AWS_ACCOUNT_ID: this.account,
+        // Force Lambda update by adding version timestamp
+        LAMBDA_VERSION: '2026-03-06-19:10',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });

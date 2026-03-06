@@ -93,6 +93,8 @@ export interface Session {
   // MediaConvert encoding tracking (UPLOAD sessions only)
   mediaConvertJobName?: string; // vnl-{sessionId}-{epochMs}
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  // Privacy control (Phase 22)
+  isPrivate?: boolean; // true = private channel with JWT auth, false/undefined = public (backward compatible)
 }
 
 /**

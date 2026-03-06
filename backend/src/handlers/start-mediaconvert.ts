@@ -68,6 +68,9 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                 Outputs: [
                   {
                     NameModifier: '1080p',
+                    ContainerSettings: {
+                      Container: 'M3U8',
+                    },
                     VideoDescription: {
                       CodecSettings: {
                         Codec: 'H_264',
@@ -94,6 +97,9 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                   },
                   {
                     NameModifier: '720p',
+                    ContainerSettings: {
+                      Container: 'M3U8',
+                    },
                     VideoDescription: {
                       CodecSettings: {
                         Codec: 'H_264',
@@ -120,6 +126,9 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                   },
                   {
                     NameModifier: '480p',
+                    ContainerSettings: {
+                      Container: 'M3U8',
+                    },
                     VideoDescription: {
                       CodecSettings: {
                         Codec: 'H_264',

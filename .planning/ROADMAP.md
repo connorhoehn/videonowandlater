@@ -217,7 +217,7 @@ Plans:
 
 - [x] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services (completed 2026-03-06)
 - [x] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
-- [ ] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint
+- [x] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint (completed 2026-03-06)
 - [ ] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events
 - [ ] **Phase 20: AI Summary Pipeline** - Inline Bedrock call in store-transcript generates and stores one-paragraph session summaries
 
@@ -267,7 +267,7 @@ Plans:
 Plans:
 - [x] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03)
 - [x] 18-02-PLAN.md — Homepage layout redesign, activity feed, recording slider (ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05)
-- [ ] 18-03-PLAN.md — ReplayViewer reaction summary display (RSUMM-03)
+- [x] 18-03-PLAN.md — ReplayViewer reaction summary display (RSUMM-03)
 
 ### Phase 19: Transcription Pipeline
 **Goal**: When a recording becomes available in S3, a transcription job is automatically started and the resulting transcript is stored on the session record
@@ -323,7 +323,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
 | 16. Hangout Participant Tracking | v1.2 | 1/1 | Complete | 2026-03-06 |
 | 17. Reaction Summary at Session End | v1.2 | 1/1 | Complete | 2026-03-06 |
-| 18. Homepage Redesign & Activity Feed | v1.2 | 2/3 | In Progress | - |
+| 18. Homepage Redesign & Activity Feed | 3/3 | Complete   | 2026-03-06 | - |
 | 19. Transcription Pipeline | v1.2 | 2/2 | Planned | - |
 | 20. AI Summary Pipeline | v1.2 | 2/2 | Planned | - |
 
@@ -332,7 +332,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 20
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 21 to break down)

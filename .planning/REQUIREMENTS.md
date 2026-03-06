@@ -85,17 +85,17 @@ Requirements for milestone v1.2. Each maps to roadmap phases (starting at Phase 
 ### Reaction Summary
 
 - [x] **RSUMM-01**: Per-emoji reaction counts are pre-computed and stored on session record when session ends (Phase 17)
-- [ ] **RSUMM-02**: Reaction summary counts are displayed on recording cards on the homepage
-- [ ] **RSUMM-03**: Reaction summary counts are displayed in the replay info panel
+- [x] **RSUMM-02**: Reaction summary counts are displayed on recording cards on the homepage (Phase 18-02)
+- [x] **RSUMM-03**: Reaction summary counts are displayed in the replay info panel (Phase 18-03)
 
 ### Activity Feed & Homepage
 
-- [ ] **ACTV-01**: Homepage displays broadcast recordings in a horizontal scrollable slider (3–4 items visible with peek)
-- [ ] **ACTV-02**: Homepage displays a unified activity feed below the recording slider showing all recent sessions
-- [ ] **ACTV-03**: Broadcast entries in the activity feed show title, duration, reaction summary counts, and relative timestamp
-- [ ] **ACTV-04**: Hangout entries in the activity feed show participant list, message count, duration, and relative timestamp
-- [ ] **ACTV-05**: Hangout sessions are filtered out of the recording slider (no longer appear as "pending" spinning tiles)
-- [ ] **ACTV-06**: A GET /activity API endpoint returns recent sessions (broadcasts + hangouts) with all activity metadata
+- [x] **ACTV-01**: Homepage displays broadcast recordings in a horizontal scrollable slider (3–4 items visible with peek) (Phase 18-02)
+- [x] **ACTV-02**: Homepage displays a unified activity feed below the recording slider showing all recent sessions (Phase 18-02)
+- [x] **ACTV-03**: Broadcast entries in the activity feed show title, duration, reaction summary counts, and relative timestamp (Phase 18-02)
+- [x] **ACTV-04**: Hangout entries in the activity feed show participant list, message count, duration, and relative timestamp (Phase 18-02)
+- [x] **ACTV-05**: Hangout sessions are filtered out of the recording slider (no longer appear as "pending" spinning tiles) (Phase 18-02)
+- [x] **ACTV-06**: A GET /activity API endpoint returns recent sessions (broadcasts + hangouts) with all activity metadata (Phase 18-01)
 
 ### Transcription Pipeline
 
@@ -227,14 +227,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PTCP-02 | Phase 16 | Complete |
 | PTCP-03 | Phase 16 | Complete |
 | RSUMM-01 | Phase 17 | Complete (2026-03-06) |
-| RSUMM-02 | Phase 18 | Pending |
-| RSUMM-03 | Phase 18 | Pending |
-| ACTV-01 | Phase 18 | Pending |
-| ACTV-02 | Phase 18 | Pending |
-| ACTV-03 | Phase 18 | Pending |
-| ACTV-04 | Phase 18 | Pending |
-| ACTV-05 | Phase 18 | Pending |
-| ACTV-06 | Phase 18 | Pending |
+| RSUMM-02 | Phase 18 | Complete (2026-03-06) |
+| RSUMM-03 | Phase 18 | Complete (2026-03-06) |
+| ACTV-01 | Phase 18 | Complete (2026-03-06) |
+| ACTV-02 | Phase 18 | Complete (2026-03-06) |
+| ACTV-03 | Phase 18 | Complete (2026-03-06) |
+| ACTV-04 | Phase 18 | Complete (2026-03-06) |
+| ACTV-05 | Phase 18 | Complete (2026-03-06) |
+| ACTV-06 | Phase 18 | Complete (2026-03-06) |
 | TRNS-01 | Phase 19 | Pending |
 | TRNS-02 | Phase 19 | Pending |
 | TRNS-03 | Phase 19 | Pending |

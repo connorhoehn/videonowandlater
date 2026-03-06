@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Activity Feed & Intelligence
-status: completed
-stopped_at: Completed 18-04-PLAN.md (5 activity component test files, 31 tests, gap closure)
-last_updated: "2026-03-06T01:14:30.480Z"
-last_activity: 2026-03-06 — Completed 19-04-PLAN.md (EventBridge event emission, Phase 20 integration ready)
+milestone: v1.3
+milestone_name: Live Broadcast with Secure Links
+status: in-progress
+stopped_at: Completed 19-05-PLAN.md (EventBridge event payload contract fix - Phase 19→20 integration aligned)
+last_updated: "2026-03-06T01:19:45Z"
+last_activity: 2026-03-06 — Completed 19-05-PLAN.md (Gap closure: transcriptText event payload, Phase 20 ready)
 progress:
-  total_phases: 19
-  completed_phases: 18
-  total_plans: 46
-  completed_plans: 42
-  percent: 93
+  total_phases: 22
+  completed_phases: 20
+  total_plans: 48
+  completed_plans: 44
+  percent: 92
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 19 of 21 (Transcription Pipeline) -- GAP CLOSURE
-Plan: 04 of 04 (EventBridge Integration) -- COMPLETE
-Status: Closed critical Phase 19→20 dependency gap. transcribe-completed handler now emits "Transcript Stored" event after successful transcript storage. Event includes sessionId and transcriptS3Uri for Phase 20's AI summary pipeline. Non-blocking event emission ensures transcript persistence even if event fails. Fixed pre-existing on-mediaconvert-complete blocking issue. All 305 backend tests passing.
-Last activity: 2026-03-06 — Completed 19-04-PLAN.md (EventBridge event emission, Phase 20 integration ready)
+Phase: 19 of 23 (Transcription Pipeline) -- GAP CLOSURE (19-05)
+Plan: 05 of 05 (Event Payload Contract Fix) -- COMPLETE
+Status: Fixed EventBridge event Detail payload contract mismatch between Phase 19 (transcribe-completed emitter) and Phase 20 (store-summary consumer). Event now emits transcriptText (plaintext content) instead of transcriptS3Uri. Phase 19→20 integration ready: store-summary handler receives actual transcript for Bedrock invocation. All 315 backend tests passing.
+Last activity: 2026-03-06 — Completed 19-05-PLAN.md (Event payload contract fix - transcriptText field emitted correctly)
 
-Progress: [██████████████████░] 93% (41/44 plans complete)
+Progress: [██████████████████░] 90% (43/48 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13 (v1.2 completion + Phase 21 start)
+- Total plans completed: 43 (v1.1 + v1.2 + v1.3 start)
 - Average duration: 3.5 min
-- Total execution time: 72 min (including plan 21 phases)
+- Total execution time: ~140 min (including all phase executions)
 
 **By Phase:**
 
@@ -49,6 +49,7 @@ Progress: [██████████████████░] 93% (41/44
 | 19 | 2 | 2 | 4.5 min |
 | 20 | 2 | 2 | 4.5 min |
 | 21 | 4 | 4 | 4 min avg (init: 6min, handlers: 12min, mediaconvert: 8min, ui: 16min) |
+| 22 | 4 | 1 | 2 min (22-01 complete) |
 
 *Updated after each plan completion*
 | Phase 18 P04 | 3min | 2 tasks | 5 files |
@@ -116,6 +117,12 @@ v1.3 decisions from Phase 21-01 (Backend Domain Models):
 - **Version field incrementation on all updates** - Following Phase 16-20 pattern, all UpdateCommand calls include `#version = #version + :inc` for optimistic locking
 - [Phase 18]: Mock child components as passthrough divs to isolate parent component tests
 
+v1.3 decisions from Phase 22-01 (Private Broadcast Foundation):
+- **isPrivate as optional field** - Session.isPrivate?: boolean maintains backward compatibility with existing sessions (undefined treated as false/public)
+- **Private channel pool suffix pattern** - STATUS#AVAILABLE#PRIVATE_CHANNEL and STATUS#CLAIMED#PRIVATE_CHANNEL differentiate private channels from public CHANNEL resources (consistent with ResourceType pattern)
+- **claimPrivateChannel return signature** - Returns { channelArn, isPrivate: true } or null on unavailability; ConditionalCheckFailedException returns null (allows caller to retry)
+- **Zero coupling with existing fields** - Adding isPrivate field does not affect any other Session fields or existing update patterns
+
 ### Roadmap Evolution
 
 - Phase 21 added: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
@@ -132,9 +139,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T01:08:25.670Z
-Stopped at: Completed 18-04-PLAN.md (5 activity component test files, 31 tests, gap closure)
+Last session: 2026-03-06T01:19:01Z
+Stopped at: Completed 22-01-PLAN.md (Session.isPrivate field, claimPrivateChannel function, 10 new tests, 315/315 backend tests passing)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 21-01 complete (Session domain extended with UPLOAD type and 10 upload-related fields; createUploadSession(), updateUploadProgress(), updateConvertStatus() repository functions implemented with field isolation; 20 new unit tests added; 244/244 backend tests passing; v1.3 milestone started)*
+*Last updated: 2026-03-06 — 22-01 complete (Session domain extended with isPrivate field for broadcast privacy control; claimPrivateChannel() repository function implemented with atomic pool claiming; 10 new unit tests covering channel claiming, field isolation, error handling; 315/315 backend tests passing; Phase 22 infrastructure foundation ready)*

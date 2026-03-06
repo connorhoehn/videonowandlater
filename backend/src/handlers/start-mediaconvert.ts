@@ -63,6 +63,7 @@ export const handler = async (event: SNSEvent): Promise<void> => {
                   HlsGroupSettings: {
                     Destination: `s3://${outputBucket}/hls/${sessionId}/`,
                     SegmentLength: 10,
+                    MinSegmentLength: 0,
                   },
                 },
                 Outputs: [

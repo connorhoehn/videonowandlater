@@ -178,7 +178,6 @@ export const handler = async (
 
         const createJobCommand = new CreateJobCommand({
           Role: process.env.MEDIACONVERT_ROLE_ARN!,
-          JobTemplate: 'Default',
           Queue: `arn:aws:mediaconvert:${process.env.AWS_REGION}:${process.env.AWS_ACCOUNT_ID}:queues/Default`,
           Settings: {
             Inputs: [
@@ -188,9 +187,6 @@ export const handler = async (
                   default: {
                     DefaultSelection: 'DEFAULT',
                   },
-                },
-                VideoSelectors: {
-                  default: {},
                 },
               },
             ],

@@ -70,6 +70,17 @@ export interface Session {
   participantCount?: number;
   // Chat activity (tracked atomically in send-message handler)
   messageCount?: number;
+  // AI-generated summary pipeline (Phase 20)
+  /**
+   * AI-generated one-paragraph summary from Bedrock/Claude
+   * Populated after transcriptStatus becomes 'available'
+   */
+  aiSummary?: string;
+  /**
+   * Status of AI summary pipeline: 'pending' (waiting to generate), 'available' (success), 'failed' (Bedrock error)
+   * Used to show placeholder states on frontend during processing
+   */
+  aiSummaryStatus?: 'pending' | 'available' | 'failed';
 }
 
 /**

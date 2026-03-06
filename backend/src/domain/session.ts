@@ -20,6 +20,7 @@ export enum SessionStatus {
 export enum SessionType {
   BROADCAST = 'BROADCAST',
   HANGOUT = 'HANGOUT',
+  UPLOAD = 'UPLOAD',
 }
 
 /**
@@ -81,6 +82,17 @@ export interface Session {
    * Used to show placeholder states on frontend during processing
    */
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  // Upload tracking (UPLOAD sessions only)
+  uploadId?: string;
+  uploadStatus?: 'pending' | 'processing' | 'converting' | 'available' | 'failed';
+  uploadProgress?: number; // 0-100 percentage
+  uploadSourceLocation?: 'phone' | 'computer';
+  sourceFileName?: string;
+  sourceFileSize?: number; // bytes
+  sourceCodec?: string; // H.264, H.265, etc
+  // MediaConvert encoding tracking (UPLOAD sessions only)
+  mediaConvertJobName?: string; // vnl-{sessionId}-{epochMs}
+  convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
 }
 
 /**

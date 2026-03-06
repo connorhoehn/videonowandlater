@@ -1,5 +1,8 @@
 /**
  * GET /activity handler - list recent activity (broadcasts and hangouts)
+ *
+ * Filters private sessions by owner (userId must match session owner)
+ * Public sessions (isPrivate=false or undefined) visible to all users
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
@@ -22,7 +25,21 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    const sessions = await getRecentActivity(tableName, 20);
+    // Extract userId from Cognito token
+    const userId = event.requestContext?.authorizer?.claims?.['cognito:username'];
+
+    let sessions = await getRecentActivity(tableName, 20);
+
+    // Filter private sessions: only show to owner
+    // Public sessions (isPrivate is false or undefined) are visible to everyone
+    sessions = sessions.filter((session: any) => {
+      // Public sessions are visible to everyone
+      if (!session.isPrivate) {
+        return true;
+      }
+      // Private sessions are only visible to the owner
+      return session.userId === userId;
+    });
 
     return {
       statusCode: 200,

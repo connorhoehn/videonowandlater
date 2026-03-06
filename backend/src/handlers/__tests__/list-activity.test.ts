@@ -243,4 +243,369 @@ describe('list-activity handler', () => {
     expect(result.headers!['Access-Control-Allow-Headers']).toBe('*');
     expect(result.headers!['Content-Type']).toBe('application/json');
   });
+
+  // ============================================================
+  // Private Session Filtering Tests (Phase 22)
+  // ============================================================
+
+  test('should return public sessions to all users', async () => {
+    const publicSession = {
+      sessionId: 'sess-public-1',
+      userId: 'user-alice',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T10:00:00Z',
+      endedAt: '2026-03-06T10:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 5,
+    };
+
+    const privateSessionAlice = {
+      sessionId: 'sess-private-1',
+      userId: 'user-alice',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T11:00:00Z',
+      endedAt: '2026-03-06T11:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-2' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 3,
+    };
+
+    const privateSessionBob = {
+      sessionId: 'sess-private-2',
+      userId: 'user-bob',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T09:00:00Z',
+      endedAt: '2026-03-06T09:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-3' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 2,
+    };
+
+    mockGetRecentActivity.mockResolvedValueOnce([
+      publicSession,
+      privateSessionAlice,
+      privateSessionBob,
+    ]);
+
+    // User charlie (not owner of any private session)
+    const event = {
+      requestContext: {
+        authorizer: {
+          claims: { 'cognito:username': 'user-charlie' },
+        },
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0].sessionId).toBe('sess-public-1');
+  });
+
+  test('should show owner their private sessions along with public sessions', async () => {
+    const publicSession = {
+      sessionId: 'sess-public-1',
+      userId: 'user-dave',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T10:00:00Z',
+      endedAt: '2026-03-06T10:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 5,
+    };
+
+    const privateSessionAlice = {
+      sessionId: 'sess-private-1',
+      userId: 'user-alice',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T11:00:00Z',
+      endedAt: '2026-03-06T11:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-2' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 3,
+    };
+
+    const privateSessionBob = {
+      sessionId: 'sess-private-2',
+      userId: 'user-bob',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T09:00:00Z',
+      endedAt: '2026-03-06T09:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-3' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 2,
+    };
+
+    mockGetRecentActivity.mockResolvedValueOnce([
+      publicSession,
+      privateSessionAlice,
+      privateSessionBob,
+    ]);
+
+    // User alice (owner of sess-private-1)
+    const event = {
+      requestContext: {
+        authorizer: {
+          claims: { 'cognito:username': 'user-alice' },
+        },
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    // Alice should see: her private session + public session
+    expect(body.sessions).toHaveLength(2);
+    const sessionIds = body.sessions.map((s: any) => s.sessionId);
+    expect(sessionIds).toContain('sess-public-1');
+    expect(sessionIds).toContain('sess-private-1');
+    expect(sessionIds).not.toContain('sess-private-2');
+  });
+
+  test('should hide private sessions from other authenticated users', async () => {
+    const publicSession = {
+      sessionId: 'sess-public-1',
+      userId: 'user-dave',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T10:00:00Z',
+      endedAt: '2026-03-06T10:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 5,
+    };
+
+    const privateSessionBob = {
+      sessionId: 'sess-private-2',
+      userId: 'user-bob',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T09:00:00Z',
+      endedAt: '2026-03-06T09:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-3' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 2,
+    };
+
+    mockGetRecentActivity.mockResolvedValueOnce([publicSession, privateSessionBob]);
+
+    // User alice (not owner)
+    const event = {
+      requestContext: {
+        authorizer: {
+          claims: { 'cognito:username': 'user-alice' },
+        },
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0].sessionId).toBe('sess-public-1');
+  });
+
+  test('should hide all private sessions from unauthenticated users', async () => {
+    const publicSession = {
+      sessionId: 'sess-public-1',
+      userId: 'user-alice',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T10:00:00Z',
+      endedAt: '2026-03-06T10:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 5,
+    };
+
+    const privateSessionAlice = {
+      sessionId: 'sess-private-1',
+      userId: 'user-alice',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T11:00:00Z',
+      endedAt: '2026-03-06T11:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-2' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 3,
+    };
+
+    const privateSessionBob = {
+      sessionId: 'sess-private-2',
+      userId: 'user-bob',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T09:00:00Z',
+      endedAt: '2026-03-06T09:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-3' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 2,
+    };
+
+    mockGetRecentActivity.mockResolvedValueOnce([
+      publicSession,
+      privateSessionAlice,
+      privateSessionBob,
+    ]);
+
+    // No auth
+    const event = {
+      requestContext: {
+        authorizer: undefined,
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0].sessionId).toBe('sess-public-1');
+  });
+
+  test('should treat sessions without isPrivate field as public', async () => {
+    const legacySession = {
+      sessionId: 'sess-legacy',
+      userId: 'user-dave',
+      // isPrivate is undefined
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T08:00:00Z',
+      endedAt: '2026-03-06T08:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 1,
+    };
+
+    const privateSessionAlice = {
+      sessionId: 'sess-private-1',
+      userId: 'user-alice',
+      isPrivate: true,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T11:00:00Z',
+      endedAt: '2026-03-06T11:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-2' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 3,
+    };
+
+    mockGetRecentActivity.mockResolvedValueOnce([legacySession, privateSessionAlice]);
+
+    // User eve (not owner)
+    const event = {
+      requestContext: {
+        authorizer: {
+          claims: { 'cognito:username': 'user-eve' },
+        },
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    // Should see legacy session (treated as public) but not private session
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0].sessionId).toBe('sess-legacy');
+  });
+
+  test('should maintain sort order from getRecentActivity after filtering', async () => {
+    const session1 = {
+      sessionId: 'sess-1',
+      userId: 'user-alice',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T08:00:00Z',
+      endedAt: '2026-03-06T08:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-1' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 1,
+    };
+
+    const session2 = {
+      sessionId: 'sess-2',
+      userId: 'user-alice',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T12:00:00Z',
+      endedAt: '2026-03-06T12:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-2' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 2,
+    };
+
+    const session3 = {
+      sessionId: 'sess-3',
+      userId: 'user-alice',
+      isPrivate: false,
+      sessionType: SessionType.BROADCAST,
+      status: SessionStatus.ENDED,
+      createdAt: '2026-03-06T10:00:00Z',
+      endedAt: '2026-03-06T10:30:00Z',
+      version: 1,
+      claimedResources: { chatRoom: 'room-3' },
+      recordingStatus: RecordingStatus.AVAILABLE,
+      messageCount: 3,
+    };
+
+    // Mock already returns sessions in sorted order (DESC by createdAt)
+    mockGetRecentActivity.mockResolvedValueOnce([session2, session3, session1]);
+
+    const event = {
+      requestContext: {
+        authorizer: {
+          claims: { 'cognito:username': 'user-test' },
+        },
+      },
+    } as any;
+
+    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    // Should maintain sort order from getRecentActivity (DESC by createdAt)
+    expect(body.sessions[0].sessionId).toBe('sess-2');
+    expect(body.sessions[1].sessionId).toBe('sess-3');
+    expect(body.sessions[2].sessionId).toBe('sess-1');
+  });
 });

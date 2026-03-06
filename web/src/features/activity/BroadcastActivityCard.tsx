@@ -48,8 +48,16 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900">{session.userId}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900">{session.userId}</h3>
+            {session.sessionType === 'UPLOAD' && (
+              <span className="text-[10px] font-semibold uppercase tracking-wider bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                Upload
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500 mt-1">
+            {session.sourceFileName ? `${session.sourceFileName} • ` : ''}
             {duration} • {timestamp}
           </p>
         </div>

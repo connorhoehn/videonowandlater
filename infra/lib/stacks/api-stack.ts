@@ -281,6 +281,36 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Transcript endpoint
+    const sessionTranscriptResource = sessionIdResource.addResource('transcript');
+
+    // GET /sessions/{sessionId}/transcript (get transcript)
+    const getTranscriptHandler = new NodejsFunction(this, 'GetTranscriptHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-transcript.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        TRANSCRIPTION_BUCKET: 'vnl-transcription-vnl-session',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getTranscriptHandler);
+
+    // Grant S3 read access to transcription bucket
+    getTranscriptHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: ['arn:aws:s3:::vnl-transcription-vnl-session/*'],
+      })
+    );
+
+    sessionTranscriptResource.addMethod('GET', new apigateway.LambdaIntegration(getTranscriptHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // Reaction endpoints
     const sessionReactionsResource = sessionIdResource.addResource('reactions');
 

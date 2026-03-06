@@ -602,14 +602,17 @@ export async function getRecentActivity(
   const result = await docClient.send(
     new ScanCommand({
       TableName: tableName,
-      FilterExpression: 'begins_with(PK, :session) AND #status IN (:ending, :ended)',
+      FilterExpression: 'begins_with(PK, :session) AND (#status IN (:ending, :ended) OR (#sessionType = :upload AND attribute_exists(#uploadStatus)))',
       ExpressionAttributeNames: {
         '#status': 'status',
+        '#sessionType': 'sessionType',
+        '#uploadStatus': 'uploadStatus',
       },
       ExpressionAttributeValues: {
         ':session': 'SESSION#',
         ':ending': SessionStatus.ENDING,
         ':ended': SessionStatus.ENDED,
+        ':upload': SessionType.UPLOAD,
       },
       Limit: limit * 2, // Scan is cheaper with higher limit; we'll sort in memory
     })

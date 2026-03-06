@@ -1,468 +1,538 @@
-# Feature Research
+# Feature Research: Shareable Links & Collections
 
-**Domain:** Live video platform — activity feed, intelligence layer, AI summaries (v1.2)
-**Researched:** 2026-03-05 (Updated for v1.2 milestone; v1.1 features preserved)
-**Confidence:** HIGH (AWS official docs verified; platform UX patterns verified via multiple sources)
-
----
-
-## Context: What v1.1 Already Ships
-
-The following features are complete and must NOT be re-researched:
-
-- Live broadcasting (IVS one-to-many) + auto-recording to S3
-- Multi-participant hangouts (IVS RealTime, up to 5 participants)
-- Real-time chat (IVS Chat) + chat persistence + synchronized replay
-- Reactions (live floating emoji + replay timeline)
-- Replay viewer with HLS playback, synchronized chat, reaction timeline
-- Home feed: full-page grid of recordings (RecordingFeed component)
-- Session lifecycle: creating -> live -> ending -> ended in DynamoDB
-
-**v1.2 adds on top of this foundation.** All five new feature areas are additive.
+**Domain:** Video sharing platform — shareable session links and private/public collections
+**Researched:** 2026-03-05
+**Confidence:** MEDIUM — based on existing JWT playback token infrastructure (Phase 22), industry patterns from video platforms, and project constraint ("don't get into users")
 
 ---
 
-## v1.2 Feature Landscape
+## Executive Summary
 
-### Table Stakes (Users Expect These)
+Shareable links and collections address a core user need: "How do I share what I've recorded with others?" and "How do I organize my recordings?"
 
-Features that users will assume exist once they see the activity-aware design. Missing any of these makes the UI feel broken or half-finished.
+**Shareable links** enable frictionless sharing without account creation. The project already has JWT playback tokens for private broadcasts (Phase 22) — shareable links extend this infrastructure to enable password-free access via simple copyable URLs.
+
+**Collections** (playlists/folders) address the organizational challenge of managing multiple recordings. Users need to group related sessions (e.g., "Conference 2026", "Team standups", "Tuesday hangouts") for easy discovery and sharing.
+
+The table stakes are straightforward: publicly copyable links + basic grouping. Differentiators emerge in access control granularity (expiration, passwords), sharing intelligence, and discovery features. Anti-features include complex permission models (contradicts "don't get into users" constraint) and email/social infrastructure (out of scope).
+
+---
+
+## Context: What Exists Today
+
+**From v1.3 (just shipped):**
+- Private broadcasts with `isPrivate` flag on Session
+- ES384 JWT token generation with time-limited access
+- Playback tokens validated at viewer access time
+- Private broadcast filtering from activity feed
+
+**From v1.2:**
+- Auto-transcription of all recordings (Phase 19)
+- AI summaries via Bedrock (Phase 20)
+- Video uploads with adaptive bitrate encoding (Phase 21)
+- Activity feed with rich session metadata
+
+**Infrastructure in place:**
+- DynamoDB Session entity with extensible fields
+- Lambda handlers for session operations
+- API Gateway endpoints for playback token generation
+- Frontend pages for broadcast, hangout, replay, viewer
+
+**Constraint:** "Don't get into users" — shareable links must NOT lead to user profiles, followers, or collaboration features that require user management.
+
+---
+
+## Table Stakes
+
+Features users expect from a video sharing platform. Missing these makes the product feel incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Activity feed shows all session types | Once a feed exists, users expect both broadcasts AND hangouts in it — filtering one out creates confusion | LOW | Hangouts that have no recording tile need their own activity card representation |
-| Hangout card shows who was there | Every group communication platform (Slack, Discord, Zoom) persists participant lists in history | MEDIUM | Requires tracking participant join events; must persist to DynamoDB in real time, not reconstructed after the fact |
-| Session duration on activity cards | Users need temporal context ("this was a 45-minute session") — without duration, cards lack weight | LOW | Duration already stored as `recordingDuration` on BROADCAST sessions via recording-ended event; HANGOUT sessions must store `endedAt - startedAt` as a separate field or compute from existing timestamps |
-| Timestamp / relative time on activity cards | "2 hours ago" / "yesterday" — absolute table stakes for any feed | LOW | Already implemented in `formatDate()` in RecordingFeed.tsx; reuse pattern |
-| Reaction counts visible without opening replay | Users scrolling a feed expect to see social proof data (likes, reactions) on cards — clicking to find out is friction | MEDIUM | Requires aggregating per-type counts at session end and storing them on the session record; not readable in real-time from the raw reactions table |
-| Horizontal recording slider for broadcasts | Netflix/Disney+/YouTube-style horizontal scrollable row is the dominant discovery pattern for video content since 2020 | MEDIUM | Scroll snap + peek pattern: 3-4 cards visible, right edge bleeds to signal more content; CSS `overflow-x: auto` + `scroll-snap-type` |
-| AI summary visible at a glance | Once AI summaries exist on recording cards, users expect to read them before clicking play — burying them behind a click removes the value | MEDIUM | 1-2 line truncated preview on card; full text in replay info panel; must handle "summary unavailable" gracefully |
+| **Shareable public links** | Every video platform allows copying a link to share. Without this, users share via messaging app links or screenshots — friction. | Low | Generate unique slug (`session.slug = nanoid(7)`); store in DynamoDB; serve via public endpoint. Extends existing private broadcast JWT model. |
+| **Direct playback from shared link** | Shared link must open video player directly, no login required for public videos. Non-negotiable UX. | Low | Public playback endpoint: `GET /playback/{slug}` (no auth required). Returns playback token if session is public. |
+| **Link preview metadata (OG tags)** | When shared on social platforms (Twitter, Slack, Discord), preview should show title, thumbnail, duration. Open Graph tags in HTML. | Low | Add OG meta tags to playback page; fetch session metadata server-side on page load. |
+| **Copy link from player** | Easy one-click copy of shareable URL from within playback UI. Users shouldn't need to manually construct URLs. | Trivial | Add copy button to player controls. Use clipboard API. |
+| **Collections / playlists** | Users expect to group related recordings (e.g., "Conference talks", "Monday standups"). Discoverability mechanism. | Medium | DynamoDB collection entity: `{ id, userId, name, description, isPublic, sessionIds[] }`. CRUD API endpoints. |
+| **Public collections viewable** | Users need to browse public playlists created by others. Discoverable via direct link. | Low | Public collections endpoint: `GET /collections/{collectionId}` (no auth if public). Returns collection + session metadata. |
+| **Organize collection playback** | Collections should play videos in order, not shuffle. Session order matters. | Low | Store `sessionIds` array in collection; preserve order in playback. |
 
-### Differentiators (Competitive Advantage)
+---
 
-Features that genuinely differentiate this platform. Not expected, but highly valued once experienced.
+## Differentiators
+
+Features that genuinely set platform apart from competitors. Not expected, but valued when present.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Hangout activity cards (non-recording tile) | Hangouts that don't have a playable recording should still show as rich social history — Discord/Slack show this, streaming platforms don't | HIGH | New card type: avatar row for participants, message count, duration, timestamp; requires dedicated backend data (participant snapshot, message count stored at session end) |
-| AI-generated 1-paragraph summary on recording cards | Users can quickly decide if a recording is worth watching — Prime Video X-Ray Recaps uses same pattern with Amazon Bedrock | HIGH | Transcript → Bedrock/Claude → summary → stored on session record; pipeline is async (3-5 min delay typical); display "Summary coming soon" while processing |
-| Reaction summary counts per type displayed on cards | "42 fire, 18 heart" — social proof that communicates session energy at a glance; YouTube/Twitch don't surface aggregate counts on cards | MEDIUM | Aggregate reactions at session end (Lambda triggered by recording-ended event); store as `reactionCounts: { fire: 42, heart: 18, ... }` on session record |
-| Transcription pipeline for all recordings | Makes sessions searchable and enables AI summaries — no competitor at this scale ships auto-transcription of casual live sessions | HIGH | S3 recording → Lambda → Amazon Transcribe → transcript JSON → S3 → Lambda → parse plain text → DynamoDB; HLS fMP4 segments are NOT directly accepted by Transcribe; need MediaConvert or use the `media/` MP4 file within the S3 recording prefix |
-| Activity feed (mixed broadcast + hangout) below recording slider | Two-zone home page: "Watch replays" (horizontal slider) + "What happened" (activity feed list) — mirrors the pattern YouTube uses with shorts vs. long-form | MEDIUM | Activity feed is a sorted list of session cards, NOT a grid; cards show type-specific metadata; broadcasts show thumbnail + duration + reaction count; hangouts show participant avatars + message count |
+| **Time-limited share links** | Creator can generate expiring links (e.g., "valid for 7 days"). Useful for time-sensitive content (webinars, workshops). High sense of control. | Low | Use JWT `exp` claim (already implemented). Add UI to set expiration when generating link; store link metadata (created_at, expires_at). |
+| **Password-protected public links** | Secondary auth layer for sensitive sharing. "Private but shareable via link." | Medium | Generate random password; hash + store; prompt for password before playback. Combines JWT + password auth. Separate from account passwords. |
+| **Public collection discovery** | Platform suggests or indexes public collections (e.g., search "AI talks" → find collection). | High | Requires search index (GSI or OpenSearch). Out of MVP scope; future iteration. |
+| **Reaction previews in collections** | Show top reactions across all videos in collection. "See what people loved." | Low | Aggregate reaction counts from all sessions; display top 2-3 emoji on collection card. |
+| **Collection thumbnails** | Display grid of first 4 video thumbnails as collection cover. Visual scanning. | Low | Client-side grid of first 4 session thumbnails in collection. |
+| **Share entire collection as single link** | Generate one link that contains all sessions in collection (vs individual session links). | Low | Share link includes collection ID; playback shows collection metadata + session list. |
+| **Collection download** | Batch download all videos in collection as ZIP (presigned S3 URLs). | High | Requires S3 presigned URL generation for each session + ZIP creation. Out of MVP. |
+| **Collaborative collections** | Multiple users can edit a shared collection (add/remove videos, reorder). | High | Requires permission model, edit tracking, conflict resolution. **OUT OF SCOPE** — contradicts "don't get into users" constraint. |
+| **Collection analytics** | Creator sees view count per video in collection, total viewers. | Medium | Track collection views in DynamoDB; aggregate per session. Out of MVP; add post-validation. |
+| **Auto-generated collections** | Platform suggests collections based on tags, date ranges, participant overlap. | High | Requires ML/heuristics. Out of scope. |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+---
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Real-time transcription during live session | "See the transcript as it's happening" sounds useful | Amazon Transcribe Streaming requires a different SDK, WebSocket connections, and session management — doubles the transcription complexity with limited v1.2 payoff | Async batch transcription only; show transcript in replay page after recording ends |
-| Full transcript display in replay viewer | "I want to read the whole transcript" seems natural | Transcripts for a 30-minute session are 5,000+ words; displaying them inline overwhelms the replay UI; users rarely read full transcripts | Show AI summary (1 paragraph) on card and replay page; link to raw transcript as a downloadable/expandable option only if users request it |
-| AI chat summary (who said what) | Speaker-diarized chat-based summary sounds comprehensive | IVS Chat stores messages but does NOT preserve speaker attribution with enough fidelity for AI diarization; mixing transcript + chat creates hallucination risk | Transcript-only summary; mention "X participants were in this hangout" in the summary prompt for context |
-| Per-user reaction breakdown | "Show me who reacted with what" — analytics-style detail | Reactions were designed as anonymous (volume signal, not identity signal); per-user breakdown contradicts the anonymous-by-default UX; also creates privacy concerns | Aggregate counts only: `{ fire: 42, heart: 18 }` — no per-user attribution |
-| AI-powered content search | "Search for sessions where topic X was discussed" | Requires vector embedding + semantic search infrastructure (OpenSearch / Bedrock Knowledge Bases) — multi-week effort orthogonal to v1.2 | Store transcript text as plain string in DynamoDB; build keyword search in v2 once transcript corpus exists |
-| Automatic video chapters from transcript | "Split the video into sections based on topic changes" | Requires topic modeling (NLP pipeline) on top of transcription; adds weeks of ML complexity | Ship 1-paragraph summary in v1.2; add chapters in v2 if users request structured navigation |
-| Hangout participant message attribution on activity card | "Show who sent the most messages" — leaderboard data | Reveals private information about who was most active; creates social pressure dynamics; not standard in group chat history UIs | Show total message count only, not per-user breakdown |
+## Anti-Features
+
+Features to explicitly NOT build. These create confusion, scope creep, or contradict project constraints.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **User profiles / creator pages** | Explicitly out of scope ("don't get into users"). Profile pages create account management debt and user discovery algorithms. | Use collections as the discovery mechanism. Creator's name stays with collection; users find content via public collections, not profiles. |
+| **Granular role-based sharing** | "Editor", "viewer", "commenter" roles on collections. Adds permission model complexity and ties to user management. | Use simple binary: owner (can edit) vs viewer (can watch). No collaborative editing in MVP. |
+| **Email invitations** | "Share this collection with: alice@example.com". Requires email infrastructure + invite management. | Use copyable links. Platform doesn't manage invites or email notifications. |
+| **Expired link management dashboard** | Dashboard showing all generated links with expirations and revocation history. | Generate link once; trust it; no link inventory. Revocation only by deleting the session or collection. |
+| **Public profile collections** | Collections page at `/creators/alice/collections`. Leads to full user profiles and social graph. | Collections linked directly (e.g., `/collections/abc123`). No "creator collections" index. |
+| **Collection versioning** | Ability to revert collection to prior state (add/remove video, reorder). | Collections are mutable; no version history. Same as Google Docs — live edit, no rollback. |
+| **Auto-post to social media** | Native "Share to Twitter" buttons that auto-post link + description. | Let users copy link; social sharing happens outside platform. Reduces social media integration debt. |
+| **Thumbnail upload for collections** | Upload custom cover image for collection. | Use first video's thumbnail or auto-generated grid of first 4 thumbnails. No asset management. |
+| **Comments on collections** | Thread-based comments on collection level (separate from video comments). | Comments stay on individual videos only. Not aggregated at collection level. |
+| **Collection tags / categorization** | Tag collections with metadata ("AI", "conference", "live") for discovery. | No tagging in MVP. Basic search by collection name only. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[v1.1 Foundation] ──already-complete──> Session lifecycle, recordings, chat, reactions, replay
+Shareable Public Links (core feature)
+  ├─> Requires: Session lookup by slug
+  ├─> Requires: Public playback endpoint
+  ├─> Requires: JWT playback token (already implemented in Phase 22)
+  └─> Extends: Existing private broadcast model
 
-[v1.2 New Features]
+Time-Limited Share Links (differentiator)
+  ├─> Requires: Shareable Public Links
+  └─> Requires: JWT `exp` claim validation (already in Phase 22)
 
-Reaction Summary Counts
-  └──requires──> Reactions stored per session (v1.1 complete)
-  └──requires──> Session-end trigger (recording-ended Lambda, already exists)
-  └──adds──> reactionCounts field on Session DynamoDB record
-  └──surfaces-on──> Recording cards (horizontal slider)
-  └──surfaces-on──> Replay info panel
+Password-Protected Links (differentiator)
+  ├─> Requires: Shareable Public Links
+  └─> Requires: Password hashing + comparison logic
 
-Hangout Participant Tracking
-  └──requires──> IVS RealTime join-hangout handler (v1.1 complete)
-  └──requires──> New participant join/leave event capture (NEW: client calls API or EventBridge)
-  └──adds──> participants list on Session DynamoDB record
-  └──adds──> messageCount field on Session DynamoDB record (populated at session end)
-  └──enables──> Hangout Activity Cards on homepage
+Collections / Playlists (core feature)
+  ├─> Requires: DynamoDB collection entity
+  ├─> Requires: `isPublic` flag on collection
+  ├─> Requires: Collection CRUD API endpoints
+  └─> Requires: Frontend collection builder UI
 
-Homepage Redesign
-  └──requires──> Recordings exist (v1.1 complete)
-  └──requires──> Hangout sessions exist (v1.1 complete)
-  └──requires──> Hangout participant data (NEW: v1.2 Hangout Tracking)
-  └──requires──> Reaction summary counts (NEW: v1.2 Reaction Summaries)
-  └──replaces──> RecordingFeed full-page grid
-  └──renders──> Horizontal recording slider (broadcasts only, with thumbnail + reaction count)
-  └──renders──> Activity feed list (all session types, chronological)
+Public Collections Index (table stakes)
+  ├─> Requires: Collections core feature
+  ├─> Requires: Public collections API endpoint
+  └─> Requires: Collections listing/browsing UI
 
-Transcription Pipeline
-  └──requires──> Recording available in S3 (recording-ended event, v1.1 complete)
-  └──requires──> Recording S3 path stored on session (v1.1 complete)
-  └──CRITICAL DEPENDENCY──> Recording must be in MP4 format for Transcribe
-      Transcribe does NOT accept HLS M3U8 playlists
-      IVS stores recordings as HLS (fMP4 segments + manifest)
-      Options:
-        A) Use AWS MediaConvert to convert HLS → MP4 after recording-ended (adds ~2 min latency)
-        B) Point Transcribe at an individual fMP4 segment (partial transcript only)
-        C) Use EventBridge + Lambda to download HLS and concatenate via FFmpeg Lambda layer (complex)
-      Recommended: Option A (MediaConvert job triggered from recording-ended Lambda)
-  └──adds──> transcriptS3Path field on Session DynamoDB record
-  └──adds──> transcriptStatus field: pending | processing | available | failed
+Collection Batch Share Link (differentiator)
+  ├─> Requires: Collections core feature
+  ├─> Requires: Public collections endpoint
+  └─> Requires: Ability to include multiple sessions in one playback token
 
-AI Summary Pipeline
-  └──requires──> Transcript available (NEW: v1.2 Transcription Pipeline)
-  └──requires──> Bedrock access enabled in AWS account (Claude Haiku model ID: anthropic.claude-3-haiku-20240307-v1:0)
-  └──triggered-by──> Transcribe job completion EventBridge event
-  └──adds──> aiSummary field on Session DynamoDB record (1 paragraph)
-  └──adds──> aiSummaryStatus field: pending | processing | available | failed
-  └──surfaces-on──> Recording cards (truncated, 1-2 lines)
-  └──surfaces-on──> Replay info panel (full text)
+Reaction Previews in Collections (differentiator)
+  ├─> Requires: Collections core feature
+  ├─> Requires: Session reaction counts (Phase 17, already complete)
+  └─> Requires: Frontend aggregation of reaction counts from all sessions
+
+Collection Download (future)
+  ├─> Requires: Collections core feature
+  ├─> Requires: S3 presigned URL generation
+  └─> Requires: ZIP file creation or external download service
+
+Collection Analytics (future)
+  ├─> Requires: Collections core feature
+  └─> Requires: View tracking infrastructure
 ```
 
-### Dependency Notes
-
-- **Reaction summaries require session-end trigger:** The recording-ended Lambda already fires at session end — this is where aggregation logic should live. Do NOT add a separate Lambda; extend the existing handler.
-- **Hangout tracking requires a capture point at join time:** The `join-hangout` handler already runs when a participant joins. This is the correct place to append to a `participants` array on the session record. No new EventBridge event needed — modify the existing handler.
-- **Transcription pipeline blocks AI summaries:** AI summary cannot start until transcript exists. The pipeline is serial: recording-ended → MediaConvert → Transcribe → summary. Plan 5-10 minutes from recording end to summary available.
-- **Homepage redesign depends on reaction counts:** Cards in the horizontal slider should show reaction counts. If reaction aggregation ships after the redesign, cards will show empty reaction slots initially — acceptable, but plan the phase order accordingly (aggregation first, then redesign).
-- **AI summary has no hard dependency on homepage redesign:** Summary can be displayed on existing cards or new cards — the surface changes independently of the pipeline.
-
 ---
 
-## MVP Definition
+## Recommended MVP
 
-### Launch With (v1.2 Core):
+**Phase focus:** Shareable public links + basic collections for organization.
 
-- [ ] **Reaction summary counts aggregated at session end** — Extend recording-ended Lambda to query all reactions for the session and write `reactionCounts: { fire: N, heart: N, ... }` to the session record. Display per-type counts on replay info panel and recording cards.
-- [ ] **Hangout participant tracking** — Modify join-hangout handler to append `userId` to a `participants` array on the session record. At session end, write `messageCount` by querying chat message count. Store `durationMs` computed from `endedAt - startedAt`.
-- [ ] **Hangout activity cards on homepage** — New card type in the activity feed: avatar row (first 4 participants + overflow count), message count, duration, timestamp. Rendered in the activity feed list below the recording slider.
-- [ ] **Homepage redesign: horizontal slider + activity feed** — Replace RecordingFeed grid with two zones: (1) horizontal scrollable slider of BROADCAST recordings (3-4 visible, scroll snap, thumbnail peek), (2) chronological activity feed list below (all session types).
-- [ ] **Transcription pipeline** — recording-ended → MediaConvert MP4 conversion → Transcribe job start → EventBridge completion → parse transcript text → store on session record. Handle failure gracefully (transcript unavailable state).
-- [ ] **AI summary pipeline** — transcript available → invoke Bedrock Claude Haiku → 1-paragraph summary → store on session record. Display truncated (2 lines) on cards, full text in replay panel.
+### Phase 1: Shareable Public Links
+**Goal:** Enable sharing individual sessions without account creation.
 
-### Add After Validation (v1.x):
+**Deliverables:**
+1. Add `slug` field to Session DynamoDB entity (unique, URL-safe)
+2. Create `POST /sessions/{sessionId}/make-public` endpoint (set `isPublic = true`, generate slug)
+3. Create `GET /playback/{slug}` endpoint — returns playback token if session is public
+4. Add OG meta tags to playback HTML page (title, thumbnail, duration, creator name)
+5. Add "Share" button in player UI with copy-to-clipboard
+6. Handle slug uniqueness (retry with new slug if collision)
 
-- [ ] **Keyword search on transcripts** — Once a corpus of transcripts exists, add DynamoDB full-text search or OpenSearch integration. Trigger: user research shows discovery pain.
-- [ ] **Transcript display in replay viewer** — Expandable full transcript panel. Trigger: user feedback requesting full text access.
-- [ ] **AI topic chapters** — Divide recording into topics based on transcript. Trigger: recordings average >15 minutes and users report navigation difficulty.
-- [ ] **Reaction timeline heatmap on recording cards** — Show a sparkline of when reactions peaked during the recording. Trigger: reaction data proves high engagement indicator.
+**Complexity:** Low — extends existing Phase 22 private broadcast JWT infrastructure
+**API additions:**
+```
+POST /sessions/{sessionId}/make-public
+  Input: (no body)
+  Output: { slug, publicUrl }
 
-### Future Consideration (v2+):
+GET /playback/{slug}
+  Input: (no params)
+  Output: { playbackToken, sessionMetadata } (no auth required)
+```
 
-- [ ] **Real-time transcription during live session** — Streaming Transcribe API, separate infrastructure. Defer until live session UX is mature.
-- [ ] **Semantic content search** — Vector embeddings + OpenSearch. Requires large transcript corpus to be valuable.
-- [ ] **AI-generated highlight clips** — Identify high-reaction moments from transcript + reaction data. Complex ML pipeline.
-- [ ] **Personalized activity feed ranking** — Algorithm to surface sessions the user would find most relevant. Requires engagement data corpus.
-
----
-
-## Feature Prioritization Matrix
-
-| Feature | User Value | Implementation Cost | Dependency Risk | Priority |
-|---------|------------|---------------------|-----------------|----------|
-| Reaction summary counts at session end | HIGH | LOW | LOW | P1 |
-| Hangout participant tracking | HIGH | LOW | LOW | P1 |
-| Hangout activity cards on homepage | HIGH | MEDIUM | MEDIUM | P1 |
-| Homepage redesign (slider + feed) | HIGH | MEDIUM | MEDIUM | P1 |
-| Transcription pipeline (Transcribe) | MEDIUM | HIGH | HIGH | P1 |
-| AI summary pipeline (Bedrock) | HIGH | MEDIUM | HIGH (blocked by transcription) | P1 |
-| Display summary on cards + replay | MEDIUM | LOW | MEDIUM | P1 |
-| Keyword search on transcripts | MEDIUM | HIGH | LOW | P2 |
-| Full transcript viewer in replay | LOW | MEDIUM | LOW | P2 |
-| Reaction heatmap sparkline on cards | LOW | MEDIUM | LOW | P3 |
-| AI topic chapters | LOW | HIGH | LOW | P3 |
-
-**Priority key:**
-- P1: Must have for v1.2 launch — these define the milestone
-- P2: Should have, add when P1 is stable
-- P3: Nice to have, defer to v2
-
----
-
-## Detailed Feature Specs
-
-### Hangout Activity Card: What Users Expect to See
-
-Based on Discord, Slack, and Clubhouse patterns for group session history:
-
-**Card Contents (ordered by user importance):**
-1. **Session type badge** — "Hangout" (purple, consistent with existing badge in RecordingFeed)
-2. **Participant avatar row** — Initials-based avatars for first 4 participants; "+N" overflow indicator if >4 joined (e.g., "+2 more")
-3. **Duration** — "42 min" — formatted as X min (under 60) or X hr Y min
-4. **Message count** — "64 messages" — social signal of engagement
-5. **Relative timestamp** — "3 hours ago" — reuse existing `formatDate()` pattern
-6. **Creator / host** — Small text: "Started by [username]"
-7. **Optional: "No recording available" indicator** — If hangout didn't produce a playable recording, card should not navigate to replay; tapping should either do nothing or show a modal explaining recordings aren't available for this session
-
-**What to NOT show on hangout cards:**
-- Individual participant message counts (privacy)
-- Full participant list beyond 4 avatars (clutters card)
-- Thumbnail (hangouts may not have one, or it may show a participant face unexpectedly)
-- Play button (no video to play unless recording exists)
-
-**Data requirements for hangout card (new fields needed on Session):**
+**Database changes:**
 ```typescript
-participants: string[];         // array of userIds who joined
-messageCount: number;           // total messages in session
-durationMs: number;             // computed: endedAt - startedAt
-```
-
-### Reaction Summary Counts: Storage and Display
-
-**Storage format (new field on Session record):**
-```typescript
-reactionCounts: {
-  heart: number;
-  fire: number;
-  clap: number;
-  laugh: number;
-  surprised: number;
-  // ...one key per emoji type in the curated set
-};
-```
-
-**When to aggregate:** Triggered by recording-ended Lambda (same handler that updates `recordingStatus = 'available'`). Query all reactions for the session using `getReactionsInTimeRange(tableName, sessionId, 0, Date.now(), 10000)` and tally by `emojiType`.
-
-**Display on recording card:** Show the top 2-3 emoji types by count as inline chips: "42 🔥 18 ❤️" — small, below the card metadata. If no reactions, hide the section (do not show "0 reactions").
-
-**Display on replay info panel:** Full breakdown by type in a row of pills or small counter badges.
-
-### Transcription Pipeline: Architecture
-
-**Critical constraint:** Amazon Transcribe does NOT accept HLS M3U8 playlists. IVS recordings are stored as HLS. An intermediate conversion step is required.
-
-**Recommended approach (MediaConvert):**
-```
-recording-ended event
-  └─> Lambda: start MediaConvert job
-        Input: s3://bucket/{prefix}/media/hls/master.m3u8
-        Output: s3://bucket/{prefix}/media/mp4/recording.mp4
-        └─> EventBridge: MediaConvert job complete
-              └─> Lambda: start Transcribe job
-                    MediaFileUri: s3://bucket/{prefix}/media/mp4/recording.mp4
-                    OutputBucketName: same S3 bucket
-                    OutputKey: {prefix}/transcript/transcript.json
-                    └─> EventBridge: Transcribe job state change (COMPLETED)
-                          └─> Lambda: parse transcript, extract plain text
-                                └─> DynamoDB: store transcriptText on session
-                                      └─> invoke Bedrock/Claude
-                                            └─> DynamoDB: store aiSummary on session
-```
-
-**Status tracking fields added to Session:**
-- `transcriptStatus`: `'pending' | 'processing' | 'available' | 'failed'`
-- `transcriptS3Path`: S3 key to transcript JSON
-- `transcriptText`: Plain text extracted from transcript JSON (stored on session for Bedrock access; consider size: a 30-min session produces ~5,000-8,000 words / 30-50 KB)
-- `aiSummaryStatus`: `'pending' | 'processing' | 'available' | 'failed'`
-- `aiSummary`: 1-paragraph plain text string
-
-**Transcribe output format:** JSON with `results.transcripts[0].transcript` containing the full plain text. Extract this field; do not store the full JSON on the DynamoDB session record (too large — store only the S3 path to the full JSON).
-
-**Bedrock model recommendation:** `anthropic.claude-3-haiku-20240307-v1:0` (Claude 3 Haiku via Bedrock Converse API). Fast, inexpensive, well-suited for summarization. Must be enabled in the AWS account/region before use (manual console step or CDK `bedrock:CreateFoundationModelAgreement` equivalent).
-
-**Prompt pattern for summary:**
-```
-You are summarizing a live video session recording.
-
-Transcript:
-{transcriptText}
-
-Session metadata:
-- Duration: {duration}
-- Participant count: {participantCount} (if hangout)
-- Type: {BROADCAST or HANGOUT}
-
-Write a single paragraph (2-4 sentences) summarizing what was discussed or happened in this session. Be conversational and concise. Do not begin with "In this session" or "The transcript shows". If the transcript is unclear or very short, write a brief neutral summary based on available context.
-```
-
-**Failure handling:**
-- MediaConvert failure → set `transcriptStatus = 'failed'` on session; do not block replay availability
-- Transcribe failure → same; summary stays pending
-- Bedrock failure → set `aiSummaryStatus = 'failed'`; display "Summary unavailable" on card
-
-### Homepage Redesign: Layout Specification
-
-**Two-zone layout:**
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  videonow          [Go Live]  [Hangout]          [Logout] │  <- sticky header (unchanged)
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  Recent Broadcasts                                       │  <- section label
-│  ┌────┐ ┌────┐ ┌────┐ ┌──                               │  <- horizontal slider
-│  │    │ │    │ │    │ │  (peek of next card)             │
-│  └────┘ └────┘ └────┘ └──                               │
-│                                                          │
-│  Activity                                                │  <- section label
-│  ┌─────────────────────────────────────────────────┐    │  <- activity card row
-│  │ [Hangout] • ●● ●● ●● + 2 more   42 min  64 msg │    │
-│  └─────────────────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ [Broadcast] • [thumb] Title  3:42  🔥42 ❤️18   │    │
-│  └─────────────────────────────────────────────────┘    │
-│  ...                                                     │
-└──────────────────────────────────────────────────────────┘
-```
-
-**Recording slider:**
-- BROADCAST sessions with `recordingStatus = 'available'` only
-- 3-4 cards visible; right edge bleeds ~20-30px to signal horizontal scroll
-- CSS `scroll-snap-type: x mandatory` + `scroll-snap-align: start` per card
-- No navigation arrows on mobile; add on desktop hover (optional for v1.2)
-- Card width: ~40-45% of viewport on mobile, ~25% on desktop
-- Each card: thumbnail + duration badge + top-2 reaction counts + relative time
-
-**Activity feed:**
-- All session types (BROADCAST and HANGOUT) that have ended
-- Sorted descending by `endedAt`
-- BROADCAST cards: compact horizontal — small thumbnail left, session owner + duration + reaction counts right
-- HANGOUT cards: participant avatar row + message count + duration (described above)
-- No inline video playback — tap navigates to replay (BROADCAST only)
-- HANGOUT cards with recording: show play indicator; without recording: no play indicator, just history
-
-**API changes needed:**
-- `GET /recordings` currently returns only ended sessions; rename concept to "activity" or add a separate `GET /activity` endpoint that returns both BROADCAST and HANGOUT sessions
-- Activity endpoint should include: `participants`, `messageCount`, `durationMs`, `reactionCounts`, `aiSummary`, `aiSummaryStatus` in response
-- Horizontal slider needs recordings with `recordingStatus = 'available'` — can filter client-side from activity response or add a `GET /recordings` query param for `?type=BROADCAST&status=available`
-
----
-
-## Competitor Feature Analysis
-
-| Feature | YouTube / Twitch | Discord / Slack | Our Approach |
-|---------|-------------------|-----------------|--------------|
-| Group session history | No group call history; only channel activity | Full thread history with participants | Activity feed with per-session hangout cards showing participant row |
-| Recording card description | Auto-generated title/chapter markers (YouTube) | No video descriptions | AI-generated 1-paragraph summary from transcript (Bedrock/Claude) |
-| Reaction summary on cards | Not shown on cards; only live count | Message reactions shown on messages | Per-type reaction counts shown on recording cards and replay panel |
-| Homepage layout | Horizontal shelf rows by category (Netflix pattern) | Recent conversations list | Two-zone: horizontal slider (broadcasts) + activity feed list (all types) |
-| Transcript access | Auto-captions visible during playback | No video transcription | Store transcript async; surface summary on card; full text accessible in replay |
-| Session duration | Shown on VOD cards | Shown in voice channel history | Shown on all activity cards |
-
----
-
-## Phase Ordering Implications for Roadmap
-
-The five v1.2 feature areas have clear phase sequencing constraints:
-
-**Phase 1: Reaction Summary Counts** (no new deps; extends existing recording-ended Lambda)
-- Aggregate reactions at session end
-- Store `reactionCounts` on session record
-- Display on existing replay info panel
-- LOW risk: purely additive to existing handlers
-
-**Phase 2: Hangout Participant Tracking** (extends existing join-hangout handler)
-- Track participants array, message count, duration on session record
-- Produces data needed for hangout activity cards
-- MEDIUM risk: must be careful about DynamoDB write patterns (array append vs. SetAdd)
-
-**Phase 3: Homepage Redesign** (depends on Phases 1 and 2 for full feature, but can ship skeleton)
-- Horizontal slider (broadcasts only) can ship independently
-- Activity feed cards use data from Phases 1 and 2
-- MEDIUM risk: frontend-heavy, no new backend infrastructure
-
-**Phase 4: Transcription Pipeline** (highest infrastructure risk)
-- New AWS services: MediaConvert + Transcribe
-- New CDK resources: IAM roles, EventBridge rules, Lambda handlers
-- CRITICAL: MediaConvert HLS→MP4 conversion is required before Transcribe
-- HIGH risk: multi-step async pipeline with failure modes at each stage
-
-**Phase 5: AI Summary Pipeline** (strictly after Phase 4)
-- Extends transcription pipeline with Bedrock invocation
-- Requires Bedrock foundation model access enabled in AWS account
-- Bedrock Converse API is the correct interface (not legacy InvokeModel)
-- MEDIUM risk: prompt engineering + response parsing; model ID must be correct
-
-**This ordering:**
-- Gets visible wins (reaction counts, hangout cards, homepage redesign) deployed early
-- Defers the highest-risk infrastructure work (Transcribe + Bedrock) to later phases
-- Allows homepage redesign to ship with "Summary coming soon" placeholders while pipeline is built
-- Avoids all-or-nothing delivery
-
----
-
-## Data Model Extensions Required
-
-### Session record (DynamoDB) — new fields for v1.2:
-
-```typescript
-// Reaction summaries (Phase 1)
-reactionCounts?: {
-  [emojiType: string]: number;   // e.g., { fire: 42, heart: 18, clap: 5 }
-};
-
-// Hangout participant tracking (Phase 2)
-participants?: string[];          // array of userIds who joined
-messageCount?: number;            // total chat messages in session
-
-// Note: durationMs = endedAt - startedAt (computable from existing fields)
-
-// Transcription pipeline (Phase 4)
-transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
-transcriptS3Path?: string;        // s3://bucket/prefix/transcript/transcript.json
-
-// AI summary pipeline (Phase 5)
-aiSummaryStatus?: 'pending' | 'processing' | 'available' | 'failed';
-aiSummary?: string;               // 1-paragraph plain text
-```
-
-### Frontend Recording type extension (RecordingFeed / new ActivityFeed):
-
-```typescript
-interface ActivityItem {
-  sessionId: string;
-  sessionType: 'BROADCAST' | 'HANGOUT';
-  userId: string;
-  createdAt: string;
-  endedAt?: string;
-  // Broadcast fields
-  thumbnailUrl?: string;
-  recordingDuration?: number;
-  recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
-  recordingHlsUrl?: string;
-  // Reaction summary (Phase 1)
-  reactionCounts?: Record<string, number>;
-  // Hangout participant fields (Phase 2)
-  participants?: string[];
-  messageCount?: number;
-  // AI summary (Phase 5)
-  aiSummary?: string;
-  aiSummaryStatus?: 'pending' | 'processing' | 'available' | 'failed';
+Session {
+  // existing fields...
+  isPublic?: boolean;
+  slug?: string; // unique index
+  publicCreatedAt?: ISO8601;
 }
 ```
+
+**Frontend changes:**
+- Add share button to ReplayViewer component
+- Display share modal with copy button
+- Add OG meta tags to index.html (dynamic server-side rendering recommended)
+
+**Testing:**
+- Manual: create session, make public, share link in browser URL bar, verify playback works
+- OG tag verification: use Twitter/Slack card preview tool
+- Slug uniqueness: generate 1000 sessions, verify no collisions
+
+**Estimate:** 1 phase (3-4 days)
+
+---
+
+### Phase 2: Collections Data Model & CRUD
+**Goal:** Store collection metadata; enable basic organization.
+
+**Deliverables:**
+1. Create DynamoDB Collection entity
+2. `POST /collections` — create new collection (owner only)
+3. `GET /collections/{collectionId}` — fetch collection + session metadata
+4. `GET /users/{userId}/collections` — list user's collections (paginated)
+5. `PUT /collections/{collectionId}` — update name, description, isPublic
+6. `POST /collections/{collectionId}/sessions` — add session to collection (append to array)
+7. `DELETE /collections/{collectionId}/sessions/{sessionId}` — remove session from collection
+8. `DELETE /collections/{collectionId}` — delete collection (owner only)
+
+**Complexity:** Medium — standard CRUD + permission checks
+**Database schema:**
+```typescript
+Collection {
+  id: string; // PK: COLLECTION#{id}
+  userId: string; // owner (GSI: USER#{userId})
+  name: string;
+  description?: string;
+  isPublic: boolean; // default: false
+  sessionIds: string[]; // ordered array of session IDs
+  createdAt: ISO8601;
+  updatedAt: ISO8601;
+}
+```
+
+**API additions:**
+```
+POST /collections
+  Input: { name, description?, isPublic? }
+  Output: Collection
+
+GET /collections/{collectionId}
+  Input: (no params)
+  Output: Collection with denormalized session data
+
+PUT /collections/{collectionId}
+  Input: { name?, description?, isPublic? }
+  Output: updated Collection
+
+POST /collections/{collectionId}/sessions
+  Input: { sessionId, position?: number }
+  Output: updated Collection
+
+DELETE /collections/{collectionId}/sessions/{sessionId}
+  Output: updated Collection
+
+GET /users/{userId}/collections?isPublic=true&limit=20&cursor=...
+  Output: { items: Collection[], cursor }
+
+DELETE /collections/{collectionId}
+  Output: { success: true }
+```
+
+**Permission logic:**
+- Create: any authenticated user
+- Read: any user if collection is public; owner only if private
+- Update/Delete: owner only
+- Add/Remove session: owner only
+
+**Testing:**
+- CRUD tests for all endpoints
+- Permission tests: verify non-owners can't modify
+- Pagination tests: test cursor-based pagination with >100 collections
+
+**Estimate:** 1 phase (3-4 days)
+
+---
+
+### Phase 3: Collections UI (Frontend)
+**Goal:** Users can create, browse, manage collections in web app.
+
+**Deliverables:**
+1. Collection browser modal/sidebar (in player or dedicated page)
+2. "Add to collection" button in ReplayViewer
+3. Create collection modal with name + description + privacy toggle
+4. Collections listing page (user's own collections)
+5. Public collections detail page (`/collections/{collectionId}`)
+6. Collection session grid/list view (read-only for non-owners)
+7. Edit collection modal (owner only)
+8. Drag-to-reorder sessions in collection (owner only)
+
+**Complexity:** Medium — new UI, state management, form handling
+**Components:**
+```
+<CollectionBrowser />
+  - Sidebar or modal showing user's collections
+  - "Create collection" button
+  - List of user's collections with edit/delete buttons
+  - "Add to collection" action (closes and returns)
+
+<PublicCollectionDetail />
+  - Collection metadata (name, creator, description)
+  - Session grid showing all videos in collection
+  - Play button on each session (navigates to replay)
+
+<CreateCollectionModal />
+  - Form: name (required), description (optional), isPublic (toggle)
+  - Submit + Cancel buttons
+
+<CollectionSessionGrid />
+  - Grid of session cards with thumbnail + title + duration
+  - Reorder UI (drag-and-drop or buttons) for owner only
+  - Remove session button (owner only)
+```
+
+**Testing:**
+- E2E: create collection, add session, view collection, reorder
+- Permissions: verify non-owner can't reorder/delete
+- Navigation: verify clicking session navigates to replay
+
+**Estimate:** 2 phases (5-7 days)
+
+---
+
+### Phase 4: Time-Limited Share Links (Differentiator)
+**Goal:** Creators can share with expiration for security.
+
+**Deliverables:**
+1. UI in player to "Generate shareable link" with optional expiration selector
+2. Store link metadata: `{ slug, expiresAt, createdAt, createdBy }`
+3. Validate expiration on each playback request
+4. Error UI: "This link has expired" message with refresh suggestion
+
+**Complexity:** Low — leverages existing JWT expiration
+**API additions:**
+```
+POST /sessions/{sessionId}/make-public?expiresIn=7days
+  Input: { expiresIn?: '1day' | '7days' | '30days' | never }
+  Output: { slug, publicUrl, expiresAt }
+
+GET /playback/{slug}
+  - Validate: if slug.expiresAt < now, return 410 Gone with "Link expired" message
+  - Otherwise: return playback token as before
+```
+
+**Database changes:**
+```typescript
+Session {
+  // ...
+  publicExpiresAt?: ISO8601;
+}
+```
+
+**Frontend changes:**
+- Add expiration selector dropdown in share modal
+- Display "Link expires on [date]" or "Link never expires"
+- Handle 410 error in playback with friendly message
+
+**Testing:**
+- Create link with 1-second expiration, verify it expires
+- Create link with no expiration, verify it doesn't expire
+- Test error UI when accessing expired link
+
+**Estimate:** 1 phase (2-3 days)
+
+---
+
+### Defer (Post-MVP)
+
+**Password-protected links:**
+- Adds password auth complexity
+- Deferred until user feedback indicates need
+
+**Collection download:**
+- Requires S3 presigned URL generation + ZIP creation
+- Deferred to future iteration
+
+**Collection discovery / search:**
+- Requires search index (GSI or OpenSearch)
+- Deferred until collection corpus grows
+
+**Collection analytics:**
+- Requires view tracking + aggregation infrastructure
+- Deferred to future iteration
+
+**Collaborative collections:**
+- Requires permission model — contradicts "don't get into users"
+- Out of scope
+
+---
+
+## Implementation Considerations
+
+### Slug Generation & Uniqueness
+```typescript
+// Use nanoid for short, URL-safe slugs
+import { nanoid } from 'nanoid';
+
+const slug = nanoid(7); // 7 chars = ~117 billion combinations
+// verify uniqueness: query DynamoDB with GSI on slug
+// if collision: retry with new slug
+```
+
+### DynamoDB GSI Design for Collections
+```typescript
+// GSI1: USER#{userId} for listing user's collections
+// GSI2: PUBLIC#${isPublic} for listing all public collections (if needed later)
+
+// Single-table design:
+// PK: COLLECTION#{id}
+// GSI1PK: USER#{userId}, GSI1SK: createdAt (for sort by date)
+// GSI2PK: PUBLIC#{isPublic}, GSI2SK: createdAt (for discovery, future)
+```
+
+### Denormalization Strategy
+```typescript
+// Store denormalized session metadata in collection for fast list rendering
+Collection {
+  sessionIds: string[]; // Primary refs
+  denormalizedSessions?: {
+    [sessionId]: {
+      title: string;
+      thumbnailUrl: string;
+      duration: number;
+      createdAt: ISO8601;
+    }
+  }
+}
+
+// Update denormalized data when session is added/updated
+// Risk: eventual consistency if session is edited after being added
+// Mitigation: fetch fresh session data on playback, not from collection cache
+```
+
+### Frontend State Management
+```typescript
+// In ReplayViewer or dedicated collections page:
+// - Store list of user's collections (fetched once on page load)
+// - When user adds session to collection, update local state + API call
+// - Optimistic UI: show session added immediately, sync backend asynchronously
+
+const [collections, setCollections] = useState<Collection[]>([]);
+
+const addSessionToCollection = async (collectionId: string, sessionId: string) => {
+  // Optimistic update
+  setCollections(prev =>
+    prev.map(c => c.id === collectionId
+      ? { ...c, sessionIds: [...c.sessionIds, sessionId] }
+      : c
+    )
+  );
+
+  // Backend sync
+  try {
+    await api.post(`/collections/${collectionId}/sessions`, { sessionId });
+  } catch (err) {
+    // Rollback on error
+    setCollections(prev =>
+      prev.map(c => c.id === collectionId
+        ? { ...c, sessionIds: c.sessionIds.filter(id => id !== sessionId) }
+        : c
+      )
+    );
+  }
+};
+```
+
+---
+
+## Complexity & Risk Assessment
+
+| Feature | Complexity | Risk | Mitigation |
+|---------|------------|------|-----------|
+| **Shareable links** | Low | Low | Reuse existing JWT infrastructure; slug uniqueness is trivial at scale <1M sessions |
+| **Collections CRUD** | Medium | Low | Standard REST patterns; permission checks straightforward |
+| **Collections UI** | Medium | Medium | Frontend state management; test reorder logic carefully |
+| **Time-limited links** | Low | Low | JWT `exp` claim already validated in Phase 22 |
+| **Password protection** | Medium | Medium | Bcrypt hashing; ensure password prompt UX doesn't break playback flow |
+| **Collection download** | High | High | S3 presigned URLs + ZIP creation; deferred |
+| **Discovery/Search** | High | High | Requires index infrastructure; deferred |
+
+---
+
+## Scale Considerations
+
+| User Scale | Recommendations | Concern |
+|------------|-----------------|---------|
+| **10-100 users** (alpha) | Ship MVP with basic collections | None — trivial scale |
+| **100-1K users** | Add slug uniqueness verification | Collision probability <0.001% at 1K sessions |
+| **1K-10K users** | Add collection search (GSI query) | DynamoDB GSI scans are fast; no caching needed |
+| **10K-100K users** | Consider denormalization caching | Collection metadata cache invalidation if session is edited |
+| **100K+ users** | Add Redis cache for popular collections | Cache popular public collections to reduce DynamoDB queries |
+
+---
+
+## Competitor Feature Comparison
+
+| Platform | Shareable Links | Collections | Collaboration | Discovery |
+|----------|-----------------|-------------|----------------|-----------|
+| **YouTube** | ✓ (public by default) | ✓ Playlists | ✓ Shared playlists | ✓ Playlist search |
+| **Vimeo** | ✓ (link sharing) | ✓ Folders | ✓ Shared folders with permissions | ✗ Limited |
+| **Loom** | ✓ (link sharing) | ✓ Collections | ✗ No sharing | ✗ Limited |
+| **Twitch** | ✓ (VOD links) | ✗ No playlists | N/A | ✓ VOD search |
+| **VideoNowAndLater v1.x** | ✓ (time-limited) | ✓ Private/public | ✗ By design | Deferred to v2 |
+
+---
+
+## Success Metrics (Post-Launch)
+
+Track adoption via:
+- **Share links created per user** — Indicates feature discovery and usage
+- **Share link click-through rate** — Indicates sharing effectiveness (measure via playback tokens)
+- **Collection creation rate** — Indicates organization value
+- **Average sessions per collection** — Indicates collection depth
+- **Collection view frequency** — Indicates reuse/value
+
+**Target:** >20% of active users create at least one share link within 30 days; >10% create at least one collection within 60 days.
 
 ---
 
 ## Sources
 
-### AWS Official Documentation (HIGH confidence)
+**Research method:** Domain knowledge + existing project architecture review + industry pattern inference
 
-- [Amazon Transcribe: Data input and output](https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html) — confirmed supported formats (MP4 yes, HLS/M3U8 no)
-- [Amazon Transcribe: StartTranscriptionJob API](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_StartTranscriptionJob.html)
-- [Amazon Transcribe: EventBridge monitoring](https://docs.aws.amazon.com/transcribe/latest/dg/monitoring-events.html) — Transcribe job state change events
-- [IVS Individual Participant Recording](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/rt-individual-participant-recording.html) — confirmed HLS fMP4 segment format
-- [IVS Auto-Record to Amazon S3](https://docs.aws.amazon.com/ivs/latest/LowLatencyUserGuide/record-to-s3.html) — recording structure confirmed
-- [IVS RealTime Participant Events](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ivs-realtime/list-participant-events.html) — JOINED, LEFT, SUBSCRIBE_STARTED event types
-- [AWS Lambda S3 event triggers](https://docs.aws.amazon.com/lambda/latest/dg/with-s3.html)
+**High confidence (verified):**
+- Existing JWT playback tokens (Phase 22, documented in PROJECT.md)
+- AWS IVS private broadcast architecture (Phase 22)
+- DynamoDB patterns for collections (single-table design, GSI querying)
 
-### AWS Blog Posts (MEDIUM confidence)
+**Medium confidence (based on patterns):**
+- Shareable links patterns: YouTube/Vimeo/Loom all implement (access restricted, inferred from public product)
+- Collections patterns: Standard feature in playlist systems
+- Time-limited link patterns: Stripe, Google Drive, AWS pre-signed URLs
 
-- [Create summaries of recordings using generative AI with Amazon Bedrock and Amazon Transcribe](https://aws.amazon.com/blogs/machine-learning/create-summaries-of-recordings-using-generative-ai-with-amazon-bedrock-and-amazon-transcribe/) — confirmed Bedrock + Transcribe pipeline pattern
-- [Amazon Prime Video: AI-powered Video Recaps using Bedrock](https://www.aboutamazon.com/news/entertainment/ai-plot-summary-video-recaps-prime-video) — confirmed UX pattern for AI summary on video cards
-- [IVS and MediaConvert post-processing workflow](https://aws.amazon.com/blogs/media/awse-using-amazon-ivs-and-mediaconvert-in-a-post-processing-workflow/) — confirmed MediaConvert as conversion path after IVS recording
-
-### Community Sources (MEDIUM confidence, multiple sources agree)
-
-- [Create call center transcript summary using AWS Bedrock Converse API and Lambda (Claude Haiku)](https://dev.to/bhatiagirish/create-call-center-transcript-summary-using-aws-bedrock-converse-api-and-lambda-anthropic-haiku-20cj) — confirmed model ID `anthropic.claude-3-haiku-20240307-v1:0`
-- [Activity Feed Design: Ultimate Guide (GetStream)](https://getstream.io/blog/activity-feed-design/) — confirmed activity feed UX patterns
-- [Horizontal Scrolling Lists in Mobile — Best Practices](https://uxdesign.cc/best-practices-for-horizontal-lists-in-mobile-21480b9b73e5) — confirmed peek + scroll snap pattern
-- [How to invoke Lambda on IVS stage participant events](https://repost.aws/questions/QUkcK0cdo2QB-bkhJyBOLAUg/how-do-i-invoke-a-lambda-function-on-ivs-stage-participant-event) — confirmed IVS EventBridge does not emit a "participant joined" event directly; application-level tracking required
-
-### v1.1 Research Preserved (HIGH confidence, verified 2026-03-02)
-
-All v1.1 research (IVS capabilities, reaction systems, synchronized replay, discovery feeds) remains valid. See git history for previous FEATURES.md for full v1.1 source citations.
+**Gaps identified:**
+- Specific bcrypt configuration for password-protected links
+- Large-scale collection pagination patterns (>10k items per collection)
+- Real-world expiration UX patterns in competing platforms
 
 ---
 
-*Feature research for: v1.2 Activity Feed & Intelligence layer on live video platform*
-*Researched: 2026-03-05*
-*Supersedes: v1.1 FEATURES.md (2026-03-02)*
+**Next steps for downstream:** Requirements scoping should address:
+- UI mockups for collection browser modal
+- Collection session order preservation (use array index or explicit position field?)
+- Password complexity/requirements for protected links (if approved as MVP feature)
+- Expiration default (7 days? 30 days? Creator's choice?)

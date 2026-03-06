@@ -12,6 +12,7 @@ import { BroadcastPage } from './features/broadcast/BroadcastPage';
 import { ViewerPage } from './features/viewer/ViewerPage';
 import { ReplayViewer } from './features/replay/ReplayViewer';
 import { HangoutPage } from './features/hangout/HangoutPage';
+import { UploadViewer } from './features/upload/UploadViewer';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -108,6 +109,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <HangoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/upload/:sessionId"
+            element={
+              <ProtectedRoute>
+                <UploadViewer />
               </ProtectedRoute>
             }
           />

@@ -10,7 +10,7 @@ import { ReactionSummaryPills } from './ReactionSummaryPills';
 export interface ActivitySession {
   sessionId: string;
   userId: string;
-  sessionType: 'BROADCAST' | 'HANGOUT';
+  sessionType: 'BROADCAST' | 'HANGOUT' | 'UPLOAD';
   thumbnailUrl?: string;
   recordingDuration?: number; // milliseconds
   createdAt: string;
@@ -25,6 +25,8 @@ export interface ActivitySession {
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   mediaConvertJobName?: string;
+  sourceFileName?: string;
+  uploadStatus?: 'pending' | 'uploading' | 'processing' | 'available' | 'failed';
 }
 
 interface RecordingSliderProps {
@@ -40,8 +42,10 @@ function formatDuration(ms: number): string {
 export function RecordingSlider({ sessions }: RecordingSliderProps) {
   const navigate = useNavigate();
 
-  // Filter to broadcasts only
-  const broadcasts = sessions.filter((s) => s.sessionType === 'BROADCAST');
+  // Filter to broadcasts and completed uploads
+  const broadcasts = sessions.filter(
+    (s) => s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD'
+  );
 
   if (broadcasts.length === 0) {
     return (
@@ -54,7 +58,7 @@ export function RecordingSlider({ sessions }: RecordingSliderProps) {
   return (
     <div className="border-b border-gray-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4">Recent Broadcasts</h2>
+        <h2 className="text-sm font-semibold text-gray-900 mb-4">Recent Videos</h2>
         <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
           <div className="flex gap-4 pb-2">
           {broadcasts.map((session) => (
@@ -64,7 +68,7 @@ export function RecordingSlider({ sessions }: RecordingSliderProps) {
               onClick={() => navigate(`/replay/${session.sessionId}`)}
             >
               {/* Thumbnail */}
-              <div className="aspect-video bg-gray-900">
+              <div className="aspect-video bg-gray-900 relative">
                 {session.thumbnailUrl && (
                   <img
                     src={session.thumbnailUrl}
@@ -72,12 +76,17 @@ export function RecordingSlider({ sessions }: RecordingSliderProps) {
                     className="w-full h-full object-cover"
                   />
                 )}
+                {session.sessionType === 'UPLOAD' && (
+                  <div className="absolute top-2 left-2 z-10 bg-green-600 text-white px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                    Upload
+                  </div>
+                )}
               </div>
 
               {/* Metadata */}
               <div className="p-3">
                 <p className="text-xs font-semibold text-gray-800 truncate">
-                  {session.userId}
+                  {session.sourceFileName || session.userId}
                 </p>
                 {session.recordingDuration && (
                   <p className="text-[10px] text-gray-500 mt-1">

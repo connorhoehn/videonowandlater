@@ -46,23 +46,6 @@ function formatDate(dateString: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function getStatusBadge(status?: string): { label: string; className: string } {
-  switch (status) {
-    case 'uploading':
-      return { label: 'Uploading', className: 'bg-blue-100 text-blue-700' };
-    case 'processing':
-      return { label: 'Processing', className: 'bg-yellow-100 text-yellow-700' };
-    case 'available':
-      return { label: 'Complete', className: 'bg-green-100 text-green-700' };
-    case 'failed':
-      return { label: 'Failed', className: 'bg-red-100 text-red-700' };
-    case 'pending':
-      return { label: 'Pending', className: 'bg-gray-100 text-gray-700' };
-    default:
-      return { label: 'Idle', className: 'bg-gray-100 text-gray-700' };
-  }
-}
-
 export function UploadActivityCard({ session, compact = false }: UploadActivityCardProps) {
   const navigate = useNavigate();
   const timestamp = formatDate(session.endedAt || session.createdAt);
@@ -71,14 +54,48 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
     : null;
   const fileSize = formatFileSize(session.fileSize);
   const fileName = session.fileName || 'Uploaded video';
-  const progress = session.uploadProgress || 0;
-  const statusBadge = getStatusBadge(session.uploadStatus);
-  const isComplete = session.uploadStatus === 'available' && session.recordingStatus === 'available';
-  const isProcessing = ['uploading', 'processing'].includes(session.uploadStatus || '');
+
+  // Determine actual processing status
+  const isUploading = session.uploadStatus === 'uploading';
+  const isUploadProcessing = session.uploadStatus === 'processing';
+  const isConverting = session.convertStatus === 'processing' ||
+                      (session.convertStatus === 'pending' && session.uploadStatus === 'processing');
+  const isTranscribing = session.transcriptStatus === 'processing';
+  const isGeneratingSummary = session.aiSummaryStatus === 'pending' && session.transcriptStatus === 'available';
+  const isFullyComplete = session.recordingStatus === 'available' &&
+                          (session.aiSummaryStatus === 'available' || session.transcriptStatus === 'available');
+  const isViewable = session.recordingStatus === 'available' ||
+                    session.convertStatus === 'available';
+
+  // Determine current processing step
+  let currentStep = 'Idle';
+  let progressPercent = 0;
+
+  if (isUploading) {
+    currentStep = 'Uploading';
+    progressPercent = session.uploadProgress || 0;
+  } else if (isUploadProcessing && !session.convertStatus) {
+    currentStep = 'Processing upload';
+    progressPercent = 25;
+  } else if (isConverting) {
+    currentStep = 'Converting video';
+    progressPercent = 50;
+  } else if (isTranscribing) {
+    currentStep = 'Transcribing';
+    progressPercent = 75;
+  } else if (isGeneratingSummary) {
+    currentStep = 'Generating summary';
+    progressPercent = 90;
+  } else if (isFullyComplete) {
+    currentStep = 'Complete';
+    progressPercent = 100;
+  }
+
+  const isProcessing = isUploading || isUploadProcessing || isConverting || isTranscribing || isGeneratingSummary;
 
   const handleClick = () => {
-    if (isComplete) {
-      navigate(`/replay/${session.sessionId}`);
+    if (isViewable) {
+      navigate(`/upload/${session.sessionId}`);
     }
   };
 
@@ -86,7 +103,7 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
     <div
       onClick={handleClick}
       className={`p-4 bg-white rounded-lg border border-gray-100 ${
-        isComplete ? 'hover:border-gray-300 cursor-pointer' : 'cursor-default'
+        isViewable ? 'hover:border-gray-300 cursor-pointer' : 'cursor-default'
       } transition-colors`}
     >
       <div className="flex items-start justify-between">
@@ -114,24 +131,39 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
               {session.userId} • {fileSize} • {duration ? `${duration} • ` : ''}{timestamp}
             </p>
 
-            {/* Status Badge */}
-            <div className="mt-2">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusBadge.className}`}>
-                {statusBadge.label}
-              </span>
-              {isComplete && (
-                <svg
-                  className="inline-block w-4 h-4 text-green-600 ml-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+            {/* Processing Status */}
+            <div className="mt-2 flex items-center gap-2">
+              {isProcessing && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                  {currentStep}
+                </span>
               )}
+              {isViewable && !isProcessing && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                  Ready to view
+                </span>
+              )}
+
+              {/* Processing indicators */}
+              <div className="flex items-center gap-1">
+                {session.convertStatus === 'available' && (
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100" title="Video converted">
+                    <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+                {session.transcriptStatus === 'available' && (
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100" title="Transcript ready">
+                    <span className="text-xs">📝</span>
+                  </span>
+                )}
+                {session.aiSummaryStatus === 'available' && (
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100" title="AI summary ready">
+                    <span className="text-xs">🤖</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -141,24 +173,24 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
       {isProcessing && (
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-            <span>Progress</span>
-            <span>{Math.round(progress)}%</span>
+            <span>{currentStep}</span>
+            {isUploading && <span>{Math.round(progressPercent)}%</span>}
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 ${
-                session.uploadStatus === 'uploading'
-                  ? 'bg-blue-600 bg-stripes animate-stripes'
-                  : 'bg-yellow-600'
-              }`}
-              style={{ width: `${progress}%` }}
-            />
+            {isUploading ? (
+              <div
+                className="h-full bg-blue-600 transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            ) : (
+              <div className="h-full bg-yellow-600 animate-pulse" />
+            )}
           </div>
         </div>
       )}
 
       {/* AI Summary (when complete) */}
-      {isComplete && (
+      {isFullyComplete && (
         <div className="mt-2">
           <SummaryDisplay
             summary={session.aiSummary}

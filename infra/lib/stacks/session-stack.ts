@@ -47,7 +47,9 @@ export class SessionStack extends Stack {
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.DESTROY,
-      pointInTimeRecovery: false,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: false,
+      },
     });
 
     // GSI1 for status-based queries
@@ -153,10 +155,6 @@ export class SessionStack extends Stack {
         },
       })
     );
-
-    // IVS Cleanup Custom Resource
-    // This ensures IVS channels are properly cleaned up before stack deletion
-    const cleanupResource = new IvsCleanupResource(this, 'IvsCleanup');
 
     // IVS Recording Configuration (L1 constructs)
     const recordingConfiguration = new ivs.CfnRecordingConfiguration(this, 'RecordingConfiguration', {

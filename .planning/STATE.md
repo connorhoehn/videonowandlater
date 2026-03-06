@@ -107,6 +107,13 @@ v1.2 decisions from Phase 20-02 (Frontend):
 - **Data flow unchanged** - Frontend passes summary fields as-is from backend; no transformation in getRecentActivity
 - **Summary positioning** - Below reactions on activity cards, above reactions on replay viewer for logical information hierarchy
 
+v1.3 decisions from Phase 21-01 (Backend Domain Models):
+- **UPLOAD sessions use existing Session model** - Reuse DynamoDB schema and GSI pattern rather than separate collection, maintaining backward compatibility
+- **Field isolation via selective UpdateExpression** - uploadStatus/uploadProgress updated together; mediaConvertJobName/convertStatus updated separately to prevent accidental overwrites
+- **No IVS resource claims for UPLOAD sessions** - Skip channel/stage claiming to reduce pool contention; chatRoom initialized as empty string for future chat feature
+- **Session stays in CREATING status** - UPLOAD sessions remain in status='creating' until convertStatus='available' (unlike BROADCAST/HANGOUT which transition to live→ending→ended). Prevents "session status confusion" pitfall where frontend thinks session is ready before HLS URL populated.
+- **Version field incrementation on all updates** - Following Phase 16-20 pattern, all UpdateCommand calls include `#version = #version + :inc` for optimistic locking
+
 ### Roadmap Evolution
 
 - Phase 21 added: Video Uploads — Support uploading pre-recorded videos (mov/mp4 from phone or computer) with processing, transcription, and adaptive bitrate streaming
@@ -123,8 +130,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 20-02-PLAN.md (AI summary frontend - SummaryDisplay component, activity card integration, replay viewer integration)
+Stopped at: Completed 21-01-PLAN.md (Backend domain models - SessionType.UPLOAD, 3 repository functions for upload session lifecycle)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-06 — 20-02 complete (SummaryDisplay reusable component created with status-based rendering; BroadcastActivityCard and HangoutActivityCard integrated with 2-line truncated summaries; ReplayViewer updated with full summary display in metadata panel; 21 tests passing; project v1.2 COMPLETE - all 20 phases and 40 plans executed)*
+*Last updated: 2026-03-06 — 21-01 complete (Session domain extended with UPLOAD type and 10 upload-related fields; createUploadSession(), updateUploadProgress(), updateConvertStatus() repository functions implemented with field isolation; 20 new unit tests added; 244/244 backend tests passing; v1.3 milestone started)*

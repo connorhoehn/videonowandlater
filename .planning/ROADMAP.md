@@ -262,16 +262,12 @@ Plans:
   5. Reaction summary counts (per emoji type) are visible on recording cards in the slider
   6. Reaction summary counts are displayed in the replay info panel when viewing a recording
   7. GET /activity returns recent sessions with all activity metadata in a single API call — the frontend does not aggregate counts at read time
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 18-01: GET /activity endpoint — list-activity.ts Lambda and CDK wiring
-- [ ] 18-02: Homepage layout redesign — horizontal recording slider with scroll-snap
-- [ ] 18-03: Activity feed — broadcast and hangout activity cards with reaction counts and participant data
-
-**Pre-plan decisions required:**
-- messageCount tracking approach: (a) atomic ADD counter in send-message.ts, (b) count chat items at session end in recording-ended.ts, or (c) show N/A initially. Decide before writing 18-01.
-- GET /activity auth posture: public (matching GET /recordings) or authenticated. Decide before writing 18-01.
+- [ ] 18-01-PLAN.md — GET /activity endpoint, messageCount tracking, CDK wiring (ACTV-06, RSUMM-02, RSUMM-03)
+- [ ] 18-02-PLAN.md — Homepage layout redesign, activity feed, recording slider (ACTV-01, ACTV-02, ACTV-03, ACTV-04, ACTV-05)
+- [ ] 18-03-PLAN.md — ReplayViewer reaction summary display (RSUMM-03)
 
 ### Phase 19: Transcription Pipeline
 **Goal**: When a recording becomes available in S3, a transcription job is automatically started and the resulting transcript is stored on the session record
@@ -330,10 +326,10 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
 | 16. Hangout Participant Tracking | v1.2 | 0/1 | Planned | - |
 | 17. Reaction Summary at Session End | v1.2 | Complete    | 2026-03-06 | - |
-| 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Not started | - |
+| 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Planned | - |
 | 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |
 | 20. AI Summary Pipeline | v1.2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-05 — Phase 16 planned*
+*Last updated: 2026-03-05 — Phase 18 planned*

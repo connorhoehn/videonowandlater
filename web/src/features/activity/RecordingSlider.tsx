@@ -19,6 +19,8 @@ export interface ActivitySession {
   participantCount?: number;
   messageCount?: number;
   recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  aiSummary?: string;
+  aiSummaryStatus?: 'pending' | 'available' | 'failed';
 }
 
 interface RecordingSliderProps {

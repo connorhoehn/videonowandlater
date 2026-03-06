@@ -1,10 +1,11 @@
 /**
  * BroadcastActivityCard - Activity card for broadcast sessions
- * Displays userId, duration, reaction summary pills, and relative timestamp
+ * Displays userId, duration, reaction summary pills, AI summary (2-line truncated), and relative timestamp
  */
 
 import { useNavigate } from 'react-router-dom';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
+import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './RecordingSlider';
 
 interface BroadcastActivityCardProps {
@@ -54,6 +55,16 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
       </div>
       <div className="mt-3">
         <ReactionSummaryPills reactionSummary={session.reactionSummary} />
+      </div>
+
+      {/* AI Summary (Phase 20) */}
+      <div className="mt-2">
+        <SummaryDisplay
+          summary={session.aiSummary}
+          status={session.aiSummaryStatus}
+          truncate={true}
+          className="text-gray-700"
+        />
       </div>
     </div>
   );

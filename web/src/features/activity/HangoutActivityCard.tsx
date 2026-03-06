@@ -1,9 +1,10 @@
 /**
  * HangoutActivityCard - Activity card for hangout sessions
- * Displays userId, participant count, message count, duration, and relative timestamp
+ * Displays userId, participant count, message count, duration, AI summary (2-line truncated), and relative timestamp
  */
 
 import { useNavigate } from 'react-router-dom';
+import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './RecordingSlider';
 
 interface HangoutActivityCardProps {
@@ -54,6 +55,16 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
             {timestamp}
           </p>
         </div>
+      </div>
+
+      {/* AI Summary (Phase 20) */}
+      <div className="mt-2">
+        <SummaryDisplay
+          summary={session.aiSummary}
+          status={session.aiSummaryStatus}
+          truncate={true}
+          className="text-gray-700"
+        />
       </div>
     </div>
   );

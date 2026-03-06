@@ -664,6 +664,12 @@ export class SessionStack extends Stack {
     // Grant DynamoDB access to on-mediaconvert-complete
     this.table.grantReadWriteData(onMediaConvertCompleteFunction);
 
+    // Grant EventBridge permissions to publish transcription trigger events (Phase 21 → Phase 19)
+    onMediaConvertCompleteFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: ['arn:aws:events:*:*:event-bus/default'],
+    }));
+
     // EventBridge rule for MediaConvert job state changes (Phase 21)
     const mediaConvertCompleteRule = new events.Rule(this, 'MediaConvertCompleteRule', {
       eventPattern: {

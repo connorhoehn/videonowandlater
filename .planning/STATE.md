@@ -93,8 +93,9 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 | Non-owner session deletion cascades | MODERATE | Soft delete sessions (mark archived); verify collections handle missing sessions gracefully |
 | Token caching performance | LOW | Target 10K users for v1.3; profile during phase execution; add Redis cache only if DynamoDB bottleneck |
 
-### Pending Todos (4)
+### Pending Todos (12)
 
+- [ ] Add CDK hooks to clean up IVS resources before stack deletion (infra)
 - [ ] Switch to Nova Pro for AI generative processing (backend)
 - [ ] Phase 23 planning: Run `/gsd:plan-phase 23` to derive plans from success criteria
 - [ ] Phase 23 implementation: Create-share-link handler + revoke handler + frontend Share button + copy-to-clipboard UI

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Live Broadcast with Secure Links
 status: in-progress
-stopped_at: Completed 20-05-PLAN.md (S3 transcript fetch integration with Bedrock)
-last_updated: "2026-03-06T01:49:00Z"
-last_activity: 2026-03-06 — Completed 20-05-PLAN.md (S3 fetch in store-summary handler, Phase 19→20 pipeline complete)
+stopped_at: Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
+last_updated: "2026-03-06T01:50:24Z"
+last_activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token handler with ES384 JWT signing, 8 new tests)
 progress:
   total_phases: 22
-  completed_phases: 20
+  completed_phases: 22
   total_plans: 48
-  completed_plans: 45
-  percent: 94
+  completed_plans: 46
+  percent: 96
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 20 of 22 (AI Summary Pipeline) -- GAP CLOSURE
-Plan: 05 of 05 (S3 Transcript Fetch Integration) -- COMPLETE
-Status: Implemented S3 fetch logic in store-summary handler. Updated event contract: Phase 19 now emits transcriptS3Uri (S3 as source of truth) instead of transcriptText. store-summary fetches transcript from S3 via GetObjectCommand, handles empty transcripts gracefully (non-blocking), and invokes Bedrock Claude for summary generation. Phase 19→20 pipeline fully integrated. All 323 backend tests passing.
-Last activity: 2026-03-06 — Completed 20-05-PLAN.md (S3 fetch in store-summary handler)
+Phase: 22 of 22 (Live Broadcast with Secure Viewer Links) -- IN PROGRESS
+Plan: 02 of 04 (Playback Token Handler) -- COMPLETE
+Status: Implemented POST /sessions/{sessionId}/playback-token endpoint with ES384 JWT signing for private broadcast playback. Handler validates private sessions, extracts channel ARNs, generates time-limited tokens (24-hour default), and constructs playback URLs with token parameters. Comprehensive unit test coverage (8 tests) for token generation, defaults, and all error cases. Added jsonwebtoken dependency. All 331 backend tests passing.
+Last activity: 2026-03-06 — Completed 22-02-PLAN.md (Playback token generation with ES384 JWT signing)
 
-Progress: [████████████████████] 94% (45/48 plans complete)
+Progress: [████████████████████] 98% (46/48 plans complete)
 
 ## Performance Metrics
 

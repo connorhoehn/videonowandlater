@@ -1,288 +1,197 @@
-# Project Research Summary: v1.4 Creator Studio & Stream Quality
+# Research Summary: Shareable Links & Collections (v1.3)
 
-**Domain:** AWS IVS live video platform — stream quality monitoring + creator cross-promotion features
-**Research Date:** 2026-03-06
-**Researched Artifacts:** STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md
-**Overall Confidence:** HIGH
-
----
+**Project:** VideoNowAndLater — Shareable Links & Collections Milestone
+**Domain:** Session sharing and content organization for video streaming platform
+**Researched:** 2026-03-05
+**Confidence:** HIGH
 
 ## Executive Summary
 
-Adding stream quality monitoring and creator spotlight features to VideoNowAndLater requires **minimal new infrastructure** but **careful integration discipline** to avoid degrading the existing real-time system.
+Shareable links and collections represent a natural extension of v1.3's private session architecture, leveraging proven JWT token patterns already deployed in production. The research confirms that both features can be implemented with **minimal stack additions** (only bcrypt for optional password hashing) and **zero refactoring** to existing components—they extend via new DynamoDB entity types and API endpoints. The recommended approach prioritizes shareable links first (1-2 weeks), then collections (2-3 weeks), then polish and delete operations (1-2 weeks), following clear dependency chains in architecture.
 
-**The recommendation:** Stream quality metrics are natively available from AWS IVS Web Broadcast SDK (`getStatus()` call, synchronous). Visualize with a lightweight charting library (Recharts, 40KB). Creator spotlight is purely metadata (one optional `featuredUid` field on Session). No breaking changes, fully backward compatible.
+The key risk is **security-first design discipline**: token claim tampering, collection privacy escalation, and permission bypass must be prevented through rigorous validation and testing. Research identifies 10 specific pitfalls with concrete prevention strategies. All pitfalls are avoidable through defensive coding patterns (permission checks on every write, signature validation on every token, cascading deletes) and comprehensive testing (security tests for tampering, concurrency tests for race conditions).
 
-**The risk:** Quality metrics polling must be bounded (5+ second minimum cadence) to prevent API load multiplication. Featured broadcast cross-promotion creates N×M query explosion if not architecturally constrained. Both features compete with existing IVS Chat polling if spotlight updates sent via Chat instead of separate transport. Success depends on strict cardinality limits and performance gating during verification.
-
----
+Operationally, the platform reuses single-table DynamoDB design, Lambda handlers, and Cognito auth; no new infrastructure components required. Stack is proven, scalable to 10K+ users without optimization, and requires only one new GSI for efficient collection queries.
 
 ## Key Findings
 
-### From STACK.md: Technology Additions
+### Recommended Stack
 
-| Technology | Version | Purpose | Why | Status |
-|-----------|---------|---------|-----|--------|
-| **recharts** | ^1.8.5 | Real-time metrics visualization | Lightweight React wrapper on D3; 40KB gzipped; perfect for live updates | NEW dependency |
-| **amazon-ivs-web-broadcast** | ^1.32.0 | Metrics collection | Already installed; `getStatus()` provides bitrate, resolution, fps natively | NO change |
-| **motion** | ^12.34.4 | UI transitions for spotlight | Already installed; reuse for fade-in/slide-in | NO change |
-| **DynamoDB** | existing | Featured broadcast storage | Add optional `featuredUid?: string` to Session model | Optional field |
-| **Lambda** | existing | Spotlight endpoint | New `POST /sessions/{sessionId}/feature` handler | New handler |
+From STACK.md: **No new dependencies beyond v1.3**. Core technologies already in place:
 
-**Breaking changes:** NONE. All additions are backward compatible. Session model extension is optional; existing sessions have undefined field (falsy check works).
+**Proven technologies (extend from v1.3):**
+- **jsonwebtoken (^9.0.0)** — ES384 JWT signing; already used in v1.3 Phase 22; extend with `link_id` custom claim for share link tracking
+- **AWS DynamoDB (managed)** — Single-table design; add SHARE_LINK# and COLLECTION# entity types; add GSI2 for owner-based collection queries
+- **Lambda (Node.js 20.x)** — Existing runtime; new handlers for link/collection operations follow existing patterns
+- **API Gateway (managed)** — Extend with 6 new endpoints (create-link, revoke-link, get-link-playback, create-collection, add-session, get-collection)
 
-**Key decision:** Metrics come free from IVS Broadcast SDK via synchronous `getStatus()` call. No external metrics infrastructure (CloudWatch, Datadog) needed. Latency stays low, cost stays zero. For real-time dashboard, synchronous API is mandatory.
+**Optional for Phase 3:**
+- **bcrypt (^5.1.0)** — Hash collection passwords if optional password protection implemented; OWASP-compliant security practice
 
----
+**Performance targets:** Share link creation <200ms, playback token fetch <100ms, collection queries <500ms. On-demand DynamoDB pricing sufficient; no pre-provisioned capacity needed.
 
-### From FEATURES.md: What Gets Built in v1.4
+### Expected Features
 
-**In Scope (Differentiators):**
-- Stream quality metrics dashboard for broadcaster (viewer experience: join latency, buffering events, playback quality state)
-- Creator spotlight: broadcaster can feature one active creator from their viewers
-- Featured broadcast link shown on viewer page
-- Featured broadcast persisted on Session (shows in replay)
+From FEATURES.md summary:
 
-**Out of Scope (Defer to v1.5+):**
-- Encoder bitrate/fps/frame drops (requires encoder integration, not available in browser)
-- Per-viewer analytics (privacy concern)
-- Historical quality trends (analytics DB needed)
-- Featured creator recommendations (ML)
-- Global search for featured creators (scope: this broadcast's viewers only)
+**Must have (table stakes) — MVP Phase 1-2:**
+- Share session with time-limited link (7-day default expiration)
+- No account required for viewers (link-based access)
+- Organize sessions into named collections with privacy controls
+- Revoke access to shared links (prevent indefinite sharing)
+- View collection with all sessions inside
 
-**Phasing constraint:** Reaction counts + Hangout tracking from v1.2 already complete. v1.4 sits on top of stable v1.1-v1.3 foundation.
+**Should have (differentiators) — MVP Phase 1-3:**
+- Generate short, copy-paste share URLs (not long JWT strings)
+- Display link expiration countdown on shared link
+- Optional password protection on private collections
+- Clear "Created by @owner" metadata on shared content
+- Delete collections safely (cascading cleanup)
 
----
+**Defer to v2+ (out of MVP scope):**
+- Bulk collection sharing (single token for entire collection)
+- Collaborative collections (multiple owners)
+- Search/browse public collections
+- Collection analytics (view counts)
+- Embed collections via iframe
 
-### From ARCHITECTURE.md: System Integration Points
+### Architecture Approach
 
-**Hangout Participant Tracking (Existing from v1.2):**
-- Modify `join-hangout.ts`: persist PARTICIPANT item after token generation
-- PK=`SESSION#{id}`, SK=`PARTICIPANT#{userId}` (separate items, no version conflict)
-- Query with `begins_with(SK, 'PARTICIPANT#')` for all participants
+From ARCHITECTURE.md: Integration strategy is **surface-level extension** of existing architecture. No refactoring required; two orthogonal new features built cleanly alongside v1.3 foundation.
 
-**Reaction Summary (Existing from v1.2):**
-- Modify `recording-ended.ts`: compute reaction counts at session end
-- Store `reactionSummary: { fire: N, heart: N, ... }` on Session METADATA
-- Frontend displays top 2-3 emoji types on cards + full breakdown on replay panel
+**Share links** reuse ES384 JWT playback token pattern from v1.3. Extend with:
+- Custom `link_id` claim for tracking/revocation
+- `purpose` claim distinguishing share tokens from owner tokens
+- 7-day default TTL (vs 24h for owners)
+- SHARE_LINK# DynamoDB records storing token metadata + revoked flag
 
-**For v1.4 — Quality Metrics:**
-- New metrics fields on Session (optional): `metricsLastUpdated`, `viewerExperienceStatus`
-- No EventBridge changes; metrics polled on-demand via HTTP
-- Caching: 4-5 second TTL on backend to prevent API storms
+**Collections** introduce new entity type:
+- COLLECTION# records for metadata (title, description, privacy, owner)
+- SESSION# membership records (no JSON arrays; supports atomic operations)
+- GSI2 index (OWNER#{userId}) for efficient "all user's collections" queries
 
-**For v1.4 — Featured Broadcast:**
-- Add optional `featuredUid?: string` to Session METADATA item
-- New handler: `POST /sessions/{sessionId}/feature` (atomic DynamoDB write)
-- Frontend polls `GET /sessions/{sessionId}` every 5-10 seconds to detect featured change
-- Alternative for v1.5+: WebSocket push (not v1.4)
+**Major components added:**
+1. ShareLink domain model + repository functions (CRUD)
+2. Collection domain model + repository functions (CRUD + membership)
+3. 6 new Lambda handlers (create-link, revoke-link, get-playback-from-link, create-collection, add-to-collection, get-collection)
+4. GSI2 index on sessions table
 
-**Performance constraint:** Featured broadcast data NOT loaded on list views. Only on broadcaster dashboard (during live) and replay detail page. Prevent N+1 query explosion.
+**Integration:** No changes to Session model or existing handlers. Collections and share links reference sessions by ID only.
 
----
+### Critical Pitfalls
 
-### From PITFALLS.md: Critical Risks & Prevention
+From PITFALLS.md, ranked by severity:
 
-| Pitfall | Severity | Prevention | Detection |
-|---------|----------|-----------|-----------|
-| **Unbounded metrics polling creates API storms** | CRITICAL | Min 5s polling cadence; backend cache 4-5s; load test with 50 concurrent broadcasters | DynamoDB throttle warnings; IVS GetStream latency > 500ms |
-| **Featured broadcast N×M query explosion** | CRITICAL | Featured data only on detail views, not lists; pre-fetch in list-activity response | Homepage load time > 2.5s; 20+ parallel GET requests on page load |
-| **Spotlight events overwhelm IVS Chat channel** | CRITICAL | Separate API transport for spotlight updates; don't mix with messages | Chat message delivery latency increases 1-2s; users report missing messages |
-| **Metrics require encoder instrumentation (unavailable in browser)** | MODERATE | Scope: viewer experience metrics only (join latency, buffering); NOT encoder bitrate/fps/frame drops | Phase research doesn't mention IVS API limitations; encoder stats in feature requirements |
-| **Featured broadcast field added as required (backward compat failure)** | MODERATE | ALL new fields optional (`?`); default to undefined; test loading Phase 1-22 sessions | Activity feed 500 error on production; validation errors in logs |
-| **Featured creator modal search becomes performance nightmare** | MODERATE | Scope: viewers of THIS broadcast only; max 20 broadcasts shown; no autocomplete search | Modal search latency > 2s; DynamoDB consumed capacity spikes |
-| **Metrics state not cleared when broadcast ends** | MINOR | Reset metrics on session status → ENDED; unmount component or set state to null | Stale metrics visible for 5+ seconds after broadcast restart |
-| **Featured creator avatar flickers (CLS issue)** | MINOR | Preload avatar image; include URL in response; show skeleton while loading | Avatar placeholder for 200ms then appears; CLS score increases |
-| **Metrics caching obscures live issues** | MINOR | Show "last updated X seconds ago"; invalidate cache if bitrate drops > 50% | User complaint: dashboard said stream fine but viewers saw buffering |
+1. **JWT Token Claim Tampering** — Attacker modifies `link_id` claim in captured JWT to access unintended sessions. **Prevention:** Always validate signature + verify link_id matches SHARE_LINK# record + check revoked flag.
 
-**Gate requirements:**
-- Phase 23 (Quality Metrics): Load test with 50 concurrent broadcasters; API latency < 200ms; backward compatibility test
-- Phase 24 (Featured Broadcast): Homepage load < 2.5s; query audit required; featured data pre-fetched in list responses
+2. **Collection Privacy Escalation** — Default `isPrivate=false` makes sensitive collections public without user awareness. **Prevention:** Default `isPrivate=true` (private by default); explicit confirmation dialog to publish; audit log privacy changes.
 
----
+3. **Cascading Delete Orphans** — Deleting collection doesn't clean up COLLECTION_SESSION# membership records; orphaned records persist. **Prevention:** Transaction: query all memberships → delete each → delete metadata. Verify count before returning success.
+
+4. **Race Condition in Revocation** — User revokes link while viewer fetches playback; timing race may allow revoked token to serve content. **Prevention:** Conditional writes + always read latest record state before serving.
+
+5. **Permission Bypass on Modifications** — Missing owner check allows User B to modify User A's collection. **Prevention:** Owner check on every write endpoint (POST/DELETE); return 403 Forbidden if not owner.
 
 ## Implications for Roadmap
 
-### Recommended Phase Structure
+Based on research, recommended phase structure with clear dependencies:
 
-**Phase 23: Stream Quality Metrics Dashboard (Low to Medium Risk)**
+### Phase 1: Shareable Links (1-2 weeks)
+**Rationale:** Foundational feature extending proven v1.3 JWT pattern; no new complexity or dependencies. Must ship before collections (collections rely on stable session references).
 
-*Rationale:* Standalone broadcaster-facing feature; no viewer impact; metrics free from IVS SDK.
+**Delivers:**
+- POST /sessions/{id}/share-link (create link with custom JWT)
+- GET /playback/link/{shareId} (fetch playback from share link)
+- DELETE /sessions/{id}/share-link/{shareId} (revoke link)
+- Frontend: "Share" button, copy-to-clipboard UI, expiration countdown
 
-**Deliverables:**
-- Metrics collection hook in BroadcastPage: poll `client.getStatus()` on 5s cadence
-- Quality dashboard component: Recharts line chart showing bitrate, fps, network status
-- Caching layer: Backend caches metrics 4-5s; multiple simultaneous requests return cached result
-- Display cache age: "Last updated 4s ago" label on dashboard
-- Backward compatibility: Optional metric fields on Session; test with Phase 1-22 sessions
-- Load test gate: 50 concurrent broadcasters; verify API latency < 200ms, no DynamoDB throttle
+**Addresses features:** Share session with time-limited link, No account required for viewers, Revoke access to shared links, Short copy-paste URLs
 
-**Stack additions:** Recharts only (40KB gzipped)
+**Avoids pitfalls:** JWT claim tampering (comprehensive token validation tests), Race condition in revocation (conditional writes), Permission escalation (verify ownership)
 
-**Duration estimate:** 2-3 weeks (includes load testing)
+### Phase 2: Collections Core (2-3 weeks)
+**Rationale:** Depends on Phase 1 (share links work correctly first); introduces collection entity type with GSI2 index; requires careful permission checks.
 
----
+**Delivers:**
+- POST /collections (create collection, default private)
+- POST /collections/{id}/sessions (add session to collection)
+- GET /collections/{id} (fetch collection + all sessions with privacy check)
+- GET /collections?userId=X (list user's collections, paginated)
+- Frontend: Create collection modal, collection detail page, session list, add-to-collection UI
 
-**Phase 24: Creator Spotlight (Medium Risk)**
+**Addresses features:** Organize sessions into named collections, Privacy control per collection, View who shared with you (owner metadata), Cursor-based pagination
 
-*Rationale:* Depends on Phase 23 load testing validation. Pure metadata feature; scope strictly limited to avoid query explosion.
+**Avoids pitfalls:** Privacy escalation (default isPrivate=true + explicit confirmation), Permission bypass (owner check on every write), Large collections (pagination implemented)
 
-**Deliverables:**
-- Featured broadcast selection modal: shows viewers of THIS broadcast only (max 20 results)
-- Backend endpoint: `POST /sessions/{sessionId}/feature` (validate ownership, atomic DynamoDB write)
-- Frontend polling: `GET /sessions/{sessionId}` every 5-10s to detect featured change (acceptable for v1.4)
-- Viewer page link: featured broadcast info + link to navigate
-- Replay persistence: featured broadcast shown on replay viewer of original session
-- Backward compatibility: `featuredUid?: string` optional field; handle undefined gracefully
-- Query audit: Featured data pre-fetched in `list-activity` response (not fetched per card)
-- Privacy audit: Featured creator links only visible to active broadcast viewers
+### Phase 3: Collections Polish & Password Protection (1-2 weeks)
+**Rationale:** Non-blocking features that depend on Phases 1-2 working correctly. Includes delete operations with cascading cleanup, optional password hashing.
 
-**Stack additions:** None (pure backend metadata + frontend UI)
+**Delivers:**
+- DELETE /collections/{id} (safe cascading delete with orphan prevention)
+- PATCH /collections/{id} (update metadata)
+- DELETE /collections/{id}/sessions/{sessionId} (remove session from collection)
+- Optional password protection (bcrypt hashing)
+- Frontend: Delete with confirmation, edit collection metadata, remove session from collection
+- Comprehensive security testing suite
 
-**Duration estimate:** 2-3 weeks (includes query audit + load testing)
+**Avoids pitfalls:** Cascading delete orphans (transaction delete + verification), Password plain-text storage (bcrypt hashing + code review)
 
----
+### Phase Ordering Rationale
 
-### Feature Grouping & Dependencies
+1. **Phase 1 before Phase 2:** Share links are simpler, foundational, and prove JWT/token patterns work correctly. Collections need stable sessions + proven token patterns.
 
-```
-Phase 1-22 (Complete)
-├─ v1.1 (Broadcast + Hangout + Chat + Reactions + Replay)
-├─ v1.2 (Reaction Counts + Hangout Tracking + Activity Feed)
-├─ v1.3 (Transcription + AI Summaries)
-│
-└─ v1.4 (Creator Studio & Stream Quality)
-   ├─ Phase 23: Quality Metrics (independent; broadcaster-only)
-   │  └─ Phase 24: Creator Spotlight (depends on Phase 23 validation)
-   │     └─ Phase 25 (optional): WebSocket Real-Time Spotlight Updates (v1.5+)
-```
+2. **Phase 2 core before Phase 3 polish:** Phase 2 delivers core read/create operations; Phase 3 adds delete/update + optional features. Phased approach reduces risk.
 
-**No architectural changes.** Both phases add data to existing Session model (optional fields). No new tables, no new EventBridge rules, no new Lambda patterns beyond what v1.2 established.
+3. **Pagination from Phase 1:** Large collection queries identified as pitfall; implementing early prevents v1 → v2 migration pain.
 
----
+4. **Permission checks in every write:** Phases 2-3 must emphasize owner/privacy validation; consistent testing across all write endpoints.
 
-## Validation Gates (Must Pass Before Ship)
+### Research Flags
 
-### Phase 23 Verification Checklist
-- [ ] Load test: 50 concurrent broadcasters polling metrics at 5s cadence; API latency < 200ms; DynamoDB throttle events = 0
-- [ ] Backward compatibility: Load Phase 1-22 recordings; no validation errors on missing metric fields
-- [ ] Cache behavior: Metrics display updates within 5 seconds; "last updated X seconds ago" label accurate and shows correct time
-- [ ] Fallback: If IVS GetStream API fails, dashboard shows "Metrics unavailable"; broadcast continues normally
-- [ ] Unit/integration tests: useBroadcast hook + QualityMetricsDashboard component; 80%+ code coverage
-- [ ] Performance: Dashboard renders without janky animations; Recharts re-render optimized for 1-5 updates/sec
+**Phases needing deeper research during planning:**
+- **Phase 2 (Collections):** Permission model and privacy enforcement — recommend threat modeling session + comprehensive test plan before implementation starts. Identify edge cases (non-owner attempts modification, session deletion while in collections, etc.).
 
-### Phase 24 Verification Checklist
-- [ ] Query performance: Homepage loads in < 2.5s with 30 active broadcasts
-- [ ] Featured data loading: Pre-fetched in `list-activity` response (verified in network tab)
-- [ ] Featured creator selection: Modal search latency < 500ms; returns <= 20 broadcasts (viewers of THIS broadcast only)
-- [ ] Backward compatibility: Replays of Phase 1-22 broadcasts render without errors; missing `featuredUid` field handled gracefully
-- [ ] Avatar preload: Featured creator overlay loads without Cumulative Layout Shift (CLS); no visual flicker
-- [ ] State reset: After broadcast ends, starting new broadcast shows clean featured state (no stale data)
-- [ ] Privacy audit: Featured creator links only visible to active broadcast viewers; spot-check activity feed for no exposure
-- [ ] Integration test: End-to-end flow — broadcaster selects featured creator → viewers see link → click → navigate to featured broadcast (no timeouts)
-
----
-
-## Research Flags (Phases Needing Additional Research)
-
-| Phase | Topic | Why Research Needed | Action |
-|-------|-------|-------------------|--------|
-| Phase 23 | IVS GetStream API exact metrics | Confirm available metrics from AWS IVS SDK before UI mockups created | Run Phase 23 research; document `getStatus()` output schema |
-| Phase 23 | Encoder bitrate capability | Verify if browser WebRTC stats provide encoder-side metrics; probably not | Test IVS Web Broadcast SDK + RTCPeerConnection APIs in spike |
-| Phase 24 | Featured creator opt-in | If creators don't want to be featured, should we require consent? | Product/design alignment; defer to v1.5 if complex |
-| Phase 24 | WebSocket real-time updates | For featured broadcast changes to propagate instantly; current polling is 5-10s | Defer to v1.5; v1.4 acceptable with polling latency |
-
-**Standard patterns (no research needed):**
-- DynamoDB optional fields + backward compatibility (v1.2 established this pattern)
-- Lambda handler + EventBridge integration (established in v1.1-v1.3)
-- React hooks for state management (project convention)
-- Frontend caching strategies (standard web patterns)
-
----
+**Phases with standard patterns:**
+- **Phase 1 (Shareable Links):** JWT token pattern proven in v1.3; ES384 signing well-documented. Standard implementation, no research needed.
+- **Phase 3 (Password Protection):** Bcrypt hashing is OWASP standard; DynamoDB cascading deletes follow established patterns. Standard implementation.
 
 ## Confidence Assessment
 
-| Area | Level | Notes |
-|------|-------|-------|
-| **Stack (Recharts + IVS SDK metrics)** | HIGH | Recharts mature library (40K+ weekly npm downloads); IVS SDK v1.32.0 stable with documented `getStatus()` API |
-| **Featured broadcast metadata** | HIGH | Simple optional Session field; backward compatible; proven pattern from v1.2 optional fields |
-| **Architecture (no breaking changes)** | HIGH | All changes additive; Session model extension is optional; DynamoDB single-table design accommodates new fields |
-| **Polling strategy (5s+ minimum)** | HIGH | Inferred from existing `useViewerCount` (15s cadence) and IVS API documented limits; load testing will validate |
-| **No encoder metrics in browser** | MEDIUM | IVS Web Broadcast SDK likely limited to viewer experience stats; requires verification in Phase 23 research |
-| **Query performance gating** | MEDIUM | Depends on discipline during Phase 24 implementation; risk if featured data added to list views without pre-fetch |
-| **Privacy implications** | MEDIUM | Current plan assumes featured creators OK with visibility; opt-in consent may be needed (defer to v1.5) |
-| **WebSocket real-time updates** | LOW | Deferred to v1.5; polling strategy (5-10s) acceptable for v1.4 MVP |
+| Area | Confidence | Notes |
+|------|------------|-------|
+| **Stack** | HIGH | All technologies already in v1.3 or standard (bcrypt). No unproven choices. Reuses existing patterns. |
+| **Features** | HIGH | MVP clearly defined with must-have/should-have/defer. Dependencies explicit. Feature scope well-bounded. |
+| **Architecture** | HIGH | Extends existing v1.3 without refactoring. DynamoDB design proven at scale. New entities follow single-table pattern. Component boundaries clear. |
+| **Pitfalls** | MEDIUM-HIGH | 10 specific pitfalls identified with prevention strategies. 5 are critical (security); 3 are operational (scale/UX); 2 are minor (denormalization/naming). All preventable with discipline + testing. |
 
----
+**Overall confidence:** HIGH — Research builds on established v1.3 foundation. No unproven technologies or untested patterns. Pitfalls well-understood and actionable.
 
-## Gaps & Open Questions
+### Gaps to Address
 
-1. **Encoder metrics availability:** Phase 23 research must verify exact output of `IVSBroadcastClient.getStatus()` and whether browser WebRTC APIs provide encoder-side bitrate/fps/frame drops. If unavailable, scope dashboard to viewer experience metrics only.
+1. **Permission model edge cases** — Research identifies permission patterns but doesn't exhaustively enumerate all edge cases (e.g., session deletion cascading to collections, user deactivation). **Mitigation:** During Phase 2 planning, create detailed threat model + test matrix for non-owner scenarios.
 
-2. **Featured creator opt-in:** Should creators be able to opt out of being featured by others? Current plan assumes yes. Product/design needs to clarify consent model before Phase 24 implementation.
+2. **Token caching performance** — Research suggests token validation may become bottleneck at 100K+ concurrent users; recommends cache layer. **Mitigation:** MVP doesn't need caching (target 10K users); profile during phase execution; add Redis cache only if DynamoDB becomes bottleneck.
 
-3. **Avatar storage & CDN:** Featured creator avatars must be preloaded to avoid CLS. Confirm S3 avatars are CloudFront-cached with 1-year cache headers before Phase 24 ships.
-
-4. **Real-time spotlight transport for v1.5:** Current featured broadcast selection uses HTTP polling (5-10s latency). For instant updates, v1.5 should add WebSocket transport to avoid cluttering IVS Chat with spotlight events.
-
-5. **Load testing infrastructure:** CI/CD should add load testing suite for Phase 23+ to measure API latency under 50+ concurrent users. Currently not in test suite.
-
----
-
-## Next Steps
-
-1. **Phase 23 Planning:** Run `/gsd:research-phase` to confirm IVS SDK metrics availability + encoder limitations. Update feature requirements based on findings.
-
-2. **Phase 23 Implementation:** Implement metrics collection (5s polling cadence) + caching before UI code. Load test gate must pass before Phase 24 begins.
-
-3. **Phase 24 Planning:** Design featured creator selection modal scoped to "viewers of THIS broadcast only" (not global). Create query audit checklist.
-
-4. **Phase 24 Implementation:** Implement with strict performance gating. Featured data pre-fetched in `list-activity` response; never loaded per card.
-
-5. **Post-Phase 24:** Gather user feedback on polling latency (5-10s). If real-time updates critical, prioritize WebSocket transport for v1.5.
-
----
+3. **Mobile playback token refresh** — Research notes iOS IVS player may cache tokens; share link expiration unnoticed. **Mitigation:** Phase 3 includes mobile testing; implement token refresh every 5min on mobile; handle 401 by fetching new token.
 
 ## Sources
 
-**High Confidence (Direct Codebase Analysis):**
-- STACK.md: Recharts library research + amazon-ivs-web-broadcast capabilities (verified against installed package versions)
-- ARCHITECTURE.md: Integration points read directly from `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`
-- FEATURES.md: Phasing constraints + feature scope from v1.2 research + AWS official docs (Transcribe, Bedrock, IVS)
-- PITFALLS.md: Risks identified from existing polling pattern (`useViewerCount` 15s cadence) + DynamoDB single-table design + N+1 query anti-patterns
+### Primary (HIGH confidence)
+- **v1.3 Phase 22 implementation** — ES384 JWT playback token generation; existing production pattern
+- **DynamoDB single-table design** — v1.0-v1.3 proven; GSI patterns documented in existing infrastructure code
+- **Cognito authorization** — Existing auth system; reused for new endpoints
+- **RFC 7519 (IETF)** — JWT standard claims structure (iss, sub, aud, exp)
 
-**Medium Confidence (AWS Documentation + Community Patterns):**
-- IVS GetStream API polling limits (5 TPS documented in service docs)
-- Recharts performance at 1-5 updates/sec (40K+ weekly downloads + production dashboards using it)
-- Backend caching tradeoffs for real-time systems (standard architecture pattern)
-- DynamoDB optional fields + backward compatibility (v1.2 established this pattern in same codebase)
+### Secondary (MEDIUM confidence)
+- **YouTube Playlists** — Collection/sharing UX patterns
+- **AWS DynamoDB best practices** — Cascading deletes, transaction patterns
+- **OWASP Top 10** — Security pitfalls and prevention (auth, data exposure, race conditions)
 
-**Verification Required (Phase 23-24 Research Spikes):**
-- Exact metrics available from `IVSBroadcastClient.getStatus()`
-- Browser WebRTC RTCPeerConnection encoder-side stats availability
-- Avatar CDN caching headers (S3 CloudFront config)
-- Load test results with 50+ concurrent broadcasters
+### Tertiary (LOW confidence, requires validation)
+- **Mobile token caching behavior** — iOS IVS player behavior; needs testing during phase execution
 
 ---
 
-## Summary Table: v1.4 Roadmap at a Glance
-
-| Aspect | Phase 23 (Quality Metrics) | Phase 24 (Creator Spotlight) |
-|--------|---------------------------|--------------------------|
-| **Risk Level** | Low-Medium | Medium |
-| **Dependencies** | None | Phase 23 validation |
-| **New Libraries** | Recharts (40KB) | None |
-| **New Handlers** | None (HTTP polling) | `POST /sessions/{id}/feature` |
-| **New Fields (Session)** | `metricsLastUpdated` (optional) | `featuredUid` (optional) |
-| **Breaking Changes** | None | None |
-| **Load Test Required** | YES (50 concurrent) | YES (query audit) |
-| **Duration Estimate** | 2-3 weeks | 2-3 weeks |
-| **Validation Gate** | API latency < 200ms @ 5s cadence | Homepage < 2.5s; featured data pre-fetched |
-| **Backward Compat** | Optional fields; Phase 1-22 compatible | Optional fields; Phase 1-22 compatible |
-| **v1.5 Upgrade Path** | Add encoder metrics if available | Add WebSocket real-time updates; global search |
-
----
-
-**Research Complete:** 2026-03-06
-**Confidence:** HIGH
-**Ready for Phase Planning:** YES
+**Research completed:** 2026-03-05
+**Status:** Ready for roadmap creation
+**Next step:** Create requirements and phase plans based on research findings

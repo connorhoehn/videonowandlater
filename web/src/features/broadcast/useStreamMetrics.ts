@@ -4,11 +4,11 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import {
+import type {
   StreamMetrics,
-  HealthScoreResult,
-  calculateHealthScore
+  HealthScoreResult
 } from '../../domain/metrics';
+import { calculateHealthScore } from '../../domain/metrics';
 
 /**
  * Extract stream statistics from WebRTC peer connection
@@ -77,7 +77,7 @@ export function useStreamMetrics(broadcastClient: any, isLive: boolean) {
   });
 
   // Polling interval reference
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Previous sample for bitrate calculation
   const previousSampleRef = useRef<{

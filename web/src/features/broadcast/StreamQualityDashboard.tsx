@@ -3,8 +3,8 @@
  * Phase 23-02: Stream Quality Monitoring Dashboard UI
  */
 
-import React, { useState } from 'react';
-import { StreamMetrics, HealthScoreResult } from '../../domain/metrics';
+import { useState } from 'react';
+import type { StreamMetrics, HealthScoreResult } from '../../domain/metrics';
 
 interface DashboardProps {
   metrics: StreamMetrics;

@@ -209,6 +209,7 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
   };
 
   return {
+    client,
     previewRef,
     startBroadcast,
     stopBroadcast,

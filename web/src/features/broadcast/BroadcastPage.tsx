@@ -17,6 +17,8 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { StreamQualityOverlay } from './StreamQualityOverlay';
+import { useStreamMetrics } from './useStreamMetrics';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -101,11 +103,33 @@ function BroadcastContent({
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   const [floatingReactions, setFloatingReactions] = React.useState<FloatingEmoji[]>([]);
+  const [linkCopied, setLinkCopied] = React.useState(false);
+
+  const viewerUrl = `${window.location.origin}/viewer/${sessionId}`;
+
+  const copyViewerLink = async () => {
+    try {
+      await navigator.clipboard.writeText(viewerUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Fallback for non-HTTPS contexts
+      const input = document.createElement('input');
+      input.value = viewerUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
 
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
   const {
+    client,
     previewRef,
     startBroadcast,
     stopBroadcast,
@@ -126,6 +150,9 @@ function BroadcastContent({
   });
 
   const { viewerCount } = useViewerCount({ sessionId, apiBaseUrl, isLive });
+
+  // NEW: Add metrics hook
+  const { metrics, healthScore } = useStreamMetrics(client, isLive);
   const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId, authToken });
   const { sendReaction, sending } = useReactionSender(sessionId, authToken);
 
@@ -178,6 +205,17 @@ function BroadcastContent({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={copyViewerLink}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                linkCopied
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+              title={viewerUrl}
+            >
+              {linkCopied ? 'Copied!' : 'Copy Link'}
+            </button>
             {isMobile && (
               <button
                 onClick={() => setIsChatOpen(!isChatOpen)}
@@ -212,6 +250,12 @@ function BroadcastContent({
                 <CameraPreview videoRef={previewRef} />
                 {/* Floating reactions overlay */}
                 <FloatingReactions reactions={floatingReactions} />
+                {/* NEW: Stream quality dashboard overlay */}
+                <StreamQualityOverlay
+                  metrics={metrics}
+                  healthScore={healthScore}
+                  isLive={isLive}
+                />
               </div>
 
               {/* Status row */}

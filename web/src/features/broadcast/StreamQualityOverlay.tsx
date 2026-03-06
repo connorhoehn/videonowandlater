@@ -8,8 +8,7 @@
  * - w-80: Fixed 320px width for consistent metrics display
  */
 
-import React from 'react';
-import { StreamMetrics, HealthScoreResult } from '../../domain/metrics';
+import type { StreamMetrics, HealthScoreResult } from '../../domain/metrics';
 import { StreamQualityDashboard } from './StreamQualityDashboard';
 
 interface OverlayProps {

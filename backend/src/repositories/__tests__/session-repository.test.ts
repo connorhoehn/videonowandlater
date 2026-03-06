@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary, createUploadSession, updateUploadProgress, updateConvertStatus } from '../session-repository';
 import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
@@ -782,6 +782,305 @@ describe('session-repository', () => {
       // s3Path and plainText should NOT be in the values (not touched)
       expect(Object.keys(updates)).not.toContain(':s3Path');
       expect(Object.keys(updates)).not.toContain(':plainText');
+    });
+  });
+
+  describe('createUploadSession', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('creates session with sessionType = UPLOAD', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'video.mp4',
+        1024000000,
+        'H.264'
+      );
+
+      expect(result.sessionType).toBe(SessionType.UPLOAD);
+    });
+
+    it('sets status = creating and uploadStatus = pending', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'video.mp4',
+        1024000000,
+        'H.264'
+      );
+
+      expect(result.status).toBe(SessionStatus.CREATING);
+      expect(result.uploadStatus).toBe('pending');
+    });
+
+    it('stores sourceFileName, sourceFileSize, sourceCodec', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'myfile.mov',
+        2048000000,
+        'H.265'
+      );
+
+      expect(result.sourceFileName).toBe('myfile.mov');
+      expect(result.sourceFileSize).toBe(2048000000);
+      expect(result.sourceCodec).toBe('H.265');
+    });
+
+    it('returns valid sessionId', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'video.mp4',
+        1024000000
+      );
+
+      expect(result.sessionId).toBeDefined();
+      expect(result.sessionId).toMatch(/^[a-f0-9\-]{36}$/); // UUID format
+    });
+
+    it('stores session in DynamoDB with PK=SESSION#{sessionId}, SK=METADATA', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'video.mp4',
+        1024000000
+      );
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Item: expect.objectContaining({
+              PK: `SESSION#${result.sessionId}`,
+              SK: 'METADATA',
+              sessionType: SessionType.UPLOAD,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('sets uploadProgress = 0 on creation', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await createUploadSession(
+        tableName,
+        'user-123',
+        'video.mp4',
+        1024000000
+      );
+
+      expect(result.uploadProgress).toBe(0);
+    });
+  });
+
+  describe('updateUploadProgress', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('updates uploadStatus without touching other fields', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateUploadProgress(tableName, 'session123', 'processing', 25);
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session123',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('#uploadStatus'),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':status': 'processing',
+              ':progress': 25,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('updates uploadProgress without touching other fields', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateUploadProgress(tableName, 'session456', 'converting', 75);
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.ExpressionAttributeValues[':progress']).toBe(75);
+    });
+
+    it('preserves createdAt, userId, sessionType via selective update', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateUploadProgress(tableName, 'session789', 'available', 100);
+
+      const call = mockSend.mock.calls[0][0];
+      // UpdateExpression should only touch uploadStatus, uploadProgress, version
+      expect(call.input.UpdateExpression).not.toContain('createdAt');
+      expect(call.input.UpdateExpression).not.toContain('userId');
+      expect(call.input.UpdateExpression).not.toContain('sessionType');
+    });
+
+    it('increments version field', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateUploadProgress(tableName, 'session-ver', 'processing', 50);
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).toContain('#version = #version + :inc');
+      expect(call.input.ExpressionAttributeValues[':inc']).toBe(1);
+    });
+  });
+
+  describe('updateConvertStatus', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('stores mediaConvertJobName and convertStatus', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(
+        tableName,
+        'session-abc',
+        'vnl-session-abc-1234567890',
+        'pending'
+      );
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-abc',
+              SK: 'METADATA',
+            },
+            ExpressionAttributeValues: expect.objectContaining({
+              ':jobName': 'vnl-session-abc-1234567890',
+              ':status': 'pending',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('sets convertStatus to processing when job is running', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(
+        tableName,
+        'session-xyz',
+        'vnl-session-xyz-1234567890',
+        'processing'
+      );
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.ExpressionAttributeValues[':status']).toBe('processing');
+    });
+
+    it('sets convertStatus to available when conversion completes', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(
+        tableName,
+        'session-done',
+        'vnl-session-done-1234567890',
+        'available'
+      );
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.ExpressionAttributeValues[':status']).toBe('available');
+    });
+
+    it('does not touch uploadStatus or uploadProgress', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(
+        tableName,
+        'session-isolated',
+        'vnl-session-isolated-1234567890',
+        'processing'
+      );
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).not.toContain('uploadStatus');
+      expect(call.input.UpdateExpression).not.toContain('uploadProgress');
+    });
+
+    it('increments version field', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(
+        tableName,
+        'session-ver',
+        'vnl-session-ver-1234567890',
+        'available'
+      );
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).toContain('#version = #version + :inc');
+      expect(call.input.ExpressionAttributeValues[':inc']).toBe(1);
+    });
+  });
+
+  describe('field isolation across upload functions', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('updateUploadProgress does not affect mediaConvertJobName', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateUploadProgress(tableName, 'session-test', 'processing', 50);
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).not.toContain('mediaConvert');
+      expect(call.input.UpdateExpression).not.toContain('convertStatus');
+    });
+
+    it('updateConvertStatus does not affect uploadProgress', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      await updateConvertStatus(tableName, 'session-test', 'vnl-job-123', 'available');
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).not.toContain('uploadProgress');
+      expect(call.input.UpdateExpression).not.toContain('uploadStatus');
     });
   });
 });

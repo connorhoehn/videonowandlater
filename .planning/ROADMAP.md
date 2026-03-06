@@ -215,7 +215,7 @@ Plans:
 
 **Milestone Goal:** Surface richer session context on the homepage — hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed — and add an automated transcription and AI summary pipeline to every recording.
 
-- [ ] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services
+- [x] **Phase 16: Hangout Participant Tracking** - Persist join events and participant count to DynamoDB with zero new AWS services (completed 2026-03-06)
 - [x] **Phase 17: Reaction Summary at Session End** - Pre-compute per-emoji reaction counts when a session ends
 - [ ] **Phase 18: Homepage Redesign & Activity Feed** - Two-zone homepage with recording slider, activity feed, and GET /activity endpoint
 - [ ] **Phase 19: Transcription Pipeline** - Automated S3-to-Transcribe pipeline triggered by recording completion events
@@ -324,7 +324,7 @@ Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
 | 13. Replay Viewer Integration Fixes | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 14. Data Quality & Hangout Identity Polish | v1.1 | 1/1 | Complete | 2026-03-04 |
 | 15. Replay & Hangout Integration Fixes | v1.1 | 2/2 | Complete | 2026-03-05 |
-| 16. Hangout Participant Tracking | v1.2 | 0/1 | Planned | - |
+| 16. Hangout Participant Tracking | 1/1 | Complete   | 2026-03-06 | - |
 | 17. Reaction Summary at Session End | v1.2 | Complete    | 2026-03-06 | - |
 | 18. Homepage Redesign & Activity Feed | v1.2 | 0/3 | Planned | - |
 | 19. Transcription Pipeline | v1.2 | 0/3 | Not started | - |

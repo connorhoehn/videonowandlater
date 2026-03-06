@@ -78,9 +78,9 @@ Requirements for milestone v1.2. Each maps to roadmap phases (starting at Phase 
 
 ### Participant Tracking
 
-- [ ] **PTCP-01**: Each hangout participant join is persisted to DynamoDB with userId, displayName, and joinedAt timestamp
-- [ ] **PTCP-02**: Hangout session record stores final participant count when session ends
-- [ ] **PTCP-03**: Hangout participant list is retrievable by session ID via repository function
+- [x] **PTCP-01**: Each hangout participant join is persisted to DynamoDB with userId, displayName, and joinedAt timestamp
+- [x] **PTCP-02**: Hangout session record stores final participant count when session ends
+- [x] **PTCP-03**: Hangout participant list is retrievable by session ID via repository function
 
 ### Reaction Summary
 
@@ -223,9 +223,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-09 | Phase 9 | Complete |
 | DEV-10 | Phase 9 | Complete |
 
-| PTCP-01 | Phase 16 | Pending |
-| PTCP-02 | Phase 16 | Pending |
-| PTCP-03 | Phase 16 | Pending |
+| PTCP-01 | Phase 16 | Complete |
+| PTCP-02 | Phase 16 | Complete |
+| PTCP-03 | Phase 16 | Complete |
 | RSUMM-01 | Phase 17 | Complete (2026-03-06) |
 | RSUMM-02 | Phase 18 | Pending |
 | RSUMM-03 | Phase 18 | Pending |

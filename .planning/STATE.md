@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Activity Feed & Intelligence
 status: executing
-stopped_at: v1.2 roadmap created — 5 phases defined (16-20), 21/21 requirements mapped
-last_updated: "2026-03-06T00:33:37.520Z"
-last_activity: 2026-03-06 — Completed 17-01-PLAN.md (reaction summary computation, 184 tests passing)
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-03-06T00:35:00.000Z"
+last_activity: 2026-03-06 — Completed 16-01-PLAN.md (participant tracking, 195 tests passing)
 progress:
   total_phases: 17
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 32
-  completed_plans: 28
-  percent: 20
+  completed_plans: 29
+  percent: 40
 ---
 
 # Project State
@@ -21,28 +21,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.2 Phase 16 — Hangout Participant Tracking
+**Current focus:** v1.2 Phase 16 complete, Phase 17 complete — next: Phase 18 (Homepage Redesign)
 
 ## Current Position
 
-Phase: 17 of 20 (Reaction Summary at Session End)
-Plan: 01 (Complete)
+Phase: 16 of 20 (Hangout Participant Tracking) -- COMPLETE
+Plan: 01 of 01 (Complete)
 Status: In progress
-Last activity: 2026-03-06 — Completed 17-01-PLAN.md (reaction summary computation, 184 tests passing)
+Last activity: 2026-03-06 — Completed 16-01-PLAN.md (participant tracking, 195 tests passing)
 
-Progress: [██░░░░░░░░] 20% (1/5 phases complete)
+Progress: [████░░░░░░] 40% (2/5 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v1.2)
+- Total plans completed: 2 (v1.2)
 - Average duration: 3 min
-- Total execution time: 3 min
+- Total execution time: 7 min
 
 **By Phase:**
 
 | Phase | Plans | Completed | Avg/Plan |
 |-------|-------|-----------|----------|
+| 16 | 1 | 1 | 4 min |
 | 17 | 1 | 1 | 3 min |
 
 *Updated after each plan completion*
@@ -64,6 +65,11 @@ v1.2 decisions from Phase 17:
 - **Non-blocking error handling** - computeAndStoreReactionSummary errors never block pool release (critical invariant)
 - **Parallel shard aggregation** - Promise.all used to query all 100 shards per emoji type concurrently
 
+v1.2 decisions from Phase 16:
+- **PutCommand for participant upserts** - addHangoutParticipant uses PutCommand (not UpdateCommand) so re-joins overwrite without ConditionalCheckFailedException
+- **displayName = cognito:username** - No separate display name exists in auth context; field is future-proof for enhancement
+- **Count-at-end strategy** - participantCount computed at session end (recording-ended) not maintained as atomic counter during joins
+
 v1.2 decisions pending:
 - Phase 18: messageCount tracking approach (atomic counter vs count-at-end vs N/A)
 - Phase 18: GET /activity auth posture (public vs authenticated)
@@ -80,9 +86,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05
-Stopped at: v1.2 roadmap created — 5 phases defined (16-20), 21/21 requirements mapped
+Last session: 2026-03-06
+Stopped at: Completed 16-01-PLAN.md (hangout participant tracking)
 
 ---
 *State initialized: 2026-03-05 (v1.2 milestone)*
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-06*

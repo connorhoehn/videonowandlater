@@ -700,6 +700,9 @@ export class SessionStack extends Stack {
         detailType: ['MediaConvert Job State Change'],
         detail: {
           'status': ['COMPLETE', 'ERROR', 'CANCELED'],
+          'userMetadata': {
+            'phase': ['19-transcription']
+          }
         },
       },
       description: 'Handle MediaConvert job completion for upload video encoding',

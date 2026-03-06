@@ -222,6 +222,27 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // POST /sessions/{sessionId}/playback-token (generate playback token)
+    const playbackTokenResource = sessionIdResource.addResource('playback-token');
+
+    const generatePlaybackTokenHandler = new NodejsFunction(this, 'GeneratePlaybackTokenHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/generate-playback-token.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        IVS_PLAYBACK_PRIVATE_KEY: process.env.IVS_PLAYBACK_PRIVATE_KEY || '',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(generatePlaybackTokenHandler);
+
+    playbackTokenResource.addMethod('POST', new apigateway.LambdaIntegration(generatePlaybackTokenHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // POST /sessions/{sessionId}/chat/messages (send message)
     const chatMessagesResource = sessionChatResource.addResource('messages');
 

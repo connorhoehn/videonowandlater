@@ -649,7 +649,7 @@ export class SessionStack extends Stack {
 
     // Grant MediaConvert permissions to start-mediaconvert
     startMediaConvertFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['mediaconvert:CreateJob'],
+      actions: ['mediaconvert:CreateJob', 'mediaconvert:TagResource'],
       resources: ['*'],
     }));
 

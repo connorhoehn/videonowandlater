@@ -32,21 +32,12 @@ export async function handler(
       return;
     }
 
-    // Determine audio file URI from the recording URL
-    // If it's an S3 path to MP4 (from MediaConvert), use it directly
-    // Otherwise, convert HLS URL to audio MP4 URL (legacy path)
-    let audioFileUri: string;
-    if (recordingHlsUrl.includes('.mp4')) {
-      // Already an MP4 path from MediaConvert
-      audioFileUri = recordingHlsUrl;
-    } else {
-      // Legacy HLS path - convert to audio MP4
-      // From: s3://bucket/hls/sessionId/master.m3u8
-      // To:   s3://bucket/recordings/sessionId/audio.mp4
-      audioFileUri = recordingHlsUrl
-        .replace('/hls/', '/recordings/')
-        .replace('/master.m3u8', '/audio.mp4');
-    }
+    // Convert HLS URL to audio MP4 URL
+    // From: s3://bucket/hls/sessionId/master.m3u8
+    // To:   s3://bucket/recordings/sessionId/audio.mp4
+    const audioFileUri = recordingHlsUrl
+      .replace('/hls/', '/recordings/')
+      .replace('/master.m3u8', '/audio.mp4');
 
     // Generate job name with timestamp for uniqueness
     const jobName = `vnl-${sessionId}-${Date.now()}`;

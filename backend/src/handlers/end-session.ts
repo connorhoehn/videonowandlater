@@ -6,7 +6,7 @@
  */
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { getSessionById, updateSessionStatus } from '../repositories/session-repository';
+import { getSessionById, updateSessionStatus, updateSpotlight } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
 
 const CORS = {
@@ -41,6 +41,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
     console.log(`[end-session] ${sessionId} → ENDING by ${userId}`);
+
+    // Clear any spotlight on this session (non-blocking)
+    try {
+      await updateSpotlight(tableName, sessionId, null, null);
+    } catch (spotlightErr) {
+      console.warn('[end-session] spotlight cleanup failed:', spotlightErr);
+    }
 
     return resp(200, { message: 'Session ending', status: 'ending' });
   } catch (err: any) {

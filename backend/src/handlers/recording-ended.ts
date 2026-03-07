@@ -6,7 +6,6 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
-import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import {
   updateSessionStatus,
@@ -48,7 +47,6 @@ export const handler = async (
   const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
   const awsRegion = process.env.AWS_REGION!;
   const awsAccountId = process.env.AWS_ACCOUNT_ID!;
-  const eventBusName = process.env.EVENT_BUS_NAME!;
 
   const resourceArn = event.resources?.[0];
   if (!resourceArn) {
@@ -309,39 +307,6 @@ export const handler = async (
           jobName,
           sessionId,
         });
-
-        // Immediately publish "Upload Recording Available" event to trigger transcription
-        // This bypasses waiting for MediaConvert to emit a completion event, which has
-        // event detail structure issues. We'll use the MP4 output path that MediaConvert creates.
-        const mp4FileUri = `s3://${transcriptionBucket}/${sessionId}/masterrecording.mp4`;
-        try {
-          const eventBridgeClient = new EventBridgeClient({ region: awsRegion });
-          await eventBridgeClient.send(
-            new PutEventsCommand({
-              Entries: [
-                {
-                  Source: 'vnl.mediaconvert',
-                  DetailType: 'Upload Recording Available',
-                  Detail: JSON.stringify({
-                    sessionId,
-                    recordingHlsUrl: mp4FileUri, // MP4 file output from MediaConvert
-                  }),
-                  EventBusName: eventBusName,
-                },
-              ],
-            })
-          );
-          console.log('Transcription pipeline triggered via EventBridge:', {
-            sessionId,
-            recordingUrl: mp4FileUri,
-          });
-        } catch (publishError: any) {
-          console.error('Failed to publish transcription trigger event (non-blocking):', {
-            sessionId,
-            error: publishError.message,
-          });
-          // Don't throw - transcription can still proceed if triggered via MediaConvert complete
-        }
       } catch (mediaConvertError: any) {
         console.error('Failed to submit MediaConvert job (non-blocking):', {
           sessionId,

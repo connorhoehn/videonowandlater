@@ -112,20 +112,25 @@ Plans:
   4. Featured creator selection is restricted to public broadcasts only (private broadcasts cannot feature or be featured)
   5. When broadcast ends or broadcaster removes featured creator, spotlight is automatically cleared with no stale data persisting
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 24-01-PLAN.md — Backend domain model, repository methods, and API handlers for spotlight
+- [ ] 24-02-PLAN.md — Frontend spotlight UI components and page integration
+- [ ] 24-03-PLAN.md — CDK API stack wiring for spotlight Lambda handlers
 
 ---
 
 ## Progress
 
 **Latest Milestone:** v1.4 Creator Studio & Stream Quality
-- **Status:** 🚧 Phase 23 gap closure pending, Phase 24 pending
+- **Status:** 🚧 Phase 23 gap closure pending, Phase 24 planned
 - **Phases:** 3 (22.1 ✅, 23 🚧, 24)
-- **Plans:** 3/3 complete (Phase 22.1), 5/6 complete (Phase 23)
+- **Plans:** 3/3 complete (Phase 22.1), 5/6 complete (Phase 23), 0/3 (Phase 24)
 - **Tests:** 343/343 backend tests passing (from v1.3)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
-| 24 - Creator Spotlight Selection & Display | 0/? | Not started | - |
+| 24 - Creator Spotlight Selection & Display | 0/3 | Planned | - |

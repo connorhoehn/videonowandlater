@@ -20,8 +20,6 @@ const mockUpdateSpotlight = sessionRepository.updateSpotlight as jest.MockedFunc
 
 describe('update-spotlight handler', () => {
   const TABLE_NAME = 'test-table';
-  const mockContext = {} as any;
-  const mockCallback = (() => {}) as any;
 
   const baseSession: Session = {
     sessionId: 'session-abc',
@@ -78,7 +76,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
@@ -102,7 +100,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(403);
     expect(mockUpdateSpotlight).not.toHaveBeenCalled();
@@ -116,7 +114,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(404);
     expect(mockUpdateSpotlight).not.toHaveBeenCalled();
@@ -131,7 +129,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(403);
     const body = JSON.parse(result.body);
@@ -148,7 +146,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: null,
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
@@ -174,7 +172,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
     const body = JSON.parse(result.body);
@@ -188,7 +186,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(401);
   });
@@ -202,7 +200,7 @@ describe('update-spotlight handler', () => {
       body: JSON.stringify({ featuredCreatorId: 'abc', featuredCreatorName: 'Name' }),
     } as any;
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
   });
@@ -216,7 +214,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(500);
     const body = JSON.parse(result.body);
@@ -236,7 +234,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.headers!['Access-Control-Allow-Origin']).toBe('*');
     expect(result.headers!['Access-Control-Allow-Headers']).toBe('*');
@@ -253,7 +251,7 @@ describe('update-spotlight handler', () => {
       featuredCreatorName: 'CreatorName',
     });
 
-    const result = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
     const body = JSON.parse(result.body);

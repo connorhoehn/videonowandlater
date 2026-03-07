@@ -832,6 +832,118 @@ export async function updateSessionRecording(
 }
 
 /**
+ * Get live public sessions for spotlight selection
+ * Queries GSI1 for STATUS#LIVE, filters out private sessions and optionally the caller's own session
+ *
+ * @param tableName DynamoDB table name
+ * @param excludeUserId Optional userId to exclude (typically the caller's own session)
+ * @param limit Maximum number of sessions to return (default 50)
+ * @returns Array of public live Session objects
+ */
+export async function getLivePublicSessions(
+  tableName: string,
+  excludeUserId?: string,
+  limit: number = 50
+): Promise<Session[]> {
+  const docClient = getDocumentClient();
+
+  const expressionAttributeNames: Record<string, string> = {
+    '#isPrivate': 'isPrivate',
+    '#userId': 'userId',
+  };
+
+  const expressionAttributeValues: Record<string, any> = {
+    ':status': 'STATUS#LIVE',
+    ':true': true,
+  };
+
+  let filterExpression: string;
+  if (excludeUserId) {
+    filterExpression = '(attribute_not_exists(#isPrivate) OR #isPrivate <> :true) AND #userId <> :excludeUser';
+    expressionAttributeValues[':excludeUser'] = excludeUserId;
+  } else {
+    filterExpression = '(attribute_not_exists(#isPrivate) OR #isPrivate <> :true)';
+  }
+
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :status',
+    FilterExpression: filterExpression,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
+    Limit: limit,
+    ScanIndexForward: false,
+  }));
+
+  return result.Items?.map(item => {
+    const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
+    return session as Session;
+  }) || [];
+}
+
+/**
+ * Update spotlight (featured creator) on a session
+ * Sets or clears the featuredCreatorId and featuredCreatorName fields
+ * Uses conditional write to ensure session exists
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param featuredCreatorId Session ID of featured creator, or null to clear
+ * @param featuredCreatorName Display name of featured creator, or null to clear
+ */
+export async function updateSpotlight(
+  tableName: string,
+  sessionId: string,
+  featuredCreatorId: string | null,
+  featuredCreatorName: string | null
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  if (featuredCreatorId === null && featuredCreatorName === null) {
+    // Clear spotlight: REMOVE both attributes
+    await docClient.send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `SESSION#${sessionId}`,
+        SK: 'METADATA',
+      },
+      UpdateExpression: 'REMOVE #featuredCreatorId, #featuredCreatorName SET #version = #version + :inc',
+      ExpressionAttributeNames: {
+        '#featuredCreatorId': 'featuredCreatorId',
+        '#featuredCreatorName': 'featuredCreatorName',
+        '#version': 'version',
+      },
+      ExpressionAttributeValues: {
+        ':inc': 1,
+      },
+      ConditionExpression: 'attribute_exists(PK)',
+    }));
+  } else {
+    // Set spotlight
+    await docClient.send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `SESSION#${sessionId}`,
+        SK: 'METADATA',
+      },
+      UpdateExpression: 'SET #featuredCreatorId = :featuredCreatorId, #featuredCreatorName = :featuredCreatorName, #version = #version + :inc',
+      ExpressionAttributeNames: {
+        '#featuredCreatorId': 'featuredCreatorId',
+        '#featuredCreatorName': 'featuredCreatorName',
+        '#version': 'version',
+      },
+      ExpressionAttributeValues: {
+        ':featuredCreatorId': featuredCreatorId,
+        ':featuredCreatorName': featuredCreatorName,
+        ':inc': 1,
+      },
+      ConditionExpression: 'attribute_exists(PK)',
+    }));
+  }
+}
+
+/**
  * Claim a private channel from the pre-warmed pool for a private broadcast session
  * Private channels require JWT tokens for playback authentication
  * Returns null if no private channels available; caller should retry or fail gracefully

@@ -97,6 +97,11 @@ export interface Session {
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   // Privacy control (Phase 22)
   isPrivate?: boolean; // true = private channel with JWT auth, false/undefined = public (backward compatible)
+  // Creator spotlight (Phase 24) — links to another live session being featured
+  /** Session ID of the featured creator's session */
+  featuredCreatorId?: string;
+  /** Display name of the featured creator (username) */
+  featuredCreatorName?: string;
   // Stream quality metrics (Phase 23+)
   /**
    * Optional stream quality metrics captured during live streaming

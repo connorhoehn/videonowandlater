@@ -2,7 +2,7 @@
  * Tests for session repository - session persistence operations
  */
 
-import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary, createUploadSession, updateUploadProgress, updateConvertStatus, claimPrivateChannel } from '../session-repository';
+import { createSession, getSessionById, updateSessionStatus, findSessionByStageArn, getRecentRecordings, updateRecordingMetadata, computeAndStoreReactionSummary, addHangoutParticipant, getHangoutParticipants, updateParticipantCount, updateTranscriptStatus, updateSessionAiSummary, createUploadSession, updateUploadProgress, updateConvertStatus, claimPrivateChannel, getLivePublicSessions, updateSpotlight } from '../session-repository';
 import type { HangoutParticipant } from '../session-repository';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
@@ -1180,6 +1180,153 @@ describe('session-repository', () => {
 
       const queryCall = mockSend.mock.calls[0][0];
       expect(queryCall.input.Limit).toBe(1);
+    });
+  });
+
+  describe('getLivePublicSessions', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('queries GSI1 for STATUS#LIVE and returns only public sessions', async () => {
+      const { getLivePublicSessions } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            PK: 'SESSION#s1', SK: 'METADATA', GSI1PK: 'STATUS#LIVE', GSI1SK: '2026-03-06T10:00:00Z',
+            entityType: 'SESSION',
+            sessionId: 's1', userId: 'user1', sessionType: SessionType.BROADCAST,
+            status: SessionStatus.LIVE, claimedResources: { chatRoom: 'room-1' }, version: 1,
+            createdAt: '2026-03-06T10:00:00Z',
+          },
+        ],
+      });
+
+      const result = await getLivePublicSessions(tableName);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].sessionId).toBe('s1');
+      // DynamoDB keys should be stripped
+      expect(result[0].PK).toBeUndefined();
+      expect(result[0].SK).toBeUndefined();
+      expect(result[0].GSI1PK).toBeUndefined();
+      expect(result[0].entityType).toBeUndefined();
+
+      // Verify GSI1 query
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.IndexName).toBe('GSI1');
+      expect(call.input.KeyConditionExpression).toBe('GSI1PK = :status');
+      expect(call.input.ExpressionAttributeValues[':status']).toBe('STATUS#LIVE');
+    });
+
+    it('excludes the requesting user own session when excludeUserId provided', async () => {
+      const { getLivePublicSessions } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      await getLivePublicSessions(tableName, 'user-me');
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.FilterExpression).toContain('userId');
+      expect(call.input.ExpressionAttributeValues[':excludeUser']).toBe('user-me');
+    });
+
+    it('returns empty array when no live public sessions exist', async () => {
+      const { getLivePublicSessions } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      const result = await getLivePublicSessions(tableName);
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array when Items is undefined', async () => {
+      const { getLivePublicSessions } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await getLivePublicSessions(tableName);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('updateSpotlight', () => {
+    const mockSend = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (dynamodbClient.getDocumentClient as jest.Mock).mockReturnValue({
+        send: mockSend,
+      });
+    });
+
+    it('sets featuredCreatorId and featuredCreatorName on session record', async () => {
+      const { updateSpotlight } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSpotlight(tableName, 'session-abc', 'featured-session-123', 'CreatorName');
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: tableName,
+            Key: {
+              PK: 'SESSION#session-abc',
+              SK: 'METADATA',
+            },
+            UpdateExpression: expect.stringContaining('featuredCreatorId'),
+            ExpressionAttributeValues: expect.objectContaining({
+              ':featuredCreatorId': 'featured-session-123',
+              ':featuredCreatorName': 'CreatorName',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('clears spotlight when featuredCreatorId is null using REMOVE', async () => {
+      const { updateSpotlight } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSpotlight(tableName, 'session-abc', null, null);
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).toContain('REMOVE');
+      expect(call.input.UpdateExpression).toContain('featuredCreatorId');
+      expect(call.input.UpdateExpression).toContain('featuredCreatorName');
+    });
+
+    it('uses conditional write with attribute_exists(PK) check', async () => {
+      const { updateSpotlight } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSpotlight(tableName, 'session-abc', 'featured-123', 'Name');
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.ConditionExpression).toBe('attribute_exists(PK)');
+    });
+
+    it('increments version on update', async () => {
+      const { updateSpotlight } = require('../session-repository');
+
+      mockSend.mockResolvedValueOnce({});
+
+      await updateSpotlight(tableName, 'session-abc', 'featured-123', 'Name');
+
+      const call = mockSend.mock.calls[0][0];
+      expect(call.input.UpdateExpression).toContain('#version = #version + :inc');
+      expect(call.input.ExpressionAttributeValues[':inc']).toBe(1);
     });
   });
 

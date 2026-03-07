@@ -40,9 +40,19 @@ interface StageParticipantRecordingEndDetail {
 export const handler = async (
   event: EventBridgeEvent<string, Record<string, any>>
 ): Promise<void> => {
+  // Required environment variables
   const tableName = process.env.TABLE_NAME!;
   const cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN!;
-  const resourceArn = event.resources[0];
+  const mediaConvertRoleArn = process.env.MEDIACONVERT_ROLE_ARN!;
+  const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
+  const awsRegion = process.env.AWS_REGION!;
+  const awsAccountId = process.env.AWS_ACCOUNT_ID!;
+
+  const resourceArn = event.resources?.[0];
+  if (!resourceArn) {
+    console.error('No resource ARN in event.resources');
+    throw new Error('Invalid event: missing resource ARN');
+  }
 
   console.log('Recording End event received for resource:', resourceArn);
 
@@ -104,8 +114,25 @@ export const handler = async (
 
     // Update recording metadata
     let finalStatus: 'available' | 'failed' = 'failed';
+    let recordingS3KeyPrefix: string = '';
+    let recordingsBucket: string = '';
+    let recordingDuration: number = 0;
+
     try {
-      const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
+      // Validate required event fields
+      recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
+      recordingsBucket = event.detail.recording_s3_bucket_name;
+      recordingDuration = event.detail.recording_duration_ms;
+
+      if (!recordingS3KeyPrefix || !recordingsBucket || typeof recordingDuration !== 'number') {
+        throw new Error('Invalid event detail: missing required recording metadata');
+      }
+
+      // Validate S3 path doesn't contain suspicious patterns (basic injection prevention)
+      if (recordingS3KeyPrefix.includes('..') || recordingS3KeyPrefix.startsWith('/')) {
+        throw new Error('Invalid S3 key prefix format');
+      }
+
       let recordingHlsUrl: string;
       let thumbnailUrl: string;
 
@@ -125,7 +152,7 @@ export const handler = async (
         : 'available';
 
       await updateRecordingMetadata(tableName, sessionId, {
-        recordingDuration: event.detail.recording_duration_ms,
+        recordingDuration,
         recordingHlsUrl,
         thumbnailUrl,
         recordingStatus: finalStatus,
@@ -165,21 +192,25 @@ export const handler = async (
     // Submit MediaConvert job to convert HLS → MP4 for transcription (best-effort, non-blocking)
     if (finalStatus === 'available') {
       try {
-        const mediaConvertClient = new MediaConvertClient({ region: process.env.AWS_REGION });
+        const mediaConvertClient = new MediaConvertClient({ region: awsRegion });
         const epochMs = Date.now();
         const jobName = `vnl-${sessionId}-${epochMs}`;
-
-        const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
-        const recordingsBucket = event.detail.recording_s3_bucket_name;
-        const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
 
         // Build HLS input path (master.m3u8 location from IVS recording structure)
         const hlsInputPath = `s3://${recordingsBucket}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
         const mp4OutputPath = `s3://${transcriptionBucket}/${sessionId}/`;
 
+        // Validate constructed paths
+        if (!hlsInputPath.match(/^s3:\/\/[\w\-\.]+\/[\w\-\.\/]+\.m3u8$/)) {
+          throw new Error(`Invalid HLS input path format: ${hlsInputPath}`);
+        }
+        if (!mp4OutputPath.match(/^s3:\/\/[\w\-\.]+\/[\w\-\.\/]+\/$/)) {
+          throw new Error(`Invalid MP4 output path format: ${mp4OutputPath}`);
+        }
+
         const createJobCommand = new CreateJobCommand({
-          Role: process.env.MEDIACONVERT_ROLE_ARN!,
-          Queue: `arn:aws:mediaconvert:${process.env.AWS_REGION}:${process.env.AWS_ACCOUNT_ID}:queues/Default`,
+          Role: mediaConvertRoleArn,
+          Queue: `arn:aws:mediaconvert:${awsRegion}:${awsAccountId}:queues/Default`,
           Settings: {
             Inputs: [
               {
@@ -219,6 +250,7 @@ export const handler = async (
                     },
                     AudioDescriptions: [
                       {
+                        AudioSourceName: 'default',
                         CodecSettings: {
                           Codec: 'AAC',
                           AacSettings: {
@@ -245,13 +277,43 @@ export const handler = async (
         });
 
         const result = await mediaConvertClient.send(createJobCommand);
+        const jobId = result.Job?.Id;
+
+        if (!jobId) {
+          throw new Error('MediaConvert did not return a job ID');
+        }
+
+        // Store MediaConvert job ID in session for tracking
+        const docClient = getDocumentClient();
+        await docClient.send(new (await import('@aws-sdk/lib-dynamodb')).UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: `SESSION#${sessionId}`,
+            SK: 'METADATA',
+          },
+          UpdateExpression: 'SET mediaconvertJobId = :jobId, transcriptStatus = :status, #version = #version + :inc',
+          ExpressionAttributeNames: {
+            '#version': 'version',
+          },
+          ExpressionAttributeValues: {
+            ':jobId': jobId,
+            ':status': 'processing',
+            ':inc': 1,
+          },
+        }));
+
         console.log('MediaConvert job submitted:', {
-          jobId: result.Job?.Id,
+          jobId,
           jobName,
           sessionId,
         });
       } catch (mediaConvertError: any) {
-        console.error('Failed to submit MediaConvert job (non-blocking):', mediaConvertError.message);
+        console.error('Failed to submit MediaConvert job (non-blocking):', {
+          sessionId,
+          error: mediaConvertError.message,
+          code: mediaConvertError.Code || mediaConvertError.$metadata?.httpStatusCode,
+          type: mediaConvertError.name,
+        });
         // Do NOT throw — transcription is best-effort, don't block session cleanup
       }
     }

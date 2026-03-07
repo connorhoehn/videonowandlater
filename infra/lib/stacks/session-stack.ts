@@ -156,6 +156,10 @@ export class SessionStack extends Stack {
       })
     );
 
+    // IVS Cleanup Custom Resource
+    // This ensures IVS channels are properly cleaned up before stack deletion
+    const cleanupResource = new IvsCleanupResource(this, 'IvsCleanup');
+
     // IVS Recording Configuration (L1 constructs)
     const recordingConfiguration = new ivs.CfnRecordingConfiguration(this, 'RecordingConfiguration', {
       destinationConfiguration: {
@@ -174,7 +178,8 @@ export class SessionStack extends Stack {
       name: 'vnl-recording-config',
     });
 
-    // Ensure cleanup resource is deleted AFTER recording configuration
+    // Ensure recording configuration depends on cleanup resource
+    // This ensures cleanup runs BEFORE recording config deletion
     recordingConfiguration.node.addDependency(cleanupResource);
 
     // Export RecordingConfiguration ARN and CloudFront domain

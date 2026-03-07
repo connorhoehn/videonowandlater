@@ -18,14 +18,14 @@
 
 ### Creator Spotlight
 
-- [ ] **SPOT-01**: Broadcaster can feature another active broadcaster during their live stream
-- [ ] **SPOT-02**: Feature selection shows a modal with search/list of live broadcasters from their viewers
+- [x] **SPOT-01**: Broadcaster can feature another active broadcaster during their live stream
+- [x] **SPOT-02**: Feature selection shows a modal with search/list of live broadcasters from their viewers
 - [ ] **SPOT-03**: Featured creator appears as a picture-in-picture overlay or elegant badge during broadcast
 - [ ] **SPOT-04**: Viewers can click featured creator link to navigate to that broadcaster's stream
-- [ ] **SPOT-05**: Featured broadcast selection is available only to public broadcasts (not private)
+- [x] **SPOT-05**: Featured broadcast selection is available only to public broadcasts (not private)
 - [ ] **SPOT-06**: Featured broadcast link appears on viewer's stream detail page
-- [ ] **SPOT-07**: When a broadcast ends, featured spotlight is automatically cleared
-- [ ] **SPOT-08**: Broadcaster can remove/change featured creator at any time mid-stream
+- [x] **SPOT-07**: When a broadcast ends, featured spotlight is automatically cleared
+- [x] **SPOT-08**: Broadcaster can remove/change featured creator at any time mid-stream
 
 ## v1.3 Requirements: Secure Sharing
 
@@ -87,14 +87,14 @@
 | QUAL-06 | Phase 23 | Complete |
 | QUAL-07 | Phase 23 | Complete |
 | QUAL-08 | Phase 23 | Complete |
-| SPOT-01 | Phase 24 | Pending |
-| SPOT-02 | Phase 24 | Pending |
+| SPOT-01 | Phase 24 | Complete |
+| SPOT-02 | Phase 24 | Complete |
 | SPOT-03 | Phase 24 | Pending |
 | SPOT-04 | Phase 24 | Pending |
-| SPOT-05 | Phase 24 | Pending |
+| SPOT-05 | Phase 24 | Complete |
 | SPOT-06 | Phase 24 | Pending |
-| SPOT-07 | Phase 24 | Pending |
-| SPOT-08 | Phase 24 | Pending |
+| SPOT-07 | Phase 24 | Complete |
+| SPOT-08 | Phase 24 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 16 total

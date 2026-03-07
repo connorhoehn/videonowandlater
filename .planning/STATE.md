@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Creator Studio & Stream Quality
-status: planning
-last_updated: "2026-03-06T21:31:14.476Z"
+status: executing
+last_updated: "2026-03-07T00:59:16Z"
 progress:
   total_phases: 3
   completed_phases: 2
@@ -24,20 +24,20 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 ## Current Position
 
-**Active Phase:** Phase 23 — Stream Quality Monitoring Dashboard
-**Active Plan:** 23-05 (complete)
-**Status:** Ready to plan
-**Progress:** [██████████] 100%
+**Active Phase:** Phase 24 — Creator Spotlight Selection & Display
+**Active Plan:** 24-02 (next)
+**Status:** Executing phase 24
+**Progress:** [███░░░░░░░] 33% (1/3 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Plans completed (v1.4): 6
-- Tasks completed (v1.4): 13
+- Plans completed (v1.4): 7
+- Tasks completed (v1.4): 15
 - Phases completed (v1.4): 2/3
 
 **Quality:**
-- Test coverage: 169/169 backend tests passing + 40 new frontend tests (Phases 23-01, 23-02)
+- Test coverage: 394/394 backend tests passing + 40 new frontend tests (Phases 23-01, 23-02)
 - Breaking changes: 0 (all additions backward compatible)
 - New dependencies: recharts@2.15.4 for visualization (deferred to future phase)
 
@@ -88,6 +88,11 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 - Dashboard positioned in bottom-right corner above FloatingReactions
 - Integration tests verify Phase 1-22 recordings continue to load
 - Load test script simulates 100 concurrent viewers for stress testing
+
+**Phase 24-01 — Backend Spotlight API:**
+- GSI1 query for live session discovery with privacy filter (attribute_not_exists OR isPrivate <> true)
+- REMOVE expression when clearing spotlight (both null) for clean DynamoDB records
+- Non-blocking spotlight cleanup in end-session handler (try/catch with console.warn)
 
 **Carried Forward from v1.2:**
 - cognito:username (not sub) as userId consistently across all handlers
@@ -148,7 +153,7 @@ None.
 - Check useStreamMetrics hook implementation in 23-01-SUMMARY.md
 - Review REQUIREMENTS.md for QUAL-* requirement definitions
 
-**Next action:** Phase 23 complete. Plan Phase 24 - Creator Spotlight Selection & Display
+**Next action:** Execute Phase 24-02 (frontend spotlight components)
 
 ---
 

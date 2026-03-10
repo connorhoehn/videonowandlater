@@ -35,9 +35,9 @@
 - [x] **MOD-03**: A bounce event is written to a DynamoDB moderation log (`PK: SESSION#{id}`, `SK: MOD#{timestamp}#{uuid}`) with `userId`, `actionType: 'bounce'`, and `actorId`
 - [x] **MOD-04**: `create-chat-token.ts` checks the moderation log before issuing a new token — users with an active bounce on the current session are denied a token with a 403 response
 - [x] **MOD-05**: Any user can report a chat message via an inline quick-action that appears only on other users' messages (never on own messages)
-- [ ] **MOD-06**: Clicking report fires a backend request and shows a private toast confirmation — the reported message remains visible and no public label is applied
+- [x] **MOD-06**: Clicking report fires a backend request and shows a private toast confirmation — the reported message remains visible and no public label is applied
 - [x] **MOD-07**: A report event is written to the moderation log with `msgId`, `actionType: 'report'`, `reporterId`, and `reportedUserId`
-- [ ] **MOD-08**: Moderation quick-action (report button) is available in all chat rooms (broadcast chat, hangout chat) not just on broadcast pages
+- [x] **MOD-08**: Moderation quick-action (report button) is available in all chat rooms (broadcast chat, hangout chat) not just on broadcast pages
 
 ### Upload Video Player
 
@@ -130,9 +130,9 @@
 | MOD-03 | Phase 28 | Complete |
 | MOD-04 | Phase 28 | Complete |
 | MOD-05 | Phase 28 | Complete |
-| MOD-06 | Phase 28 | Pending |
+| MOD-06 | Phase 28 | Complete |
 | MOD-07 | Phase 28 | Complete |
-| MOD-08 | Phase 28 | Pending |
+| MOD-08 | Phase 28 | Complete |
 | VIDP-01 | Phase 29 | Pending |
 | VIDP-02 | Phase 29 | Pending |
 | VIDP-03 | Phase 29 | Pending |

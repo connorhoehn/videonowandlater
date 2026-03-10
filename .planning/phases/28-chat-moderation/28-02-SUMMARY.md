@@ -57,7 +57,7 @@ completed: 2026-03-10
 - **Duration:** ~5 min
 - **Started:** 2026-03-10T19:20:00Z
 - **Completed:** 2026-03-10T19:22:02Z
-- **Tasks:** 2 auto (1 checkpoint awaiting human verification)
+- **Tasks:** 3 (2 auto + 1 human-verify checkpoint, approved)
 - **Files modified:** 5
 
 ## Accomplishments
@@ -73,7 +73,7 @@ Each task was committed atomically:
 1. **Task 1: Extend MessageRow with hover bounce and report buttons** - `dd4a20a` (feat)
 2. **Task 2: Thread currentUserId + wire bounce/report API + toast** - `b382e66` (feat)
 
-**Plan metadata:** (pending — awaiting checkpoint verification)
+**Plan metadata:** `5790d3b` (docs: complete chat moderation frontend plan)
 
 ## Files Created/Modified
 - `web/src/features/chat/MessageRow.tsx` - Added isBroadcasterViewing/isOwnMessage/onBounce/onReport props; Kick and Report hover buttons with Tailwind group pattern
@@ -97,9 +97,9 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Chat moderation frontend complete; Task 3 is a human-verify checkpoint
-- A bounced user's error state ("You have been removed from this chat") relies on the existing `useChatRoom` `setError(event.reason)` path — no additional code change needed
-- Phase 29 (Upload Video Player Core) is ready to start after checkpoint approval
+- Chat moderation frontend complete and verified; human-verify checkpoint approved
+- A bounced user's error state ("You have been removed from this chat") relies on the existing `useChatRoom` `setError(event.reason)` path — confirmed working in live browser session
+- Phase 29 (Upload Video Player Core) is ready to start
 
 ---
 *Phase: 28-chat-moderation*

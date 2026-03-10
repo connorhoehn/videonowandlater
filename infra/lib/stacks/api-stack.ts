@@ -330,6 +330,35 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Speaker segments endpoint
+    const sessionSpeakerSegmentsResource = sessionIdResource.addResource('speaker-segments');
+
+    // GET /sessions/{sessionId}/speaker-segments (get diarized speaker segments)
+    const getSpeakerSegmentsHandler = new NodejsFunction(this, 'GetSpeakerSegmentsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-speaker-segments.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        TRANSCRIPTION_BUCKET: 'vnl-transcription-vnl-session',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getSpeakerSegmentsHandler);
+
+    getSpeakerSegmentsHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: ['arn:aws:s3:::vnl-transcription-vnl-session/*'],
+      })
+    );
+
+    sessionSpeakerSegmentsResource.addMethod('GET', new apigateway.LambdaIntegration(getSpeakerSegmentsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // Reaction endpoints
     const sessionReactionsResource = sessionIdResource.addResource('reactions');
 

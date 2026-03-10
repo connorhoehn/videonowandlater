@@ -17,6 +17,7 @@ interface ChatPanelProps {
   connectionState: 'disconnected' | 'connecting' | 'connected';
   onClose?: () => void;
   currentUserId?: string;
+  chatError?: string | null;
 }
 
 interface ConnectionIndicatorProps {
@@ -43,6 +44,7 @@ interface ChatPanelContentProps {
   onBounce?: (userId: string) => void;
   onReport?: (msgId: string, reportedUserId: string) => void;
   toastMsg?: string | null;
+  chatError?: string | null;
 }
 
 const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
@@ -55,6 +57,7 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
   onBounce,
   onReport,
   toastMsg,
+  chatError,
 }) => {
   const { messages, isLoadingHistory } = useChatMessagesContext();
 
@@ -70,6 +73,12 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
         )}
         <ConnectionIndicator state={connectionState} />
       </div>
+
+      {chatError && (
+        <div className="bg-red-50 border-b border-red-200 px-3 py-2 text-sm text-red-700 text-center">
+          {chatError}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden">
@@ -113,6 +122,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   connectionState,
   onClose,
   currentUserId,
+  chatError,
 }) => {
   const room = useChatRoomContext();
   const [toastMsg, setToastMsg] = React.useState<string | null>(null);
@@ -180,6 +190,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           onBounce={handleBounce}
           onReport={handleReport}
           toastMsg={toastMsg}
+          chatError={chatError}
         />
       </div>
     </ChatMessagesProvider>

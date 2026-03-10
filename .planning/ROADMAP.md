@@ -174,8 +174,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
-- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
+- [ ] 26-01-PLAN.md — scan-stuck-sessions handler + unit tests (detection, filtering, atomic counter, PutEvents)
+- [ ] 26-02-PLAN.md — recording-ended.ts recovery guard + CDK Lambda/Scheduler/Rule wiring
 
 ---
 
@@ -196,8 +196,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
-- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
+- [ ] 27-01-PLAN.md — To be planned
+- [ ] 27-02-PLAN.md — To be planned
 
 ---
 
@@ -218,8 +218,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
-- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
+- [ ] 28-01-PLAN.md — To be planned
+- [ ] 28-02-PLAN.md — To be planned
 
 ---
 
@@ -239,8 +239,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
-- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
+- [ ] 29-01-PLAN.md — To be planned
+- [ ] 29-02-PLAN.md — To be planned
 
 ---
 
@@ -261,8 +261,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
-- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
+- [ ] 30-01-PLAN.md — To be planned
+- [ ] 30-02-PLAN.md — To be planned
 
 ---
 
@@ -280,7 +280,7 @@ Plans:
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
-| 26 - Stuck Session Recovery Cron | 0/? | Not started | - |
+| 26 - Stuck Session Recovery Cron | 0/2 | Not started | - |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |

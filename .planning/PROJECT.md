@@ -83,7 +83,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 - ✓ EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary) — Phase 25
 - ✓ Cron job identifies sessions stuck in pipeline for >45 min and re-fires appropriate recovery event — Phase 26
-- [ ] Transcripts include speaker diarization with labels mapped to session usernames
+- ✓ Transcripts include speaker diarization with labels mapped to session usernames — Phase 27
 - [ ] Broadcaster can bounce (kick) a user from their active stream
 - [ ] Any user can report a chat message via inline quick action (shown only on other users' messages)
 - [ ] Reports and bounces are recorded in a moderation log (DynamoDB)
@@ -152,6 +152,9 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Dual GSI1 partition query (STATUS#ENDING + STATUS#ENDED) | Stuck sessions are in ENDED (not ENDING) after MediaConvert submission — must query both to catch all cases | ✓ Phase 26 |
 | ConditionalCheckFailedException caught per-session in cron | Concurrent cron runs race on same session; per-session catch lets remaining sessions proceed | ✓ Phase 26 |
 | EventBridge PutEvents for recovery (not Lambda.invoke) | Preserves DLQ and retry semantics; recovery events route through existing EventBridge rules | ✓ Phase 26 |
+| Speaker labels as "Speaker 1"/"Speaker 2" (no username mapping) | Composite audio prevents username attribution; Transcribe diarization works on mixed audio only | ✓ Phase 27 |
+| Diarized segments stored in S3 only (not DynamoDB inline) | 400KB DynamoDB item limit risk on long recordings; S3 pointer pattern avoids size constraint | ✓ Phase 27 |
+| Speaker bubble mode in TranscriptDisplay | Side-by-side bubble layout distinguishes speakers visually; plain mode preserved as fallback | ✓ Phase 27 |
 
 ## Current State
 
@@ -164,4 +167,4 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-10 after Phase 26 — stuck session recovery cron complete (scan-stuck-sessions Lambda + RecordingRecoveryRule + recording-ended guard)*
+*Last updated: 2026-03-10 after Phase 27 — speaker-attributed transcripts complete (diarization in start-transcribe + transcribe-completed + speaker bubble UI in ReplayViewer)*

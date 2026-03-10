@@ -359,6 +359,42 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Phase 28: Chat Moderation — bounce and report endpoints
+
+    // POST /sessions/{sessionId}/bounce (disconnect user from chat + record BOUNCE)
+    const bounceResource = sessionIdResource.addResource('bounce');
+    const bounceUserHandler = new NodejsFunction(this, 'BounceUserHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/bounce-user.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(bounceUserHandler);
+    bounceUserHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:DisconnectUser'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    bounceResource.addMethod('POST', new apigateway.LambdaIntegration(bounceUserHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/report (record a message report for any authenticated user)
+    const reportResource = sessionIdResource.addResource('report');
+    const reportMessageHandler = new NodejsFunction(this, 'ReportMessageHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/report-message.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(reportMessageHandler);
+    reportResource.addMethod('POST', new apigateway.LambdaIntegration(reportMessageHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // Reaction endpoints
     const sessionReactionsResource = sessionIdResource.addResource('reactions');
 

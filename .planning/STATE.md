@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Creator Studio & Stream Quality
-status: complete
+milestone: v1.5
+milestone_name: Pipeline Reliability, Moderation & Upload Experience
+status: planning
 last_updated: "2026-03-10T00:00:00Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 11
-  percent: 99
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 
 ## Current Position
 
-**Active Phase:** Phase 24 — Creator Spotlight Selection & Display
-**Active Plan:** 24-03 (complete)
-**Status:** Phase 24 complete — all 3 plans done
-**Progress:** [██████████] 99%
+**Active Phase:** Not started — defining requirements
+**Active Plan:** —
+**Status:** Defining requirements for v1.5
+**Progress:** [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 

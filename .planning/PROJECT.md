@@ -31,14 +31,26 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - ✅ AI summary pipeline: transcript → Bedrock/Claude Sonnet → one-paragraph summary on every recording
 - ✅ Video uploads: users can upload pre-recorded videos (MOV/MP4) with automatic adaptive bitrate encoding
 
-## Current Milestone: v1.4 Creator Studio & Stream Quality
+## Latest Milestone: v1.4 Creator Studio & Stream Quality (SHIPPED 2026-03-10)
 
-**Goal:** Give broadcasters professional tools to monitor stream health and showcase other creators in real-time.
+**Accomplished:** Professional broadcast tooling — real-time stream quality dashboard and creator spotlight feature.
+
+**Delivered:**
+- ✅ Stream quality dashboard: bitrate, FPS, health score overlay during live broadcast (Phase 23)
+- ✅ Creator spotlight: broadcaster can feature another live creator with badge + modal (Phase 24)
+- ✅ Viewer spotlight display: featured creator link + badge visible to all viewers (Phase 24)
+- ✅ CDK wiring: GET /sessions/live + PUT /sessions/{sessionId}/spotlight endpoints (Phase 24)
+
+## Current Milestone: v1.5 Pipeline Reliability, Moderation & Upload Experience
+
+**Goal:** Harden the recording/transcription/AI pipeline, give broadcasters and users moderation tools, and build a dedicated rich player page for uploaded videos.
 
 **Target features:**
-- Stream quality dashboard during broadcast (bitrate, resolution, network status, frame rate)
-- Creator spotlight overlay feature (feature another broadcaster's stream with elegant UI)
-- Real-time metrics ingest for professional broadcast experience
+- EventBridge pipeline audit with structured debug logging across all Lambda handlers
+- Cron-based recovery for stuck sessions (recordings that never reach transcription/summary)
+- Speaker-attributed transcripts using Transcribe diarization mapped to session usernames
+- Broadcaster bounce/kick controls + per-message report action for all chat users
+- Dedicated upload video player page (/video/:sessionId) with HLS adaptive bitrate, resolution selector, async comments, reactions, and transcript/AI summary panel
 
 ## Requirements
 
@@ -67,14 +79,18 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-**v1.4 Milestone (Creator Studio & Stream Quality):**
+**v1.5 Milestone (Pipeline Reliability, Moderation & Upload Experience):**
 
-- [ ] Broadcaster can view stream quality metrics during live broadcast
-- [ ] Stream quality dashboard shows bitrate, resolution, frame rate, network status
-- [ ] Broadcaster can feature another creator's broadcast as an overlay/spotlight
-- [ ] Featured broadcast selection UI with search and discovery
-- [ ] Featured broadcast link/badge displayed to viewers during broadcast
-- [ ] Viewers can click featured broadcast to navigate and watch
+- [ ] EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary)
+- [ ] Cron job identifies sessions stuck in pipeline for >30 min and re-fires appropriate recovery event
+- [ ] Transcripts include speaker diarization with labels mapped to session usernames
+- [ ] Broadcaster can bounce (kick) a user from their active stream
+- [ ] Any user can report a chat message via inline quick action (shown only on other users' messages)
+- [ ] Reports and bounces are recorded in a moderation log (DynamoDB)
+- [ ] Dedicated /video/:sessionId page for uploaded video playback with HLS adaptive bitrate
+- [ ] Video player supports manual resolution selection (quality levels from HLS manifest)
+- [ ] Upload video page supports async comments (timestamped, persistent, not live chat)
+- [ ] Upload video page shows reactions, transcript, and AI summary
 
 ### Just Validated (v1.2)
 
@@ -95,7 +111,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - Email confirmation on signup — explicitly excluded for speed
 - OAuth/social login — username/password only for v1
 - Paid subscriptions/monetization — not in scope
-- Content moderation/AI filtering — defer to v2
+- AI content moderation/filtering — defer to v2 (v1.5 adds human-driven moderation only)
 - Multi-region deployment — single region for v1
 
 ## Context
@@ -143,4 +159,4 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-06 after completing v1.3 milestone (22 phases total, 64 plans executed); now planning v1.4*
+*Last updated: 2026-03-10 after shipping v1.4 (24 phases total); starting v1.5 Pipeline Reliability, Moderation & Upload Experience*

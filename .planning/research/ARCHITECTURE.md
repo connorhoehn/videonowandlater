@@ -1,524 +1,593 @@
 # Architecture Research
 
-**Domain:** AWS IVS live-video platform — Activity Feed & Intelligence (v1.2)
-**Researched:** 2026-03-05
-**Confidence:** HIGH (based on direct codebase analysis)
-
----
-
-## Existing Architecture Baseline
-
-The system is a single-table DynamoDB design with Lambda handlers, EventBridge-driven lifecycle
-events, and two API surfaces: REST (API Gateway + Cognito) and internal (EventBridge).
-
-### DynamoDB Access Patterns (Current)
-
-| PK | SK | Entity | GSI |
-|----|----|--------|-----|
-| `SESSION#{id}` | `METADATA` | Session record | GSI1PK=`STATUS#{status}`, GSI1SK=`createdAt` |
-| `RESOURCE#{arn}` | `METADATA` | Pool resource | GSI1PK=`STATUS#AVAILABLE#{type}` |
-| `REACTION#{sessionId}#{emojiType}#SHARD{n}` | `{time}#{reactionId}` | Reaction | GSI2PK=`REACTION#{sessionId}`, GSI2SK=padded time |
-| `CHAT#{sessionId}` | `{ts}#{messageId}` | Chat message | — |
-
-### Session Domain Model (current fields, `backend/src/domain/session.ts`)
-
-```
-sessionId, userId, sessionType (BROADCAST|HANGOUT), status (creating|live|ending|ended),
-claimedResources { channel?, stage?, chatRoom },
-createdAt, startedAt, endedAt, version,
-recordingS3Path, recordingDuration, thumbnailUrl, recordingHlsUrl,
-recordingStatus (pending|processing|available|failed)
-```
-
-### Existing Lambda Handlers
-
-| Handler | Trigger | Responsibility |
-|---------|---------|---------------|
-| `create-session.ts` | POST /sessions | Claim pool resource, create session record |
-| `get-session.ts` | GET /sessions/{id} | Read session by ID |
-| `join-hangout.ts` | POST /sessions/{id}/join | Generate IVS RealTime token; transition to LIVE |
-| `end-session.ts` | POST /sessions/{id}/end | Transition session to ENDING |
-| `stream-started.ts` | EventBridge IVS Stream Start | Scan by channel ARN, transition to LIVE |
-| `stream-ended.ts` | EventBridge IVS Stream End | Transition to ENDING |
-| `recording-started.ts` | EventBridge IVS Recording Start | Update recordingStatus=processing |
-| `recording-ended.ts` | EventBridge IVS Recording End (broadcast+stage) | Transition to ENDED, set recording metadata, release pool |
-| `list-recordings.ts` | GET /recordings | Scan for ended/ending sessions, return sorted |
-| `create-reaction.ts` | POST /sessions/{id}/reactions | Persist sharded reaction, broadcast via IVS Chat |
-| `get-reactions.ts` | GET /sessions/{id}/reactions | Query GSI2 for time-ranged reactions |
-| `create-chat-token.ts` | POST /sessions/{id}/chat/token | Generate IVS Chat token |
-| `send-message.ts` | POST /sessions/{id}/chat/messages | Store message to DynamoDB |
-| `get-chat-history.ts` | GET /sessions/{id}/chat/messages | Query chat messages |
-| `replenish-pool.ts` | EventBridge schedule (5-min) | Top up IVS channel/stage/room pool |
-| `ivs-event-audit.ts` | EventBridge all aws.ivs | CloudWatch observability |
+**Domain:** AWS IVS streaming platform — v1.5 Pipeline Reliability, Moderation & Upload Experience
+**Researched:** 2026-03-10
+**Confidence:** HIGH (based on direct codebase analysis + AWS official docs)
 
 ---
 
 ## System Overview
 
 ```
-+-----------------------------------------------------------------+
-|                     Frontend (React/Vite)                       |
-|  HomePage  |  BroadcastPage  |  HangoutPage  |  ReplayPage     |
-+-----------------------------+-----------------------------------+
-                              | REST (API Gateway + Cognito auth)
-+-----------------------------+-----------------------------------+
-|                    API Lambda Handlers                          |
-|  create-session  get-session  join-hangout  end-session         |
-|  list-recordings  [NEW] list-activity  [NEW] get-session+AI    |
-|  create-reaction  get-reactions  create-chat-token  send-msg    |
-+--------+----------------------------+---------------------------+
-         | DynamoDB                   | AWS SDKs
-+--------+----------+   +------------+--------------------+
-|  vnl-sessions      |   | IVS Channel | IVS RealTime Stage |
-|  GSI1 (status)     |   | IVS Chat   | Amazon Transcribe   |
-|  GSI2 (reactions)  |   | S3/CF      | Bedrock (Claude)    |
-+-------------------+   +-----------------------------------------+
-+----------------------------------------------------------------+
-|         Event-Driven Handlers (EventBridge targets)            |
-|  stream-started  stream-ended  recording-started               |
-|  recording-ended (MODIFY: +reaction summary)                   |
-|  [NEW] start-transcription  [NEW] store-transcript             |
-+----------------------------------------------------------------+
++-----------------------------------------------------------------------------------------------+
+|                               React Frontend (web/)                                            |
+|   /broadcast/:id  /viewer/:id  /replay/:id  /hangout/:id  /upload/:id  /video/:sessionId      |
++-----------------------------------------------------------------------------------------------+
+                                          |
+                              API Gateway (Cognito REST)
+                                          |
++-----------------------------------------------------------------------------------------------+
+|                                Lambda Handlers                                                 |
+|  Existing: create-session  get-session  recording-ended  transcribe-completed  store-summary   |
+|  NEW: bounce-user  report-message  scan-stuck-sessions  list-comments  create-comment          |
++-----------------------------------------------------------------------------------------------+
+                                          |
++-----------------------------------------------------------------------------------------------+
+|                      EventBridge (default bus + Scheduler)                                    |
+|  aws.ivs events -> pipeline + audit handlers                                                   |
+|  custom.vnl -> pipeline progression (Recording Available, Transcript Stored)                   |
+|  NEW: EventBridge Scheduler rate(30 min) -> scan-stuck-sessions                               |
++-----------------------------------------------------------------------------------------------+
+                                          |
++-----------------------------------------------------------------------------------------------+
+|                     DynamoDB (vnl-sessions, single-table)                                     |
+|  SESSION#{id} / METADATA    MODLOG#{sessionId} / BOUNCE#{ts}#{userId}                        |
+|  REACTION#{id}#{emoji}...   MODLOG#{sessionId} / REPORT#{msgId}#{ts}                         |
+|  PARTICIPANT#{id}...        COMMENT#{sessionId} / {paddedTs}#{commentId}                      |
++-----------------------------------------------------------------------------------------------+
+                |
++---------------+-------------------+--------------------+-------------------+
+|      S3/CF    |    Transcribe     |   MediaConvert     |    Bedrock        |
+|               | (+ diarization)   |                    |  (Nova Pro)       |
++---------------+-------------------+--------------------+-------------------+
 ```
 
 ---
 
-## Integration Points: What Changes and Where
+## Existing Architecture Baseline (inherited from v1.4)
 
-### 1. Hangout Participant Tracking
+### DynamoDB Access Patterns (current)
 
-**Current state:** `backend/src/handlers/join-hangout.ts` generates a participant token and
-transitions the session to LIVE on first join. No participant data is persisted to DynamoDB.
+| PK | SK | Entity | GSI Used |
+|----|----|--------|----------|
+| `SESSION#{id}` | `METADATA` | Session record | GSI1PK=`STATUS#{status}`, GSI1SK=`createdAt` |
+| `SESSION#{id}` | `PARTICIPANT#{userId}` | Hangout participant | None (query by PK prefix) |
+| `RESOURCE#{arn}` | `METADATA` | Pool resource | GSI1PK=`STATUS#AVAILABLE#{type}` |
+| `REACTION#{sessionId}#{emojiType}#SHARD{n}` | `{time}#{reactionId}` | Reaction | GSI2 for time-range |
+| `CHAT#{sessionId}` | `{ts}#{messageId}` | Chat message | None |
 
-**Integration point:** `join-hangout.ts`, after line 65 — after `ivsRealTimeClient.send(command)`
-returns successfully, before the response is built.
+### Existing Lambda Handlers Relevant to v1.5
 
-**What to add:** Call a new `addHangoutParticipant()` repository function. Stores the participant
-join event as a separate DynamoDB item co-located under the session PK.
+| Handler | Trigger | v1.5 Change |
+|---------|---------|-------------|
+| `recording-ended.ts` | EventBridge IVS Recording End | Add structured log statements |
+| `start-transcribe.ts` | EventBridge `Upload Recording Available` | Add `ShowSpeakerLabels: true` |
+| `transcribe-completed.ts` | EventBridge `aws.transcribe` | Parse speaker_labels, store speakerSegments |
+| `transcode-completed.ts` | EventBridge MediaConvert COMPLETE | Add structured log statements |
+| `store-summary.ts` | EventBridge `Transcript Stored` | Add structured log statements |
+| `ivs-event-audit.ts` | EventBridge all aws.ivs | Existing — pattern to extend |
 
-**New DynamoDB item pattern:**
+### Session Domain Model (current, `backend/src/domain/session.ts`)
+
+The `Session` interface has 30+ fields. Key fields relevant to v1.5:
 
 ```
-PK:            SESSION#{sessionId}
-SK:            PARTICIPANT#{userId}
-entityType:    PARTICIPANT
-sessionId:     string
-userId:        string
-participantId: string   (from response.participantToken.participantId)
-joinedAt:      ISO timestamp
-leftAt:        ISO timestamp | undefined  (nullable — set by EventBridge handler if added later)
+sessionId, userId, sessionType (BROADCAST|HANGOUT|UPLOAD), status
+claimedResources { channel?, stage?, chatRoom }
+transcriptStatus: 'pending' | 'processing' | 'available' | 'failed'
+transcriptS3Path, transcript
+aiSummary, aiSummaryStatus
+mediaconvertJobId
+recordingHlsUrl, recordingStatus
 ```
 
-Using `SESSION#{sessionId}` as PK with SK=`PARTICIPANT#{userId}` keeps participant items
-co-located with the session. A single `Query` on PK with `begins_with(SK, 'PARTICIPANT#')` fetches
-all participants. No new GSI needed.
-
-**Why not a list on the session METADATA item:** Adding participants to the session item creates
-write-contention — concurrent joins would all update the same versioned item. The existing
-`updateSessionStatus()` uses optimistic locking (`#version = :currentVersion`). A concurrent second
-participant join would cause a `ConditionalCheckFailedException`. Separate items with shared PK
-avoid this entirely.
-
-**Leave events (optional for v1.2):** IVS RealTime emits `IVS Participant Event` EventBridge events
-(participant.left, participant.disconnected). A handler can update the participant item with
-`leftAt`. This is deferred — participant count for the activity card can be derived from join items
-alone, and `leftAt` is nullable.
+`ProcessingEventType` enum and `ProcessingEvent` interface already exist in `session.ts` — the
+data model for a pipeline audit log is partially defined. This is the anchor for structured logging.
 
 ---
 
-### 2. Reaction Summary Counts
+## Integration Points: New vs Modified Components
 
-**Current state:** `backend/src/repositories/reaction-repository.ts` `getReactionCounts()` aggregates
-across 100 shards (100 parallel DynamoDB queries per emoji type, 5 types = 500 queries per call).
-This cost is unacceptable on every homepage load.
-
-**Integration point:** `backend/src/handlers/recording-ended.ts`, after `updateRecordingMetadata()`
-succeeds (around line 127).
-
-**When to compute:** At session end — the recording-ended event. The session is complete, no more
-reactions will arrive, and the cost is paid once rather than on every homepage request.
-
-**What to add in `recording-ended.ts`:** After updating recording metadata, call a new
-`computeAndStoreReactionSummary()` helper that:
-1. Calls `getReactionCounts()` for all 5 emoji types in parallel.
-2. Writes the result as `reactionSummary` map to the session METADATA item.
-
-**New session METADATA fields:**
-
-```
-reactionSummary: {
-  heart:     number,
-  fire:      number,
-  clap:      number,
-  laugh:     number,
-  surprised: number,
-  totalCount: number
-}
-```
-
-Stored as a DynamoDB map attribute on `SESSION#{id} / METADATA`. A new `updateReactionSummary()`
-function is added to `backend/src/repositories/session-repository.ts` alongside the existing
-`updateRecordingMetadata()`.
-
-**Critical implementation note:** Wrap in try/catch, do NOT throw. Pool resource release is
-time-critical — it must always execute. Reaction summary computation is best-effort; a failure
-here should log and continue.
-
----
-
-### 3. Transcription Pipeline — Trigger
-
-**Current state:** `recording-ended.ts` fires when IVS emits a Recording End event. The EventBridge
-event payload includes `recording_s3_key_prefix` — the S3 path prefix where the recording landed.
-The handler already derives the HLS URL from this prefix.
-
-**Integration point:** Add `backend/src/handlers/start-transcription.ts` as a second Lambda target
-on the existing `RecordingEndRuleV2` EventBridge rule in `infra/lib/stacks/session-stack.ts`.
-
-**Why not S3 event notifications:** The Recording End EventBridge event from IVS is the
-authoritative "recording is complete" signal — it fires exactly once when all files are finalized.
-S3 events would fire multiple times (once per file: HLS segments, thumbnails, manifests) before the
-recording is assembled. Using the existing EventBridge rule avoids S3-trigger complexity and
-provides the session context (ARN lookup) already solved in `recording-ended.ts`.
-
-**What `start-transcription.ts` does:**
-1. Parse the resource ARN and determine broadcast vs stage (same logic as `recording-ended.ts`).
-2. Derive the MP4 source path from `recording_s3_key_prefix`. IVS records raw MP4 alongside HLS:
-   - Broadcast: `{prefix}/media/hls/` contains HLS; MP4 source is not directly provided.
-   - Fallback: Use the HLS master playlist URI with Transcribe's MediaFormat=m3u8. Amazon Transcribe
-     supports HLS as input format, so the existing HLS URL can be used directly. This avoids
-     guessing the MP4 path.
-3. Call `StartTranscriptionJobCommand` (AWS SDK `@aws-sdk/client-transcribe`).
-4. Use `jobName = transcript-{sessionId}-{Date.now()}` for uniqueness.
-5. Set output to the recordings S3 bucket under a `transcripts/` prefix.
-6. Update session: `transcriptStatus=processing`, `transcriptJobName={jobName}`.
-
-**New session METADATA fields for transcription:**
-
-```
-transcriptStatus:  'pending' | 'processing' | 'available' | 'failed'
-transcriptJobName: string   (for audit and re-fetch)
-transcriptText:    string   (inline for typical sessions; see storage note below)
-```
-
-**Storage consideration:** Transcripts for a 60-minute session are typically 20-60KB of plain text,
-well under DynamoDB's 400KB item limit. For sessions over 3 hours, consider storing only the S3 URI
-on the item and fetching on demand. For v1.2, storing inline is acceptable. Guard with a character
-limit (truncate at 250,000 characters if needed).
-
----
-
-### 4. Transcript Storage — `store-transcript.ts`
-
-**Trigger:** Amazon Transcribe emits an EventBridge event when a job completes.
-- Source: `aws.transcribe`
-- Detail-type: `Transcribe Job State Change`
-- Filter: `detail.TranscriptionJobStatus: [COMPLETED, FAILED]`
-
-**New EventBridge rule needed in `session-stack.ts`:**
-```
-TranscribeJobCompleteRule:
-  source: ['aws.transcribe']
-  detail-type: ['Transcribe Job State Change']
-  detail.TranscriptionJobStatus: ['COMPLETED', 'FAILED']
-  target: store-transcript Lambda
-```
-
-**What `store-transcript.ts` does:**
-1. Parse `TranscriptionJobName` from the event (`transcript-{sessionId}-{timestamp}` by convention).
-2. Extract `sessionId` from the job name.
-3. If status is FAILED: update `transcriptStatus=failed`, set `aiSummaryStatus=failed`, return.
-4. If status is COMPLETED:
-   a. Call `GetTranscriptionJobCommand` to retrieve the transcript output S3 URI.
-   b. `S3.GetObject` to fetch transcript JSON.
-   c. Extract transcript text: `data.results.transcripts[0].transcript`.
-   d. Call `updateTranscriptFields()` on session-repository to store transcript + update status.
-   e. Call Bedrock to generate AI summary (see section 5).
-   f. Call `updateAiSummary()` on session-repository to store summary.
-
----
-
-### 5. AI Summary Pipeline — Bedrock
-
-**Trigger:** Inline within `store-transcript.ts`, after transcript is stored.
-
-**Why inline rather than a separate Lambda/EventBridge step:** The transcript → summary dependency
-is linear and guaranteed. Bedrock `InvokeModelCommand` returns within 2-5 seconds for a
-summarization prompt. Keeping it in `store-transcript.ts` avoids an extra EventBridge rule and
-DynamoDB Streams infrastructure.
-
-**Failure isolation:** The Bedrock call is wrapped in its own try/catch. On failure:
-- Set `aiSummaryStatus=failed`, log error.
-- Do NOT throw. The transcript is already stored and valuable without the summary.
-
-**Model:** `anthropic.claude-3-haiku-20240307-v1:0` (Bedrock model ID). Haiku is fast (1-2s
-invocation), cheap, and sufficient for a 2-3 sentence summarization task. Sonnet/Opus are
-unnecessary for this prompt complexity.
-
-**Prompt structure:**
-```
-System: You are a video content summarizer. Summarize video call transcripts concisely.
-User: Summarize the following transcript in 2-3 sentences, friendly tone:
-{transcriptText}
-```
-
-**New session METADATA fields for AI summary:**
-
-```
-aiSummary:       string   (one paragraph, 2-3 sentences, ~100-200 words)
-aiSummaryStatus: 'pending' | 'processing' | 'available' | 'failed'
-aiModel:         string   (e.g., "anthropic.claude-3-haiku-20240307-v1:0" for audit)
-```
-
-**IAM required:** `store-transcript.ts` Lambda needs:
-- `bedrock:InvokeModel` on `arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-*`
-
----
-
-### 6. Homepage API — New and Modified Endpoints
-
-**Current `GET /recordings`:** Returns all ended/ending sessions via a full-table Scan, sorted by
-`endedAt` descending. Defined in `backend/src/handlers/list-recordings.ts`. The `getRecentRecordings()`
-repository function in `session-repository.ts` already returns complete session objects, so new
-fields (`reactionSummary`, `aiSummary`, `transcriptStatus`) will flow through automatically once
-the pipeline populates them.
-
-**No breaking change to `/recordings`:** The `Recording` interface in
-`web/src/features/replay/RecordingFeed.tsx` (lines 8-17) is extended additively with optional
-fields. Existing callers are unaffected.
-
-**New `GET /activity` endpoint:**
-
-The homepage redesign adds an activity feed below the recording slider — a chronological list of
-all recent sessions (BROADCAST + HANGOUT), including sessions without available recordings (e.g.,
-in-progress, failed, or hangouts without a recording). The existing `/recordings` endpoint is
-insufficient because it filters by recordingStatus and only surfaces replay-ready content.
-
-```
-GET /activity
-Query params: ?limit=20&type=ALL|BROADCAST|HANGOUT  (optional)
-Response:     { items: ActivityItem[] }
-```
-
-This endpoint is the primary source for both the horizontal recording slider (broadcasts with
-`recordingStatus=available`) and the activity feed list (all sessions). The frontend differentiates
-rendering based on `sessionType` and `recordingStatus`.
-
-**Hangout activity cards:** Hangout sessions appear as activity cards with participant list,
-message count, and duration — not as recording tiles. The `/activity` endpoint serves both use
-cases from a single call.
-
----
-
-## New Components Summary
-
-### New Lambda Functions
+### New Lambda Handlers
 
 | File | Trigger | Responsibility |
 |------|---------|---------------|
-| `backend/src/handlers/start-transcription.ts` | EventBridge `RecordingEndRuleV2` (2nd target) | Start Amazon Transcribe job |
-| `backend/src/handlers/store-transcript.ts` | EventBridge `aws.transcribe` Job State Change | Fetch transcript, store, invoke Bedrock |
-| `backend/src/handlers/list-activity.ts` | GET /activity | Unified activity feed (all session types, all new fields) |
+| `bounce-user.ts` | POST /sessions/{id}/bounce | IVS Chat DisconnectUser + write MODLOG item |
+| `report-message.ts` | POST /sessions/{id}/chat/{msgId}/report | Write MODLOG report item |
+| `scan-stuck-sessions.ts` | EventBridge Scheduler rate(30 min) | Find stuck sessions, emit recovery events |
+| `list-comments.ts` | GET /sessions/{id}/comments | Query COMMENT items for session |
+| `create-comment.ts` | POST /sessions/{id}/comments | Write timestamped COMMENT item |
 
-### Modified Lambda Functions
+### Modified Lambda Handlers
 
-| File | Change | Location |
-|------|--------|----------|
-| `backend/src/handlers/join-hangout.ts` | Add participant persistence after token generation | After line 65 |
-| `backend/src/handlers/recording-ended.ts` | Add reaction summary computation after metadata update | After line 127 |
-| `backend/src/handlers/list-recordings.ts` | No logic change — new fields appear automatically | — |
+| File | Change | Scope |
+|------|--------|-------|
+| `recording-ended.ts` | Add structured JSON log at invocation, MediaConvert submission, and error paths | Log-only — no behavior change |
+| `transcode-completed.ts` | Add structured JSON log at invocation, transcribe submission, error paths | Log-only |
+| `transcribe-completed.ts` | Parse `speaker_labels` JSON, reconstruct speaker segments, store `speakerSegments` on session | Functional change |
+| `start-transcribe.ts` | Add `Settings.ShowSpeakerLabels = true`, `Settings.MaxSpeakerLabels = 10` to `StartTranscriptionJobCommand` | Functional change |
+| `store-summary.ts` | Add structured JSON log at invocation and result paths | Log-only |
 
-### New Repository Functions (all in `backend/src/repositories/session-repository.ts`)
+### New API Routes (wired in `api-stack.ts`)
 
-| Function | Purpose |
-|----------|---------|
-| `addHangoutParticipant()` | Write PARTICIPANT item under SESSION# PK |
-| `getHangoutParticipants()` | Query PARTICIPANT items for a session |
-| `updateReactionSummary()` | Write `reactionSummary` map to session METADATA |
-| `updateTranscriptFields()` | Write `transcriptText`, `transcriptStatus`, `transcriptJobName` |
-| `updateAiSummary()` | Write `aiSummary`, `aiSummaryStatus`, `aiModel` |
-| `getRecentActivity()` | Scan all recent sessions (all types), sorted descending |
+| Method | Route | Auth | Handler |
+|--------|-------|------|---------|
+| POST | `/sessions/{sessionId}/bounce` | Cognito required | `bounce-user.ts` |
+| POST | `/sessions/{sessionId}/chat/{msgId}/report` | Cognito required | `report-message.ts` |
+| GET | `/sessions/{sessionId}/comments` | Cognito required | `list-comments.ts` |
+| POST | `/sessions/{sessionId}/comments` | Cognito required | `create-comment.ts` |
 
-### New DynamoDB Schema Additions
+New CDK resource path: `{msgId}` must be added under the existing `sessionChatResource` in `api-stack.ts`:
 
-All changes are to the existing `vnl-sessions` table. No new tables needed.
-
-**Session METADATA item — new fields:**
-
+```typescript
+const msgIdResource = sessionChatResource.addResource('{msgId}');
+const reportResource = msgIdResource.addResource('report');
+const sessionCommentsResource = sessionIdResource.addResource('comments');
 ```
-# Reaction summary (computed at session end)
-reactionSummary: Map {
-  heart:      Number,
-  fire:       Number,
-  clap:       Number,
-  laugh:      Number,
-  surprised:  Number,
-  totalCount: Number
+
+### New DynamoDB Item Schemas (all in existing `vnl-sessions` table)
+
+**Moderation log — bounce:**
+```
+PK:            MODLOG#{sessionId}
+SK:            BOUNCE#{ISO-timestamp}#{targetUserId}
+entityType:    MODERATION_EVENT
+eventType:     BOUNCE
+sessionId:     string
+actorUserId:   string   (cognito:username of broadcaster)
+targetUserId:  string   (cognito:username of bounced user)
+reason?:       string
+timestamp:     string   (ISO-8601)
+```
+
+**Moderation log — report:**
+```
+PK:            MODLOG#{sessionId}
+SK:            REPORT#{messageId}#{ISO-timestamp}
+entityType:    MODERATION_EVENT
+eventType:     REPORT
+sessionId:     string
+reporterUserId:   string
+messageId:     string   (IVS Chat message ID)
+messageContent:   string   (copy for audit)
+reason?:       string
+timestamp:     string
+```
+
+**Comment (upload/video page):**
+```
+PK:            COMMENT#{sessionId}
+SK:            {zeroPaddedSeconds}#{commentId}   e.g. "0000045.320#uuid-..."
+entityType:    COMMENT
+commentId:     string   (uuid)
+sessionId:     string
+userId:        string   (cognito:username)
+text:          string
+videoTimestamp:  number   (float seconds into video)
+createdAt:     string   (ISO-8601)
+```
+
+Zero-padded SK (10 digits before decimal, 3 after) ensures lexicographic sort = chronological by
+video position. This enables range queries: `KeyConditionExpression: 'PK = :pk AND SK BETWEEN :start AND :end'`
+for efficiently fetching comments near a playhead position.
+
+**Session METADATA — new fields (additive, backward compatible):**
+```typescript
+speakerSegments?: SpeakerSegment[]   // derived from Transcribe speaker_labels
+speakerCount?: number                // from speaker_labels.speakers
+```
+
+Where `SpeakerSegment`:
+```typescript
+interface SpeakerSegment {
+  speaker_label: string;   // "spk_0", "spk_1"
+  start_time: string;      // seconds as string (Transcribe format, e.g. "4.87")
+  end_time: string;
+  text: string;            // reconstructed sentence/phrase text for this segment
 }
-
-# Transcription pipeline
-transcriptStatus:  String  ('pending' | 'processing' | 'available' | 'failed')
-transcriptJobName: String
-transcriptText:    String  (inline; guard at 250,000 chars for sessions > ~3 hrs)
-
-# AI summary
-aiSummary:       String
-aiSummaryStatus: String  ('pending' | 'processing' | 'available' | 'failed')
-aiModel:         String  (model ID for audit)
-
-# Denormalized participant count (written at session end for fast reads)
-participantCount: Number
 ```
 
-**New PARTICIPANT item type:**
+### CDK Additions in `session-stack.ts`
 
+```typescript
+// scan-stuck-sessions Lambda + schedule
+const scanStuckFn = new nodejs.NodejsFunction(this, 'ScanStuckSessions', {
+  entry: '...scan-stuck-sessions.ts',
+  timeout: Duration.minutes(5),
+  environment: { TABLE_NAME: this.table.tableName },
+});
+this.table.grantReadWriteData(scanStuckFn);
+scanStuckFn.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['events:PutEvents'],
+  resources: ['arn:aws:events:*:*:event-bus/default'],
+}));
+new events.Rule(this, 'ScanStuckSessionsSchedule', {
+  schedule: events.Schedule.rate(Duration.minutes(30)),
+  targets: [new targets.LambdaFunction(scanStuckFn)],
+  description: 'Scan for stuck sessions every 30 minutes and re-trigger recovery events',
+});
+
+// Explicit logGroup on pipeline Lambdas (follow ivs-event-audit.ts pattern)
+// Add logGroup: new logs.LogGroup(...) to:
+//   RecordingEnded, TranscodeCompleted, TranscribeCompleted, StoreSummary
 ```
-PK:            SESSION#{sessionId}
-SK:            PARTICIPANT#{userId}
-entityType:    PARTICIPANT
-sessionId:     String
-userId:        String
-participantId: String    (IVS RealTime participant ID from token response)
-joinedAt:      ISO String
-leftAt:        ISO String | undefined  (nullable)
+
+### CDK IAM Additions
+
+| Lambda | New Permission | Resource |
+|--------|---------------|---------|
+| `bounce-user.ts` | `ivschat:DisconnectUser` | `arn:aws:ivschat:*:*:room/*` |
+| `bounce-user.ts` | DynamoDB read/write | vnl-sessions table |
+| `report-message.ts` | DynamoDB read/write | vnl-sessions table |
+| `scan-stuck-sessions.ts` | DynamoDB read | vnl-sessions table |
+| `scan-stuck-sessions.ts` | `events:PutEvents` | default event bus |
+| `list-comments.ts` | DynamoDB read | vnl-sessions table |
+| `create-comment.ts` | DynamoDB read/write | vnl-sessions table |
+
+### New Frontend Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `VideoPage.tsx` | `web/src/features/video/` | New `/video/:sessionId` route — full player with comments, transcript, reactions |
+| `useVideoComments.ts` | `web/src/features/upload/` | Fetch all comments, filter by syncTime proximity |
+| `CommentThread.tsx` | `web/src/features/upload/` | Render timestamped comments near playhead |
+| `BounceButton.tsx` | `web/src/features/moderation/` | Broadcaster-only: POST /bounce |
+| `ReportButton.tsx` | `web/src/features/moderation/` | Per-message: POST /chat/{msgId}/report |
+| `useModerationActions.ts` | `web/src/features/moderation/` | API wiring for bounce + report |
+
+### Modified Frontend Components
+
+| Component | Change |
+|-----------|--------|
+| `MessageRow.tsx` | Add `ReportButton` on other users' messages; add `BounceButton` when viewer is broadcaster |
+| `App.tsx` | Add `/video/:sessionId` route pointing to `VideoPage` |
+| `useReplayPlayer.ts` | Return `player` instance + `qualities` state array for resolution selector |
+| `UploadViewer.tsx` | Add `/video/:sessionId` redirect or supersede with `VideoPage` |
+| `TranscriptDisplay.tsx` | Extend to optionally render diarized `speakerSegments` (grouped by speaker label) |
+
+---
+
+## Feature-Specific Architecture Decisions
+
+### 1. Structured Logging
+
+**Approach: inline structured JSON — do not add AWS Powertools/Middy dependency.**
+
+The existing `ivs-event-audit.ts` already uses `console.log(JSON.stringify({...}))` as the
+canonical pattern. AWS Powertools TypeScript would add ~400KB to cold-start payload and requires
+`middy` middleware wiring not present in the codebase. For this milestone the inline approach is
+the right fit.
+
+**Log schema — apply to all pipeline handlers:**
+```typescript
+console.log(JSON.stringify({
+  pipeline: 'vnl',
+  stage: 'recording-ended',        // unique per handler
+  sessionId,
+  event: 'mediaconvert_submitted', // handler-defined event name
+  jobId?,                          // event-specific context
+  error?,                          // on error paths
+  timestamp: new Date().toISOString(),
+}));
 ```
 
-No new GSI. Participants always accessed by PK=`SESSION#{id}`, SK beginning with `PARTICIPANT#`.
+**Log group structure:** Each NodejsFunction in CDK gets its own log group. To make log groups
+long-lived and queryable, add `logGroup:` with explicit `RetentionDays` to each pipeline Lambda
+in `session-stack.ts`, following the `IvsEventAuditLogGroup` pattern already there.
 
-**Message count on session (recommendation):** Store `messageCount` as an atomic counter on the
-session METADATA item, incremented by `send-message.ts` via `ADD messageCount :1`. This avoids
-a chat history scan on every activity card. If this adds unwanted scope to an early phase, defer
-to a later phase and show message count as N/A initially.
+**CloudWatch Insights query across all pipeline stages:**
+```
+fields @timestamp, pipeline, stage, sessionId, event, error
+| filter pipeline = 'vnl'
+| sort @timestamp desc
+| limit 200
+```
 
-### New EventBridge Rules
+### 2. Stuck Session Cron Recovery
 
-| Rule Name | Event Pattern | Target |
-|-----------|--------------|--------|
-| `TranscribeJobCompleteRule` | `source: aws.transcribe`, `detail.TranscriptionJobStatus: [COMPLETED, FAILED]` | `store-transcript.ts` |
+**Trigger:** `events.Schedule.rate(Duration.minutes(30))` — consistent with existing
+`ReplenishPoolSchedule` pattern in `session-stack.ts`.
 
-Existing rules modified (in `infra/lib/stacks/session-stack.ts`):
-- `RecordingEndRuleV2`: add `start-transcription.ts` as a second target alongside `recording-ended.ts`.
+**Query for stuck sessions — use GSI1 for `STATUS#ENDING`:**
 
-### New API Gateway Endpoints (in `infra/lib/stacks/api-stack.ts`)
+Sessions stuck in the pipeline have `status = 'ending'` (set when IVS stream ends) and were
+never transitioned to `'ended'` by `recording-ended.ts`. Query GSI1:
 
-| Method | Path | Auth | Handler |
-|--------|------|------|---------|
-| GET | `/activity` | None (public) | `list-activity.ts` |
+```typescript
+const result = await docClient.send(new QueryCommand({
+  TableName: tableName,
+  IndexName: 'GSI1',
+  KeyConditionExpression: 'GSI1PK = :status',
+  ExpressionAttributeValues: { ':status': 'STATUS#ENDING' },
+}));
 
-Existing endpoints: no breaking changes. New fields on `/recordings` responses appear addively.
+const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+const stuck = result.Items?.filter(item =>
+  item.createdAt < thirtyMinAgo &&
+  (!item.transcriptStatus || item.transcriptStatus === 'processing')
+) || [];
+```
 
-### New IAM Permissions
+This avoids a full table scan. The GSI1PK=`STATUS#ENDING` partition is small in practice
+(sessions transition out of ENDING quickly when the pipeline is healthy).
 
-| Lambda | Permission | Resource |
-|--------|-----------|---------|
-| `start-transcription.ts` | `transcribe:StartTranscriptionJob` | `*` |
-| `start-transcription.ts` | `s3:GetObject`, `s3:PutObject` | recordings bucket |
-| `store-transcript.ts` | `transcribe:GetTranscriptionJob` | `*` |
-| `store-transcript.ts` | `s3:GetObject` | recordings bucket (transcript output) |
-| `store-transcript.ts` | `bedrock:InvokeModel` | `arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-*` |
-| `store-transcript.ts` | `dynamodb:UpdateItem`, `dynamodb:GetItem` | vnl-sessions table |
-| `list-activity.ts` | `dynamodb:Scan` | vnl-sessions table |
-| `join-hangout.ts` (modified) | No new perms — already has DynamoDB read/write | — |
-| `recording-ended.ts` (modified) | No new perms — already has DynamoDB read/write | — |
+**Recovery action — EventBridge PutEvents (preferred over direct Lambda invocation):**
+
+```typescript
+// Re-trigger transcription for sessions that have recordingHlsUrl but stuck in processing
+await eventBridgeClient.send(new PutEventsCommand({
+  Entries: [{
+    Source: 'custom.vnl',
+    DetailType: 'Upload Recording Available',
+    Detail: JSON.stringify({
+      sessionId: session.sessionId,
+      recordingHlsUrl: session.recordingHlsUrl,
+      recoveryAttempt: true,
+    }),
+  }],
+}));
+```
+
+For sessions without `recordingHlsUrl` (stuck before MediaConvert), emit a custom event
+`'Session Recording Recovery'` on `custom.vnl` and wire an EventBridge rule to invoke
+`recording-ended.ts` indirectly, or call shared repository functions directly from the cron Lambda.
+
+**Why PutEvents over direct Lambda.invoke:** Decouples cron from handler implementation.
+DLQ and retry semantics apply automatically. Consistent with pipeline architecture.
+
+### 3. Speaker-Attributed Transcripts
+
+**API change to `start-transcribe.ts`:**
+```typescript
+const transcribeParams = {
+  ...existingParams,
+  Settings: {
+    ShowSpeakerLabels: true,
+    MaxSpeakerLabels: 10,  // reasonable upper bound for video sessions
+  },
+};
+```
+
+**Transcribe output JSON structure (HIGH confidence — verified against AWS docs):**
+```json
+{
+  "results": {
+    "transcripts": [{ "transcript": "full plain text" }],
+    "items": [
+      {
+        "start_time": "4.87",
+        "end_time": "5.02",
+        "alternatives": [{ "confidence": "0.99", "content": "Hello" }],
+        "type": "pronunciation",
+        "speaker_label": "spk_0"
+      }
+    ],
+    "speaker_labels": {
+      "speakers": 2,
+      "segments": [
+        {
+          "start_time": "4.87",
+          "end_time": "6.88",
+          "speaker_label": "spk_0",
+          "items": [
+            { "start_time": "4.87", "end_time": "5.02", "speaker_label": "spk_0" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+**Processing in `transcribe-completed.ts`:**
+1. Parse `speaker_labels.segments` from the full Transcribe JSON (already fetched from S3).
+2. For each segment, collect all `results.items` whose `start_time` falls within the segment
+   time window. Join their `alternatives[0].content` to reconstruct segment text.
+3. Build `speakerSegments: SpeakerSegment[]` array.
+4. Call `updateTranscriptStatus(...)` with additional `speakerSegments` and `speakerCount` fields.
+
+**Size guard:** If `JSON.stringify(speakerSegments).length > 50000` (50KB), truncate to the first
+N segments that fit and store `speakerSegmentsPartial: true`. Full segments remain available via
+`transcriptS3Path` in S3. Do not risk exceeding the 400KB DynamoDB item limit.
+
+**Speaker-to-username mapping:** NOT implemented in v1.5. Transcribe assigns `spk_0`, `spk_1`,
+etc. with no knowledge of which participant is which. Store generic labels; the frontend renders
+"Speaker 1", "Speaker 2". Future milestone can add an owner-labeling UI.
+
+**Frontend rendering:** Color-code segments by `speaker_label` consistently (stable hash of label
+string → CSS color). Sync highlighted segment to video position using `speaker_label.start_time`
+vs `player.getPosition()`.
+
+### 4. Chat Moderation (Bounce + Report)
+
+**IVS Chat DisconnectUser (HIGH confidence — verified against AWS IVS Chat API reference):**
+
+```typescript
+import { IvschatClient, DisconnectUserCommand } from '@aws-sdk/client-ivschat';
+
+const ivschat = new IvschatClient({});
+await ivschat.send(new DisconnectUserCommand({
+  roomIdentifier: session.claimedResources.chatRoom,  // room ARN on session
+  userId: targetUserId,                                // cognito:username
+  reason: 'Bounced by broadcaster',
+}));
+```
+
+Disconnects ALL connections by that `userId` from the room. The client receives a `disconnect`
+event automatically. Does NOT prevent reconnection — `create-chat-token.ts` would need a block-list
+check to enforce persistent ban (out of scope for v1.5 "bounce" which is a temporary kick).
+
+**`bounce-user.ts` logic:**
+1. Fetch session by `sessionId` from DynamoDB.
+2. Verify caller's Cognito identity === `session.userId` (broadcaster-only gating).
+3. Return 403 if caller is not the broadcaster.
+4. Call `DisconnectUserCommand`.
+5. Write MODLOG item to DynamoDB.
+6. Return 200.
+
+**`report-message.ts` logic:**
+1. Parse `reporterUserId` from Cognito context, `messageId` from path, `messageContent` from body.
+2. Guard: return 400 if `reporterUserId === messageOwnerUserId` (cannot report own messages).
+3. Write MODLOG item to DynamoDB.
+4. Return 200 (idempotent — duplicate reports just add items).
+
+**Frontend — where bounce and report buttons appear:**
+- `BounceButton`: rendered in `MessageRow.tsx` only when `authUser.userId === session.userId`
+  (caller is broadcaster) AND message sender is not the broadcaster.
+- `ReportButton`: rendered in `MessageRow.tsx` on all messages NOT from the current user.
+  Hidden by default, revealed on hover (to keep the chat UI clean).
+
+### 5. Upload Video Player Page (/video/:sessionId)
+
+**Route:** The existing `/upload/:sessionId` route renders `UploadViewer.tsx` and already shows
+the IVS player, transcript, and AI summary. The v1.5 target is a richer page at `/video/:sessionId`
+that adds: resolution selector, async comments, and reactions.
+
+**Decision: add `/video/:sessionId` as a new route; keep `/upload/:sessionId` as redirect.**
+`UploadActivityCard` links should be updated to use `/video/:sessionId`. This avoids a conflicting
+rewrite of existing `UploadViewer` mid-phase.
+
+**IVS Player hook — extend `useReplayPlayer`, do not fork:**
+
+`UploadViewer.tsx` uses `useReplayPlayer(url)` which returns `{ videoRef, syncTime }`. Extend it
+to also return `{ player, qualities }`:
+
+```typescript
+// In useReplayPlayer.ts
+const [player, setPlayer] = useState<any>(null);
+const [qualities, setQualities] = useState<any[]>([]);
+
+// After ivsPlayer.create():
+ivsPlayer.addEventListener(window.IVSPlayer.PlayerEventType.QUALITY_CHANGED, () => {
+  setQualities(ivsPlayer.getQualities());
+});
+// On load:
+setPlayer(ivsPlayer);
+```
+
+This gives `VideoPage.tsx` access to `player.setQuality(quality)` for the resolution selector.
+The change is non-breaking — existing callers that don't destructure `player` or `qualities` are
+unaffected.
+
+**Async comments — no new GSI needed:**
+
+All comments for a session have `PK = COMMENT#{sessionId}`. Full list query:
+```typescript
+new QueryCommand({
+  TableName: tableName,
+  KeyConditionExpression: 'PK = :pk',
+  ExpressionAttributeValues: { ':pk': `COMMENT#${sessionId}` },
+})
+```
+
+Returns comments sorted by SK = zero-padded video timestamp. Filter to a ±30s window around
+current `syncTime` in the frontend hook `useVideoComments`.
+
+**`create-comment.ts` body:**
+```typescript
+const body = JSON.parse(event.body!);
+const { text, videoTimestamp } = body;
+// videoTimestamp: float seconds
+const paddedTs = videoTimestamp.toFixed(3).padStart(14, '0');  // "0000045.320"
+const commentId = uuidv4();
+const sk = `${paddedTs}#${commentId}`;
+```
 
 ---
 
 ## Data Flows
 
-### Hangout Participant Tracking
+### Pipeline Audit Log Flow
 
 ```
-User clicks "Hangout" -> Homepage creates session
+IVS Recording End
     |
     v
-POST /sessions/{id}/join
+recording-ended.ts
+    -> log { stage: 'recording-ended', event: 'invoked', sessionId }
+    -> submit MediaConvert
+    -> log { stage: 'recording-ended', event: 'mediaconvert_submitted', jobId }
     |
     v
-join-hangout.ts:
-  1. Validate session (existing)
-  2. CreateParticipantTokenCommand -> IVS RealTime (existing)
-  3. updateSessionStatus LIVE (existing, first join only)
-  4. addHangoutParticipant() -> DynamoDB       [NEW]
-     PK=SESSION#{id}, SK=PARTICIPANT#{userId}
-  5. Return token + participantId
+transcode-completed.ts
+    -> log { stage: 'transcode-completed', event: 'transcribe_submitted', sessionId }
+    |
+    v
+transcribe-completed.ts
+    -> log { stage: 'transcribe-completed', event: 'transcript_stored', sessionId }
+    -> parse speakerSegments
+    -> log { stage: 'transcribe-completed', event: 'speaker_segments_stored', speakerCount }
+    |
+    v
+store-summary.ts
+    -> log { stage: 'store-summary', event: 'summary_stored', sessionId }
 ```
 
-### Reaction Summary
+### Stuck Session Recovery Flow
 
 ```
-IVS emits Recording End event
+EventBridge Scheduler (rate 30 min)
     |
     v
-EventBridge -> recording-ended.ts (existing, unmodified flow up to pool release)
-    |
-    v
-updateSessionStatus ENDED (existing)
-    |
-    v
-updateRecordingMetadata (existing)
-    |
-    v
-computeAndStoreReactionSummary() [NEW, best-effort]
-  getReactionCounts() x 5 emoji types (parallel, ~500 DynamoDB queries)
-  updateReactionSummary() -> session METADATA
-    |
-    v
-releasePoolResources (existing — always runs, even if summary fails)
+scan-stuck-sessions.ts
+    -> Query GSI1 STATUS#ENDING
+    -> Filter: createdAt < 30 min ago AND transcriptStatus missing or 'processing'
+    -> For each stuck session:
+         IF recordingHlsUrl present:
+           PutEvents 'Upload Recording Available' (re-triggers transcription pipeline)
+         IF recordingHlsUrl absent:
+           PutEvents 'Session Recording Recovery' (re-triggers from recording-ended)
 ```
 
-### Transcription + AI Summary Pipeline
+### Moderation Flow
 
 ```
-IVS emits Recording End event
+Broadcaster clicks Bounce
     |
-    +-> EventBridge target 1: recording-ended.ts (existing, unchanged)
+    v
+POST /sessions/{id}/bounce { targetUserId }
     |
-    +-> EventBridge target 2: start-transcription.ts [NEW]
-            |
-            v
-        StartTranscriptionJobCommand -> Amazon Transcribe
-        (uses HLS URL as input; jobName=transcript-{sessionId}-{ts})
-        updateTranscriptFields(transcriptStatus=processing, transcriptJobName)
-            |
-            | (async: Transcribe job takes 30s - 5 min)
-            v
-        Amazon Transcribe emits EventBridge: TranscribeJobStateChange
-            |
-            v
-        EventBridge -> store-transcript.ts [NEW]
-            |
-            v
-        GetTranscriptionJobCommand -> get transcript S3 URI
-        S3.GetObject -> fetch transcript JSON
-        extract transcriptText
-        updateTranscriptFields(transcriptText, transcriptStatus=available) -> session METADATA
-            |
-            v [same function, after transcript stored]
-        InvokeModelCommand -> Bedrock Claude Haiku
-        prompt: "Summarize in 2-3 sentences: {transcriptText}"
-        updateAiSummary(aiSummary, aiSummaryStatus=available) -> session METADATA
+    v
+bounce-user.ts
+    -> verify caller === session.userId (403 if not broadcaster)
+    -> IvschatClient.DisconnectUser(roomArn, targetUserId)
+    -> DynamoDB PutItem MODLOG#{sessionId} / BOUNCE#{ts}#{userId}
+    -> return 200
+
+User clicks Report on message
+    |
+    v
+POST /sessions/{id}/chat/{msgId}/report { reason, messageContent }
+    |
+    v
+report-message.ts
+    -> verify reporterUserId !== messageOwnerId (400 if self-report)
+    -> DynamoDB PutItem MODLOG#{sessionId} / REPORT#{msgId}#{ts}
+    -> return 200
 ```
 
-### Homepage Activity Feed
+### Upload Video Player Flow
 
 ```
-User opens HomePage
+User opens /video/:sessionId
     |
     v
-GET /activity  [NEW endpoint]
+VideoPage.tsx
+    -> GET /sessions/{sessionId} (fetch session + speakerSegments + aiSummary)
+    -> useReplayPlayer(session.recordingHlsUrl)
+       -> returns { videoRef, syncTime, player, qualities }
+    -> useVideoComments(sessionId)
+       -> GET /sessions/{sessionId}/comments
+       -> filter comments within ±30s of syncTime
     |
     v
-list-activity.ts -> getRecentActivity() -> DynamoDB Scan
-  FilterExpression: begins_with(PK, 'SESSION#') AND SK = 'METADATA'
-  Sort: by endedAt or createdAt descending
-  Returns: all session fields including reactionSummary, aiSummary, participantCount
-    |
-    v
-Frontend:
-  - Broadcast sessions w/ recordingStatus=available -> horizontal slider (HLS replay)
-  - All sessions -> activity feed list below slider
-  - HANGOUT sessions -> activity card with participants, messageCount, duration
-  - BROADCAST sessions -> recording card with thumbnail, AI summary, reaction counts
+User selects resolution
+    -> player.setQuality(selectedQuality)
+
+User posts comment at T=45.3s
+    -> POST /sessions/{sessionId}/comments { text, videoTimestamp: 45.3 }
+    -> create-comment.ts writes COMMENT#${sessionId} / "0000045.300#uuid"
+    -> useVideoComments re-fetches and displays
 ```
 
 ---
@@ -526,255 +595,162 @@ Frontend:
 ## Recommended Project Structure Additions
 
 ```
-backend/src/
-  handlers/
-    join-hangout.ts            # MODIFY: add participant persistence after token
-    recording-ended.ts         # MODIFY: add reaction summary after metadata update
-    start-transcription.ts     # NEW: trigger Transcribe job on recording end
-    store-transcript.ts        # NEW: receive transcript + call Bedrock
-    list-activity.ts           # NEW: unified activity feed endpoint
-  repositories/
-    session-repository.ts      # MODIFY: addHangoutParticipant, getHangoutParticipants,
-                               #         updateReactionSummary, updateTranscriptFields,
-                               #         updateAiSummary, getRecentActivity
-  domain/
-    session.ts                 # MODIFY: extend Session interface with new fields
-  lib/
-    transcribe-client.ts       # NEW: shared Transcribe SDK client (follows ivs-clients.ts)
-    bedrock-client.ts          # NEW: shared Bedrock SDK client
+backend/src/handlers/
++-- bounce-user.ts            (NEW) POST /sessions/{id}/bounce
++-- report-message.ts         (NEW) POST /sessions/{id}/chat/{msgId}/report
++-- scan-stuck-sessions.ts    (NEW) EventBridge Scheduler cron
++-- list-comments.ts          (NEW) GET /sessions/{id}/comments
++-- create-comment.ts         (NEW) POST /sessions/{id}/comments
 
-infra/lib/stacks/
-  session-stack.ts             # MODIFY: add start-transcription as 2nd target on
-                               #         RecordingEndRuleV2; add TranscribeJobCompleteRule
-  api-stack.ts                 # MODIFY: GET /activity + list-activity handler
-
-web/src/
-  features/replay/
-    RecordingFeed.tsx          # MODIFY: extend Recording interface; render AI summary
-                               #         + reaction counts
-    ReplayViewer.tsx           # MODIFY: display aiSummary + reactionSummary in info panel
-  pages/
-    HomePage.tsx               # MODIFY: split feed into horizontal slider + activity feed
+web/src/features/
++-- moderation/
+|   +-- BounceButton.tsx      (NEW)
+|   +-- ReportButton.tsx      (NEW)
+|   +-- useModerationActions.ts (NEW)
++-- video/
+|   +-- VideoPage.tsx         (NEW) /video/:sessionId
++-- upload/
+    +-- useVideoComments.ts   (NEW)
+    +-- CommentThread.tsx     (NEW)
 ```
-
----
-
-## Build Order: Dependency-Justified Phases
-
-Dependencies determine ordering. Participant tracking and reaction summary are independent of the
-AI pipeline. The AI pipeline depends on recordings. The homepage depends on all data being present
-but can render progressively with empty states.
-
-```
-Phase 1: Participant Tracking
-  Rationale: No external dependencies. Only touches join-hangout.ts and session-repository.ts.
-  Deliverables:
-  - Modify join-hangout.ts: persist PARTICIPANT item after token generation
-  - Add addHangoutParticipant() to session-repository.ts
-  - Add getHangoutParticipants() to session-repository.ts
-  - Extend Session/domain types for participantCount
-  Unblocks: Hangout activity card participant display
-
-Phase 2: Reaction Summary at Session End
-  Rationale: Depends only on existing reaction data and recording-ended.ts hook.
-  Deliverables:
-  - Modify recording-ended.ts: call computeAndStoreReactionSummary() post-metadata
-  - Add updateReactionSummary() to session-repository.ts
-  - Extend Session domain with reactionSummary field
-  Unblocks: Reaction counts on recording cards
-
-Phase 3: Transcription Pipeline
-  Rationale: Depends on recordings being available (natural consequence of Phase 2 work
-  in recording-ended.ts). Both can be done in same pass through session-stack.ts CDK changes.
-  Deliverables:
-  - New start-transcription.ts Lambda
-  - New TranscribeJobCompleteRule EventBridge rule in session-stack.ts
-  - Wire start-transcription as 2nd target on RecordingEndRuleV2
-  - New store-transcript.ts Lambda (without Bedrock initially)
-  - Add updateTranscriptFields() to session-repository.ts
-  - IAM: transcribe:StartTranscriptionJob, s3 access
-  Unblocks: AI summary (Phase 4)
-
-Phase 4: AI Summary
-  Rationale: Depends directly on transcript pipeline (Phase 3). Extends store-transcript.ts.
-  Deliverables:
-  - Extend store-transcript.ts: call Bedrock after storing transcript
-  - Add updateAiSummary() to session-repository.ts
-  - New bedrock-client.ts shared client
-  - IAM: bedrock:InvokeModel
-  - Extend Session domain with aiSummary, aiSummaryStatus, aiModel
-  Unblocks: Summary display on cards and replay page
-
-Phase 5: Homepage Redesign + Activity Feed API
-  Rationale: Depends on Phases 1-4 for full data richness; can build with empty states earlier.
-  Deliverables:
-  - New list-activity.ts Lambda
-  - GET /activity endpoint in api-stack.ts
-  - Add getRecentActivity() to session-repository.ts
-  - Extend Recording interface in RecordingFeed.tsx
-  - Homepage layout: horizontal recording slider + activity feed below
-  - Activity card component for hangouts
-  - Replay page: display aiSummary + reactionSummary in info panel
-```
-
-Phases 2 and 3 share the `session-stack.ts` CDK file and can be done in the same CDK pass.
-Phase 5 frontend can begin while Phases 3-4 are running — build the layout with empty/loading
-states for AI and reaction fields; content appears as the pipeline delivers it to session records.
 
 ---
 
 ## Architectural Patterns
 
-### Pattern 1: Fan-Out via Multiple EventBridge Targets
+### Pattern 1: Inline Structured JSON Logging (extend existing)
 
-The existing `RecordingEndRuleV2` in `session-stack.ts` has one target. CDK supports multiple
-Lambda targets on the same rule. Adding `start-transcription.ts` as a second target fires both
-`recording-ended.ts` and `start-transcription.ts` in parallel from the same IVS event.
+**What:** Every pipeline handler emits `console.log(JSON.stringify({ pipeline, stage, event, ... }))`.
+**When to use:** Any Lambda in the `custom.vnl` or `aws.ivs` pipeline that needs CloudWatch observability.
+**Trade-offs:** Simple, zero dependencies, queryable with CloudWatch Insights. Less ergonomic
+than Powertools but avoids a 400KB cold-start penalty.
 
-**When to use:** When two functions both need the same event, are fully independent, and have no
-shared write paths.
+### Pattern 2: GSI Query + In-Lambda Filter for Cron Scans
 
-**Trade-off:** Both functions must be idempotent. EventBridge retries independently for each
-target on failure, so a failed transcription job does not block recording metadata storage.
+**What:** Query GSI1 for a bounded status partition, then filter by timestamp in Lambda.
+**When to use:** When the population of interest (stuck sessions) is small and bounded by status.
+**Trade-offs:** GSI query is efficient when `STATUS#ENDING` partition stays small (it should — sessions
+cycle through ENDING quickly). Full table scan is unacceptable for a cron job as the table grows.
 
-### Pattern 2: Linear Async Chain for Sequentially Dependent Steps
+### Pattern 3: EventBridge PutEvents for Async Recovery
 
-The transcript -> AI summary dependency is linear. Rather than emitting a custom EventBridge event
-after storing the transcript (which requires a custom event bus and additional rule), calling
-Bedrock directly inside `store-transcript.ts` is simpler and sufficient.
+**What:** Cron Lambda emits custom events on `custom.vnl` to re-trigger existing pipeline handlers.
+**When to use:** Recovery from stuck state; handler re-use without coupling.
+**Trade-offs:** EventBridge DLQ and retry apply; decoupled from handler implementation.
+Small delay (~ms) vs direct Lambda.invoke.
 
-**When to use:** When Step B always follows Step A, and failure of B must not invalidate A.
+### Pattern 4: Co-located COMMENT Items on Shared PK
 
-**Implementation:** Try/catch around the Bedrock call. On failure, set `aiSummaryStatus=failed`,
-log, and return. The transcript is stored and usable even without the summary.
+**What:** All comments for a session share `PK = COMMENT#{sessionId}`, sorted by video timestamp in SK.
+**When to use:** Access pattern is always "all comments for this session, near this time".
+**Trade-offs:** Single table partition per session; efficient key-based queries with optional SK range.
+No GSI needed for v1.5 scale.
 
-### Pattern 3: Compute-Once, Read-Many for Aggregates
+### Pattern 5: Extend `useReplayPlayer` Hook, Don't Fork
 
-Reaction counts across 100 shards require 500 DynamoDB queries to compute. Computing at session-end
-converts a 500-query per-page-load into a single attribute access on the session item. This is the
-correct pattern for any aggregate that: (a) stops changing at a well-defined point, and (b) is read
-frequently.
-
-### Pattern 4: Co-locate Related Items on Shared PK
-
-Hangout participants are stored as `SESSION#{id} / PARTICIPANT#{userId}` items. All participants
-for a session are fetched with a single `Query` on PK — no GSI needed. Session METADATA
-(`SESSION#{id} / METADATA`) is fetched separately with `GetItem`.
-
-**When to use:** When child entities always belong to a parent and are always accessed through
-that parent. Avoids GSI for simple parent-child relationships.
+**What:** Add `player` and `qualities` to the return value of the existing hook.
+**When to use:** New callers need IVS player internals; existing callers must not break.
+**Trade-offs:** Non-breaking because new destructured values are optional. Avoids duplicate
+player initialization logic.
 
 ---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Triggering Transcription from S3 Events
+### Anti-Pattern 1: Storing Full Transcribe JSON on DynamoDB Session Item
 
-**What people do:** Wire S3 event notifications to fire when IVS writes recording files, then
-trigger Transcribe from there.
+**What people do:** Write `JSON.stringify(transcribeOutput)` directly to a session attribute after
+fetching it from S3.
+**Why it's wrong:** Full Transcribe JSON for a 1-hour session is 2-5MB — exceeds DynamoDB's 400KB
+item limit and causes silent write failures or `ItemCollectionSizeLimitExceededException`.
+**Do this instead:** Parse the JSON in Lambda, extract only the compact `speakerSegments` array
+(one entry per speaker turn, not per word). Keep `transcriptS3Path` pointing to full raw JSON.
 
-**Why it's wrong:** IVS recordings are multi-file (HLS segments, thumbnails, manifest files). S3
-events fire multiple times before the recording is assembled. The EventBridge `Recording End` event
-from IVS is the authoritative "recording is complete" signal — it fires once when all files are
-finalized.
+### Anti-Pattern 2: Direct Lambda.invoke for Cron Recovery
 
-**Do this instead:** Use the existing `RecordingEndRuleV2` as the sole trigger for
-`start-transcription.ts`.
+**What people do:** Call `LambdaClient.send(new InvokeCommand({ FunctionName: 'RecordingEnded' }))` from the cron.
+**Why it's wrong:** Bypasses EventBridge DLQ/retry semantics; creates tight coupling; `recording-ended.ts`
+expects a specific IVS EventBridge event shape that is non-trivial to fake.
+**Do this instead:** Emit a `custom.vnl` EventBridge event; let the existing rule routing handle
+delivery. The cron stays decoupled from handler internals.
 
-### Anti-Pattern 2: Computing Reaction Counts on Every Homepage Load
+### Anti-Pattern 3: New DynamoDB Table for Moderation Log
 
-**What people do:** Call `getReactionCounts()` inside `list-recordings.ts` or `list-activity.ts`
-for each session returned.
+**What people do:** Create `vnl-moderation` table for bounce/report records.
+**Why it's wrong:** Requires separate IAM grants, adds CDK complexity, and DynamoDB doesn't support
+cross-table joins — you can't efficiently get "session + its moderation events" in one request.
+**Do this instead:** Use `PK: MODLOG#{sessionId}` in the existing `vnl-sessions` table. All
+moderation events for a session are co-located and queryable with one DynamoDB Query call.
 
-**Why it's wrong:** 5 emoji types x 100 shards = 500 DynamoDB queries per session. With 20 sessions
-on the homepage, that is 10,000 DynamoDB queries per page load.
+### Anti-Pattern 4: Polling IVS Chat for Bounce Enforcement
 
-**Do this instead:** Compute once at session end, store as `reactionSummary` map on the session
-item. Homepage reads the pre-computed value in a single attribute access.
+**What people do:** After writing a bounce flag to DynamoDB, check it on every incoming message
+or let the user stay connected but drop their messages.
+**Why it's wrong:** IVS Chat `DisconnectUser` already severs the WebSocket server-side. The client
+receives a `disconnect` event immediately. No polling needed.
+**Do this instead:** Call `DisconnectUser` — the user is gone from the room. For persistent bans,
+gate `create-chat-token.ts` with a block-list check (not in v1.5 scope).
 
-### Anti-Pattern 3: Storing Participants as a List on the Session METADATA Item
+### Anti-Pattern 5: New Route `/video/:sessionId` That Duplicates `/upload/:sessionId` Entirely
 
-**What people do:** Add `participants: string[]` to the session item and use
-`list_append` to push userId on join.
-
-**Why it's wrong:** Even though `list_append` itself does not conflict, the existing
-`updateSessionStatus()` function uses an optimistic lock (`#version = :currentVersion`). Any
-concurrent update to the session item will increment `version`, causing the next join to fail its
-version check. Two participants joining within the same second will conflict.
-
-**Do this instead:** Write each participant as a separate item with PK=`SESSION#{id}`,
-SK=`PARTICIPANT#{userId}`. No version conflicts, and items are naturally idempotent on re-join.
-
-### Anti-Pattern 4: Blocking Pool Release on Reaction Summary Computation
-
-**What people do:** Make `recording-ended.ts` await the full reaction count computation before
-releasing pool resources.
-
-**Why it's wrong:** Pool resource release is time-critical — released channels and stages become
-available for new sessions immediately. Blocking for 2-5 seconds on 500 DynamoDB queries delays
-pool replenishment unnecessarily.
-
-**Do this instead:** Wrap reaction summary computation in try/catch (best-effort, non-blocking),
-and ensure pool release always runs in the `finally` block or sequentially after the try/catch.
-
-### Anti-Pattern 5: Using a Separate DynamoDB Table for AI/Transcript Data
-
-**What people do:** Create a new `vnl-transcripts` table or `vnl-ai-summaries` table to store
-AI pipeline results.
-
-**Why it's wrong:** This requires cross-table joins (not natively supported in DynamoDB), complicates
-IAM, and adds CDK infrastructure. All AI/transcript fields fit on the session item (< 400KB),
-and the access pattern is always "get everything about a session."
-
-**Do this instead:** Add fields directly to the `SESSION#{id} / METADATA` item in the existing
-`vnl-sessions` table.
+**What people do:** Create `VideoPage.tsx` as a near-copy of `UploadViewer.tsx`.
+**Why it's wrong:** Two components with the same IVS player lifecycle create duplicate code and
+diverge in behavior. Existing `useReplayPlayer` already handles the player setup.
+**Do this instead:** Extend `useReplayPlayer` to return the player instance and qualities, then
+build `VideoPage.tsx` on top of it — sharing the player hook with `UploadViewer`.
 
 ---
 
-## Scaling Considerations
+## Build Order (Phase Dependencies)
 
-| Scale | Architecture Adjustment |
-|-------|------------------------|
-| Current (< 1K sessions) | Scan-based queries for activity feed are acceptable; no GSI optimization needed |
-| 1K-10K sessions | `getRecentActivity()` scan becomes expensive; add GSI3: PK=`ENTITY#SESSION`, SK=`{endedAt}` for efficient time-ordered session queries |
-| 10K+ sessions | Transcribe costs scale linearly with audio hours; add session duration guard (skip transcription for sessions under 30s or over 4 hours) |
-| High hangout concurrency | Separate PARTICIPANT items are already concurrency-safe; no hot-partition risk |
+```
+Phase 25: Structured Pipeline Logging
+  Modify: recording-ended.ts, transcode-completed.ts, transcribe-completed.ts, store-summary.ts
+  CDK: add explicit logGroup to pipeline Lambdas in session-stack.ts
+  No new Lambdas. No behavior change. Unblocks observability for all subsequent debugging.
 
----
+Phase 26: Stuck Session Cron Recovery
+  New: scan-stuck-sessions.ts
+  CDK: EventBridge Scheduler rule in session-stack.ts
+  Depends on Phase 25 (logging makes it possible to verify cron behavior in CloudWatch).
 
-## Integration Points Reference (Quick Lookup)
+Phase 27: Speaker-Attributed Transcripts
+  Modify: start-transcribe.ts (add ShowSpeakerLabels)
+  Modify: transcribe-completed.ts (parse + store speakerSegments)
+  Domain: extend Session interface with speakerSegments, speakerCount
+  Frontend: extend TranscriptDisplay to render diarized segments
+  Independent of Phase 26 (can run in parallel).
 
-| Task | File | Function/Location | Type |
-|------|------|-------------------|------|
-| Persist participant join | `backend/src/handlers/join-hangout.ts` | After `ivsRealTimeClient.send()`, line ~65 | Modify |
-| Participant repo fn | `backend/src/repositories/session-repository.ts` | New `addHangoutParticipant()` | Add |
-| Compute reaction summary | `backend/src/handlers/recording-ended.ts` | After `updateRecordingMetadata()`, line ~127 | Modify |
-| Store reaction summary | `backend/src/repositories/session-repository.ts` | New `updateReactionSummary()` | Add |
-| Trigger Transcribe | `backend/src/handlers/start-transcription.ts` | New handler | New file |
-| Wire 2nd EB target | `infra/lib/stacks/session-stack.ts` | Add target to `RecordingEndRuleV2` | Modify |
-| Transcribe complete rule | `infra/lib/stacks/session-stack.ts` | New `TranscribeJobCompleteRule` | Modify |
-| Store transcript + Bedrock | `backend/src/handlers/store-transcript.ts` | New handler | New file |
-| Transcript repo fns | `backend/src/repositories/session-repository.ts` | New `updateTranscriptFields()`, `updateAiSummary()` | Add |
-| Activity feed endpoint | `backend/src/handlers/list-activity.ts` | New handler | New file |
-| Wire /activity | `infra/lib/stacks/api-stack.ts` | Add GET /activity resource + handler | Modify |
-| Activity repo fn | `backend/src/repositories/session-repository.ts` | New `getRecentActivity()` | Add |
-| Extend domain model | `backend/src/domain/session.ts` | Add new fields to Session interface | Modify |
-| Homepage layout | `web/src/pages/HomePage.tsx` | Split into slider + activity feed | Modify |
-| Extend recording card | `web/src/features/replay/RecordingFeed.tsx` | Extend Recording interface, add AI/reaction display | Modify |
-| Replay info panel | `web/src/features/replay/ReplayViewer.tsx` | Display aiSummary + reactionSummary | Modify |
+Phase 28: Chat Moderation (Bounce + Report)
+  New: bounce-user.ts, report-message.ts
+  CDK: new routes in api-stack.ts, ivschat:DisconnectUser IAM
+  Frontend: BounceButton, ReportButton, useModerationActions, MessageRow changes
+  Independent of Phases 26 and 27 (can run in parallel with Phase 27).
+
+Phase 29: Upload Video Player Page
+  New: create-comment.ts, list-comments.ts, VideoPage.tsx, useVideoComments.ts
+  CDK: new /comments routes in api-stack.ts
+  Modify: useReplayPlayer.ts (return player + qualities)
+  App.tsx: add /video/:sessionId route
+  Depends on: Phase 27 (for diarized transcript display on the page).
+  Comments and resolution selector are independent of Phase 27.
+```
+
+Phases 27 and 28 are independent and can be developed simultaneously by different phases if needed.
+Phase 29 can start comments/player work before Phase 27 is complete; speaker segments display is
+the only Phase 27 dependency in Phase 29.
 
 ---
 
 ## Sources
 
-- Codebase direct analysis: `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`, `web/src/` (HIGH confidence — read directly)
-- Amazon Transcribe EventBridge events: source `aws.transcribe`, detail-type `Transcribe Job State Change` (HIGH confidence — official AWS documentation)
-- Amazon Transcribe HLS input support: Transcribe accepts `.m3u8` as `MediaFormat` input (MEDIUM confidence — requires verification against current Transcribe docs before implementation)
-- AWS Bedrock Claude model IDs: `anthropic.claude-3-haiku-20240307-v1:0` (MEDIUM confidence — model availability should be verified in the target deployment region before CDK wiring)
-- DynamoDB single-table design: co-located items on shared PK for parent-child relationships (HIGH confidence — established AWS pattern)
-- IVS recording S3 structure: `{prefix}/media/hls/master.m3u8` confirmed from existing `recording-ended.ts` (HIGH confidence — read from live code)
+- Codebase direct analysis: `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`, `web/src/` (HIGH confidence)
+- [Amazon Transcribe Diarization Batch Output](https://docs.aws.amazon.com/transcribe/latest/dg/diarization-output-batch.html) — HIGH confidence, JSON schema verified
+- [IVS Chat DisconnectUser API Reference](https://docs.aws.amazon.com/ivs/latest/ChatAPIReference/API_DisconnectUser.html) — HIGH confidence, parameters and behavior verified
+- [AWS Lambda Powertools TypeScript Logger](https://docs.aws.amazon.com/powertools/typescript/2.8.0/core/logger/) — considered and rejected for this milestone
+- [EventBridge Scheduler invoke Lambda](https://docs.aws.amazon.com/lambda/latest/dg/with-eventbridge-scheduler.html) — HIGH confidence, matches existing replenish-pool pattern
 
 ---
 
-*Architecture research for: VideoNowAndLater v1.2 Activity Feed & Intelligence*
-*Researched: 2026-03-05*
+*Architecture research for: VideoNowAndLater v1.5 Pipeline Reliability, Moderation & Upload Experience*
+*Researched: 2026-03-10*

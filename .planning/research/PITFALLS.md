@@ -1,493 +1,418 @@
-# Stream Quality Monitoring & Creator Spotlight: Domain Pitfalls
+# Pitfalls Research: v1.5 Pipeline Reliability, Moderation & Upload Experience
 
-**Domain:** AWS IVS broadcast metrics collection + creator cross-promotion features on existing real-time system
-**Researched:** 2026-03-05
-**Context:** v1.4 feature additions to established 22-phase codebase with live chat, reactions, replays, and event-driven session lifecycle
-**Confidence:** HIGH (based on existing codebase patterns, AWS IVS service constraints, and real-time system architecture)
-
----
-
-## Executive Summary
-
-Adding stream quality monitoring and creator spotlight to the existing VideoNowAndLater system introduces **three categories of critical risk:**
-
-1. **Metrics Collection Architecture** — Polling vs. push, rate limiting, cache invalidation, frontend performance impact
-2. **Creator Feature Scope Creep** — Cross-promotion logic creates data model coupling, discovery UX complexity, and privacy boundary violations
-3. **Real-Time System Integration** — New metric streams + spotlight updates compete with existing IVS Chat polling, can overwhelm frontend event loop and degrade UX
-
-**Core danger:** The existing codebase is optimized for one-way broadcast polling (viewer count on 15s cadence). Adding quality metrics (bitrate, fps, latency, network status) + creator spotlight feature triggers + notification delivery will multiply API load by 3-5x if not carefully scoped.
-
-**Success criterion:** Stream quality dashboard for broadcaster-only view (no viewer impact). Creator spotlight opt-in with strict cardinality limits (one active featured broadcast per session max).
+**Domain:** AWS Lambda + EventBridge pipeline hardening, Amazon Transcribe diarization, IVS Chat moderation, HLS.js adaptive video player, async comments on existing streaming platform
+**Researched:** 2026-03-10
+**Confidence:** HIGH — based on existing codebase analysis (recording-ended.ts, start-transcribe.ts, transcribe-completed.ts, useChatRoom.ts), prior hotfix history from MEMORY.md, and verified AWS service constraints
 
 ---
 
-## CRITICAL PITFALLS
+## Context: System-Specific Risk Profile
 
-### Pitfall 1: Unbounded Metrics Polling Creates API Storms
+This codebase has already experienced production bugs in exactly the EventBridge pipeline it is now trying to harden:
+- Phase mismatch in userMetadata (`'21-uploads'` vs `'19-transcription'`) broke EventBridge rule matching
+- Stale condition check (`session.recordingStatus` vs computed `finalStatus`) silently blocked MediaConvert submission
+- Missing `iam:PassRole` permission caused runtime failures after a clean deploy
+- The trigger fix required restructuring event flow (MediaConvert completion → direct PutEvents instead of relying on EventBridge rule matching MediaConvert events)
+
+The pitfalls below are calibrated to this specific history. They are not generic advice.
+
+---
+
+## Critical Pitfalls
+
+### Pitfall 1: Audit Log CloudWatch Log Group Does Not Exist at First Invocation
 
 **What goes wrong:**
-- Quality metrics API called every 1-2 seconds by broadcaster (vs. current 15s viewer count poll)
-- Each metrics call hits IVS GetStream + DynamoDB session fetch
-- If 10 concurrent broadcasters × 60 calls/min = 600 API calls/min
-- Backend service degrades; DynamoDB throttles; featured broadcast queries timeout
+Lambda functions auto-create their `/aws/lambda/FunctionName` log group on first invocation — but only if the execution role has `logs:CreateLogGroup`. When a new audit Lambda (e.g., a structured pipeline logger) is deployed and immediately triggered by a live event, if the log group creation fails silently the first invocation produces no logs. The Lambda still succeeds (returns 200/void) but the audit trail is empty for that event. The developer checks CloudWatch Insights, finds nothing, and assumes the event was never received.
 
 **Why it happens:**
-- Stream quality is perceived as "real-time dashboard data" so engineer implements 1s polling cadence
-- Existing `useViewerCount` pattern (15s interval) is copied without adjustment
-- No rate-limit testing in local dev environment (IVS mocks don't reflect production quotas)
-- Frontend sees "stale" metrics and pushes poll interval down to 3s
+- CDK Lambda construct grants `logs:CreateLogStream` and `logs:PutLogEvents` by default, but NOT `logs:CreateLogGroup` in all configurations
+- If `logRetention` or an explicit `logs.LogGroup` resource is specified in CDK, the log group must be created before the Lambda is invoked — but CDK uses a custom resource for log retention, and timing during first deploy can create a window where invocations arrive before the log group exists
+- The existing `ivs-event-audit.ts` handler uses `console.log(JSON.stringify(...))` which goes to CloudWatch via the Lambda runtime; this works fine. But when adding a NEW Lambda that calls `CloudWatchLogsClient.PutLogEvents` directly (for cross-handler structured logging), the log group must pre-exist
 
-**Consequences:**
-- IVS API throttling (5 TPS limit for GetStream in some operations)
-- DynamoDB consumed capacity exhausted
-- Metrics displayed are 30s stale anyway due to API lag (defeats dashboard purpose)
-- Featured broadcast selection UI becomes unusable (queries timeout)
+**How to avoid:**
+- In CDK: explicitly declare `new logs.LogGroup(this, 'PipelineAuditLogGroup', { logGroupName: '/vnl/pipeline/audit', removalPolicy: RemovalPolicy.DESTROY })` for any log group targeted by PutLogEvents calls
+- Do NOT rely on Lambda auto-creation for log groups referenced in code (only safe for the default `/aws/lambda/FunctionName` group)
+- Prefer `console.log(JSON.stringify({ structured: true, ... }))` over direct CloudWatch SDK calls — the Lambda runtime handles log delivery reliably
+- If direct PutLogEvents is used: wrap in try/catch and fall back to console.log; never let audit log failure propagate to the caller
 
-**Prevention:**
-- **Hard ceiling:** Quality metrics poll interval = 5 seconds minimum (not negotiable)
-- **Caching strategy:** Backend caches metrics for 4-5s; multiple simultaneous calls return cached result
-- **Metric subsetting:** Only expose metrics broadcaster actually needs (bitrate, fps, network status) — not 20 dimensions
-- **Load testing gate:** Before Phase ship, test with 50 concurrent broadcasters polling metrics at 5s cadence; measure API/DynamoDB utilization
-- **Frontend feedback loop:** Show "last updated 4s ago" on metrics display to set expectations
-- **Rate limit monitoring:** CloudWatch alarm on IVS GetStream throttling and DynamoDB read capacity exceeded
+**Warning signs:**
+- CloudWatch Insights query returns 0 results for a new audit Lambda that you know was invoked
+- Lambda shows successful invocations in metrics but empty log streams
+- CDK deploy log shows `Custom::LogRetention` resource creation failures or warnings
 
-**Detection:**
-- DynamoDB consumed capacity warnings in CloudWatch (watch `ConsumedReadCapacityUnits`)
-- IVS GetStream latency spikes above 500ms (baseline is 50-100ms)
-- Featured broadcast queries timeout (403 Gateway Timeout in browser console)
-- Metrics dashboard shows stale data (> 5s old) consistently
-
-**When to address:**
-- Phase implementing quality metrics (likely Phase 23+) — implement caching + polling interval limit as first task before any UI code
-- Phase implementing featured broadcast (Phase 24+) — add cardinality limit (one featured creator per session) as requirement gate
+**Phase to address:**
+Phase adding pipeline audit logging (v1.5 Phase 1) — pre-create all log groups in CDK before any Lambda code references them
 
 ---
 
-### Pitfall 2: Featured Broadcast Cross-Promotion Creates N×M Query Explosion
+### Pitfall 2: Cron Recovery Handler Re-Fires Already-Processing Sessions (Double MediaConvert Submission)
 
 **What goes wrong:**
-- For each broadcast on viewer's home page, fetch "featured creator" data to show "now featuring broadcaster X"
-- If 30 broadcasts on home feed + each has featured creator link = 30 extra DynamoDB queries per page load
-- Each query hits Session table, then Creator profile table (if profiles exist), then featured broadcast Session fetch
-- Total: 90 DynamoDB reads per homepage load (vs. current 6 reads: list-activity → 5-10 recordings)
-- Homepage becomes unusably slow; DynamoDB throttles
+A cron Lambda scans DynamoDB for sessions where `transcriptStatus` is `null` or `'pending'` and `endedAt` is older than 30 minutes. It re-fires the EventBridge event to start the pipeline. If the session is ALREADY in `transcriptStatus: 'processing'` (MediaConvert job submitted, job running) but hasn't finished yet (e.g., job takes 25 minutes for a long recording), the cron fires again, submits a SECOND MediaConvert job, and both jobs complete. The second job overwrites `transcript.json` in S3 with identical content — harmless in the happy path but wastes MediaConvert cost and creates confusing audit trail entries.
 
 **Why it happens:**
-- "Creator spotlight" conceptually means "show every broadcast's featured creator on the card"
-- Naive implementation: For each recording card, call `GET /sessions/{sessionId}/featured-creator` endpoint
-- Frontend renders in map loop, triggering 30 sequential requests or 30 parallel requests (both bad)
-- No one thinks about N+1 query problem during feature design
+- The cron checks `transcriptStatus` for `null` / `'pending'` but the existing code sets `transcriptStatus = 'processing'` when the MediaConvert job is submitted (see `recording-ended.ts` line ~294). A session with a slow-running job shows `transcriptStatus: 'processing'` for 20-30 minutes — which the cron should NOT retry
+- If the cron threshold is set too tight (e.g., "retry after 15 minutes") it will hit sessions mid-processing
+- The deeper issue: if the cron fires while the original Lambda is also running (race), two simultaneous MediaConvert jobs get submitted with different `jobName` values but the same `sessionId`. Both write to the same S3 output key (`${sessionId}/transcript.json`). The second write wins
 
-**Consequences:**
-- Homepage loads in 5-8 seconds (vs. current 1-2 seconds)
-- DynamoDB throttled; session queries timeout
-- Users navigate away; engagement metrics drop
-- Featured broadcast data stale (30s old) because queries were so slow
-- Cascading failure: slow homepage → users refresh → more queries → worse throttling
+**How to avoid:**
+- Cron filter must exclude sessions with `transcriptStatus = 'processing'` AND where `mediaconvertJobId` is set — only retry sessions where `transcriptStatus` is null, `'pending'`, or `'failed'`
+- Use a longer threshold: 45+ minutes before marking stuck (MediaConvert jobs for long recordings can take 20-30 minutes)
+- Add a DynamoDB conditional write to set a `cronRecoveryAt` timestamp before re-firing, preventing the same session from being recovered twice within a cooldown window
+- For truly stuck sessions (processing for >2 hours), set `transcriptStatus = 'failed'` rather than retrying indefinitely
 
-**Prevention:**
-- **Hard limit:** Featured broadcast data NOT loaded on list views (home feed, activity feed)
-- **Featured broadcast link** only on: (1) broadcaster dashboard (during live), (2) single session detail page (replay viewer)
-- **Eager load in list responses:** If featured broadcast must appear on cards, pre-fetch it in `list-activity` handler and include in response (one query, 5-10 records fetched, not N queries)
-- **Cardinality constraint:** Exactly one featured creator per session (not "featured creators" plural)
-- **TTL/caching:** Featured broadcast reference cached 60s on frontend; don't refetch on every page view
-- **Query audit:** Phase gate requires comparing homepage load time before/after; if >2.5s, feature is deferred
+**Warning signs:**
+- Multiple MediaConvert jobs with the same `sessionId` prefix in the AWS console
+- `transcript.json` S3 object `Last-Modified` timestamp is newer than the MediaConvert job completion time
+- CloudWatch shows two `start-transcribe` Lambda invocations within minutes for the same sessionId
 
-**Detection:**
-- PageSpeed/Lighthouse scores drop 20+ points on home page
-- Network waterfall shows 20+ GET requests happening in parallel on page load
-- Backend logs show 30+ consecutive `ListActivity` handlers each triggering featured broadcast fetches
-- DynamoDB `ConsumedReadCapacityUnits` spikes 5-10x normal during homepage load
-
-**When to address:**
-- Phase 24 (featured broadcast): Include query audit in VERIFICATION.md
-- Before adding featured broadcast to any list view component, add architectural review task
+**Phase to address:**
+Phase adding the stuck session cron (v1.5 Phase 2) — the filter expression for "stuck" must be defined precisely before implementation, not assumed
 
 ---
 
-### Pitfall 3: Spotlight Feature Update Events Overwhelm IVS Chat Channel
+### Pitfall 3: Cron DynamoDB Scan Reads Every Item in the Table (Cost + Throttle)
 
 **What goes wrong:**
-- Current architecture: Broadcaster + viewers connected to IVS Chat room for messages + reactions
-- New feature: Broadcaster selects featured creator → event sent to IVS Chat room to notify viewers
-- Problem: Chat room is designed for messages/reactions (~10-50 events/min), not feature updates (~1 event per click)
-- But if feature updates sent via IVS Chat, they compete with message polling
-- Frontend's `ChatRoomProvider` polling loop may drop messages to process feature update events
-- Users miss chat messages; experience feels broken
+The stuck session cron calls `ScanCommand` on the single-table DynamoDB table to find sessions where `status = 'ended'` AND `transcriptStatus` is not `'available'`. The table contains sessions, pool resources, chat messages, reactions, and processing events — all sharing one table. A full scan reads ALL of them. At current scale (small) this is cheap. As the table grows (each session generates 10-50 chat message items, multiple reaction items, multiple processing event items), a scan that runs every 5 minutes costs increasingly more and consumes read capacity units that could throttle other operations.
 
 **Why it happens:**
-- Engineer thinks "IVS Chat already connected, send spotlight update through same channel"
-- Seems efficient; reduces API calls
-- Doesn't model that Chat event types have different SLA requirements (messages = critical, spotlight = nice-to-have)
-- No explicit event prioritization in `useChatRoom` hook
+- The existing `recording-ended.ts` handler already does a full table scan to find sessions by channel ARN (line ~74). This is a known anti-pattern already in the codebase — the cron is tempted to follow the same pattern
+- The single-table design has no GSI optimized for "sessions by transcript status"
+- DynamoDB Filter expressions do NOT reduce RCU consumption — you pay to read every item, then filter client-side
 
-**Consequences:**
-- Viewers miss chat messages during featured creator changes
-- Featured broadcast update doesn't propagate reliably to some viewers
-- Frontend error: "Message received but failed to render" in console
-- Users manually refresh to see featured creator change
+**How to avoid:**
+- Add a GSI before implementing the cron, keyed on pipeline status. Example: `GSI_PIPELINE_PK = PIPELINE#${transcriptStatus}`, `GSI_PIPELINE_SK = ${endedAt}` — allows efficient query for all sessions with a given transcript status
+- Alternatively: maintain a separate DynamoDB item as a "pipeline queue" (PK: `PIPELINE_QUEUE`, SK: `${sessionId}`) that is written when a session ends and deleted when pipeline completes — cron queries this small set only
+- If adding a GSI is deferred: limit scan with `FilterExpression` on `entityType = 'SESSION'` first, scope to PK prefix `SESSION#` using a begins_with condition
 
-**Prevention:**
-- **Separate event channel:** Spotlight updates sent via separate API endpoint or EventBridge, NOT through IVS Chat
-- **Different transport:** If spotlight is shown on viewer page, use HTTP polling (5s interval, cached) or Cognito Sync
-- **Explicit SLA:** Message events = 100% delivery, low latency. Spotlight events = best-effort, 5-10s latency OK
-- **No mixing concerns:** IVS Chat = messages + reactions only (CRITICAL: document this constraint)
-- **Event prioritization:** If spotlight MUST use Chat, implement explicit priority queue: messages → reactions → spotlight. Drop spotlight events if buffer fills.
+**Warning signs:**
+- DynamoDB `ConsumedReadCapacityUnits` metric spikes every 5 minutes in CloudWatch
+- Cron Lambda duration climbs over time as table grows
+- `ScanCommand` returns hundreds of non-session items before filtering
 
-**Detection:**
-- ChatPanel logs show `message polling errors` or `dropped events`
-- Users report missing chat messages during broadcasts with active spotlight changes
-- CloudWatch logs show `message-buffer-overflow` warnings
-- Message delivery latency increases from 200ms to 1-2s during featured broadcast changes
-
-**When to address:**
-- Phase 24 (featured broadcast): Choose transport for spotlight updates as **first architectural decision** before implementation
-- Phase 23 (quality metrics): If metrics sent via Chat as events, same constraint applies — separate channel required
+**Phase to address:**
+Phase adding the stuck session cron (v1.5 Phase 2) — design the query strategy before writing cron code; do not start with a scan
 
 ---
 
-## MODERATE PITFALLS
-
-### Pitfall 4: Quality Metrics Require Encoder-Side Instrumentation (Not Available in Browser)
+### Pitfall 4: IVS Chat Bounce Does Not Prevent Immediate Reconnection
 
 **What goes wrong:**
-- Engineer plans to display bitrate, framerate, network jitter, keyframe interval on broadcaster dashboard
-- Realizes: Browser WebRTC stats API shows **received** metrics (viewer side), not **sent** metrics (broadcaster encoder side)
-- IVS Chat doesn't provide encoder stats; AWS IVS GetStream endpoint returns only viewer count + playback stats
-- Conclusion: Quality metrics must come from broadcaster's encoder/OBS/capture device
-- But typical browser broadcasting setup (getUserMedia + WebRTC) doesn't expose encoder bitrate or frame drop rate
+The broadcaster calls `DisconnectUser` via the IVS Chat Management API. The user is kicked from the WebSocket connection. Within 2-3 seconds, the frontend's `useChatRoom` hook detects the disconnect event (the `disconnect` listener fires with `reason: 'KICKED_BY_MODERATOR'` or similar) and — if the error handling is not explicit — automatically calls `room.connect()` again via a reconnection retry. The kicked user is back in the chat before the broadcaster notices they were removed.
 
 **Why it happens:**
-- Assumption: "All live streaming platforms show quality dashboard to broadcaster"
-- Reality: Twitch OBS integration sends stats via OBS native plugin, not from browser
-- AWS IVS for web broadcasting has different constraints than OBS/encoder software
-- Engineer doesn't research IVS Web Broadcast SDK capabilities until Phase implementation
+- `useChatRoom.ts` has a `disconnect` listener that sets `connectionState = 'disconnected'` and logs the reason — but it does NOT suppress reconnection attempts
+- The `amazon-ivs-chat-messaging` SDK does not implement automatic reconnection itself, but frontend code that wraps the SDK in a useEffect might re-invoke `room.connect()` if `connectionState === 'disconnected'`
+- More critically: `DisconnectUser` does not invalidate the existing chat token. The frontend still holds a valid token. Calling `tokenProvider()` again returns a new valid token (since `create-chat-token.ts` has no ban check), and the user reconnects with full permissions
 
-**Consequences:**
-- Quality dashboard stub created with placeholder metrics "Coming soon"
-- Broadcaster has no insight into stream quality (defeats v1.4 feature goal)
-- Phase ships with incomplete feature; marked for future enhancement
-- User frustration: "Professional streamers get quality dashboards but this platform doesn't"
+**How to avoid:**
+- Backend: `create-chat-token.ts` must check a moderation blocklist (DynamoDB) before issuing tokens. If `userId` is on the blocklist for `sessionId`, return `403 Forbidden`. This is the only reliable reconnection barrier
+- Backend: Store bounced users in DynamoDB: `PK: MODERATION#${sessionId}`, `SK: BAN#${userId}`, with a TTL for temporary bans or no TTL for session-duration bans
+- Frontend: On receiving a disconnect event with reason `KICKED_BY_MODERATOR`, set a `wasBounced` state flag and display a "You have been removed from this session" message — do NOT attempt reconnection
+- The `DisconnectUser` API call alone is a display action only (removes user from current viewers' perspective) — the token block is what prevents re-entry
 
-**Prevention:**
-- **Phase research (Phase 23):** Document available metrics sources:
-  1. **Viewer-side metrics** (from IVS Player): buffering events, playback quality, join latency (LOW confidence for encoder quality)
-  2. **IVS GetStream API metrics** (available via AWS IVS SDK): current viewer count, playback stats (does NOT include encoder bitrate/fps/drops)
-  3. **WebRTC RTCPeerConnection stats** (if custom WebRTC used): only available in Chrome/Firefox, requires deep integration
-  4. **Encoder-provided metrics** (OBS/hardware encoder): NOT available in browser-based platform, requires native app
-- **Feature scope gate:** Define "quality dashboard" precisely:
-  - **Option A:** "Viewer experience metrics" — buffering events, join latency, bitrate adaptation (feasible from IVS Player)
-  - **Option B:** "Encoder health metrics" — bitrate, fps, network jitter (NOT feasible without native encoder integration)
-- **Decision:** v1.4 implements **Option A only** (viewer experience metrics)
-- **Documentation:** Explicitly note in feature requirements: "Quality dashboard shows viewer experience, not encoder input metrics. For encoder stats, integrate with OBS/Streamlabs plugin."
+**Warning signs:**
+- User reappears in chat within seconds of being kicked
+- `useChatRoom.ts` disconnect handler does not branch on disconnect reason
+- `create-chat-token.ts` has no moderation check before calling `CreateChatToken`
 
-**Detection:**
-- Phase research doesn't mention IVS GetStream API limitations
-- Quality dashboard feature request includes "bitrate" + "frame rate" + "network jitter" from broadcaster
-- Phase implementation discovers RTCPeerConnection stats require Chrome-only APIs or fail silently
-
-**When to address:**
-- Phase 23 research MUST investigate IVS Web Broadcast SDK capabilities doc before any mockups created
-- Clarify metrics availability with product/design before Phase 23-01 plan written
+**Phase to address:**
+Phase adding broadcaster bounce controls (v1.5 Phase 3) — implement the DynamoDB moderation store and token check before wiring the disconnect API call; the API call alone is insufficient
 
 ---
 
-### Pitfall 5: Creator Spotlight Lookup Adds Field to Session Model Without Backward Compatibility
+### Pitfall 5: Transcribe Diarization Stores Oversized JSON in DynamoDB (400KB Limit)
 
 **What goes wrong:**
-- Phase 24 adds `featuredCreatorId?: string` field to Session domain model
-- Existing sessions (22 phases worth) have no `featuredCreatorId` (undefined)
-- Frontend displays featured creator overlay; code checks `if (session.featuredCreatorId) { show() }`
-- Existing broadcasts replay with no featured creator shown (OK)
-- But if featured creator field is REQUIRED in DynamoDB scan queries, old sessions cause parse errors
-- Code path: `list-activity` → DynamoDB scan → hydrate Session objects → if missing field, validation fails
-
-**Consequences:**
-- Activity feed fails to load (500 error)
-- Viewers can't see replays of broadcasts
-- Rollback required; Phase 24 blocked
-
-**Prevention:**
-- **Backward compatibility gate:** All new fields on Session marked optional (`?`)
-- **Default values:** Frontend assumes undefined featured creator means "no spotlight" (not error)
-- **Repository pattern:** `getSessionById` function initializes missing optional fields with defaults
-- **Migration optional:** Phase 24 does NOT include migration job to backfill old sessions; defaults in code are sufficient
-- **DynamoDB scan safety:** Query/Scan operations return sessions with missing fields; code must handle undefined for ALL newly-added fields
-- **Test legacy sessions:** Phase 24 verification includes test loading sessions from Phase 1-22 data; ensure no parsing/validation errors
-
-**Detection:**
-- Phase 24 unit tests only test NEW sessions (missing old session coverage)
-- Activity feed 500 error on production shortly after Phase 24 deployment
-- CloudWatch logs show `ValidationError: featuredCreatorId is required` when sessions lacking field are queried
-
-**When to address:**
-- Phase 24 planning: Add `all new fields are optional` as requirement gate
-- Phase 24 verification: Include test with mock session objects missing new fields
-
----
-
-### Pitfall 6: Featured Broadcast Selection UI Becomes Infinite Scroll / Search Performance Nightmare
-
-**What goes wrong:**
-- Feature: Broadcaster chooses featured creator from list of all live broadcasts
-- UI mockup shows searchable dropdown / modal with "Start typing creator name…"
-- Implementation: Each keystroke queries DynamoDB for `list live broadcasts matching search term`
-- At 100+ concurrent broadcasters, search returns 50 results
-- If feature accessible from broadcaster dashboard (constantly visible), frontend sends search query every keystroke
-- DynamoDB consumed capacity exhausted; search results timeout; featured creator selection UI breaks
+When `ShowSpeakerLabels: true` is added to the Transcribe job config, the JSON output grows substantially. A 1-hour session with active multi-speaker conversation produces a transcript JSON with the full `speaker_labels` section: per-utterance speaker assignments, each with `start_time`, `end_time`, `speaker_label`, and nested `items` arrays. A 60-minute 4-speaker session can produce 150KB–400KB of JSON. The existing `transcribe-completed.ts` handler reads the full JSON from S3, parses it, extracts `results.transcripts[0].transcript`, and stores the plain text directly on the session DynamoDB item (`transcript` field). If the plain text is large, or if the handler is changed to store the full diarized JSON on the session item, it will hit the 400KB DynamoDB item limit.
 
 **Why it happens:**
-- Scope creep: "Easier if users can search for featured creator by name/title"
-- No one models that search = full table scan with filter expression
-- UI designer shows "autocomplete search" pattern; engineer builds it without query optimization
-- Local testing with 5 total sessions shows instant results; production with 1000+ sessions reveals latency
+- The current handler extracts plain text only (line ~76-77: `transcribeOutput.results.transcripts[0].transcript`) — this is safe for text-only transcripts
+- When adding diarization, there is pressure to also store the speaker-attributed segment array on the session item for frontend display
+- Each diarized segment looks like: `{ speakerLabel: 'spk_0', startTime: 1.2, endTime: 4.5, text: '...' }` — a 60-minute session at 1 segment/3 seconds = 1200 segments × ~80 bytes each = ~96KB just for segments
+- If stored inline on the `SESSION#${sessionId} | METADATA` item alongside all other session fields (aiSummary, transcript, streamMetrics, etc.), the combined item size can exceed 400KB
 
-**Consequences:**
-- Featured creator selection modal unusable (search returns 0 results or times out)
-- Broadcaster can't change featured creator mid-broadcast
-- Feature feels broken despite code correctness
+**How to avoid:**
+- Store diarized segments in S3 only — keep the existing `transcriptS3Path` pointer on the session item and add a `diarizedTranscriptS3Path` field pointing to the full diarized JSON
+- Store a speaker attribution summary on the session item only: `speakerMap: { spk_0: 'alice', spk_1: 'bob' }` (small, bounded)
+- Never store per-segment arrays directly on a DynamoDB session item — always reference via S3 URI
+- The `TranscriptDisplay` frontend component already fetches from S3 via the `GET /sessions/{id}/transcript` endpoint — extend this endpoint to serve diarized data from S3, not DynamoDB
 
-**Prevention:**
-- **Cardinality constraint:** Featured creator selection limited to **"Current viewers of YOUR broadcast"** only, not global search
-- **Pre-computed list:** Before opening selection modal, fetch `get-active-broadcasts-with-viewers-watching-mine` (1 query, returns ~3-10 broadcasts)
-- **Hard limit:** Modal shows max 20 broadcasts; search disabled if <= 20 visible; if > 20, user required to scroll (no search)
-- **No autocomplete on keystroke:** Search button required (not real-time keystroke-triggered)
-- **Query optimization:** If search needed, use GSI with `sessionType#status` + `creatorName` prefix, not full scan
-- **Scope gate:** Phase 24 requirement = "Featured creator selection from MY broadcast viewers only"; global search deferred to v1.5
+**Warning signs:**
+- DynamoDB `UpdateCommand` returns `ValidationException: Item size has exceeded the maximum allowed size`
+- Transcribe completion handler sets `transcriptStatus = 'failed'` silently after a large recording
+- `get-transcript.ts` returns truncated or partial transcript for long sessions
 
-**Detection:**
-- Featured creator modal search latency > 2 seconds for any query
-- DynamoDB consumed capacity spikes when modal opened
-- Search returns 0 results on first load then "Request timeout" errors
-- Phase implementation includes `list-broadcasts` query without GSI or limit
-
-**When to address:**
-- Phase 24 planning: Define UI mockup with strict "viewers of this broadcast only" scope
-- Phase 24 verification: Load test with 1000+ concurrent broadcasts; confirm search latency < 500ms
+**Phase to address:**
+Phase adding speaker diarization (v1.5 Phase 4) — establish the S3 storage contract for diarized data before any code is written; never put segment arrays in DynamoDB
 
 ---
 
-## MINOR PITFALLS
-
-### Pitfall 7: Metrics Frontend State Not Cleared When Broadcast Ends
+### Pitfall 6: Speaker Labels Cannot Be Reliably Mapped to Usernames Without Enrollment Data
 
 **What goes wrong:**
-- Broadcaster stops broadcast → session transitions to ENDING
-- Quality metrics component still holding stale dashboard state (bitrate, fps, jitter, latency)
-- Broadcaster navigates back to home, then starts NEW broadcast
-- Quality metrics component reused; initialized with stale values from previous broadcast
-- Dashboard shows old metrics until server updates arrive (5s+ delay)
-- Confuses broadcaster about stream health
+Amazon Transcribe assigns labels `spk_0`, `spk_1`, etc. in the order speakers are first detected in the audio. These labels are NOT stable across jobs (a second Transcribe job on the same audio may assign `spk_0` to a different speaker), and they carry no metadata about who was speaking. The goal of "map speaker labels to session usernames" requires external context: you need to know which participant was speaking when, and that information is not in the Transcribe output. For hangout sessions (IVS RealTime, up to 5 participants), there is no audio track-to-participant mapping in the IVS RealTime recording structure. For broadcast sessions, there is only one broadcaster — diarization is straightforward (one labeled speaker = broadcaster). For hangouts, the composite recording does not expose per-participant audio tracks.
 
 **Why it happens:**
-- Quality metrics component created as singleton on BroadcastPage
-- When new session starts, component updates via useEffect
-- But useEffect debounced or delayed; stale state shown briefly
-- No explicit `resetMetrics()` when session status transitions to ENDING
+- IVS RealTime stage recording produces a composite video file that mixes all participant audio into a single audio track — there are no separate audio channels per participant
+- Transcribe receives the composite audio and assigns speaker labels purely based on voice acoustics — it has no knowledge of who each voice belongs to
+- The assumption "Transcribe will tell me speaker 0 is Alice and speaker 1 is Bob" is incorrect — Transcribe produces `spk_0` and `spk_1` only; the mapping to names requires voice enrollment (Amazon Transcribe has no enrollment feature) or manual labeling
 
-**Prevention:**
-- **Clean state on session change:** When `sessionId` changes, clear metrics to loading state
-- **Broadcast status dependency:** useEffect triggers on session.status → ENDED to reset all metrics
-- **Explicit reset:** Call `setMetrics({ bitrate: null, fps: null, latency: null })` when starting new broadcast
-- **Component cleanup:** Metrics component unmounts when session ends (not kept alive across broadcasts)
+**How to avoid:**
+- Scope diarization to: "show turn-by-turn transcript with consistent speaker labels" — NOT "show Alice: / Bob:" headers
+- For broadcast sessions: since there is only one voice (the broadcaster), `spk_0 = session.userId` is a valid assumption — but only if the recording is a single-speaker broadcast
+- For hangout sessions with multiple speakers: display `Speaker 1 / Speaker 2` labels, not usernames — this is honest about what the data actually provides
+- Optionally: if hangout sessions used IVS RealTime with per-participant recording enabled, individual participant recordings exist in S3 and could be transcribed separately. This is a significant architecture change; scope carefully
+- Document the limitation explicitly in the frontend: "Speakers are labeled by voice, not by name"
 
-**Detection:**
-- Quality metrics shown after broadcast stopped (should show "Broadcast ended" or nothing)
-- Stale metrics data visible for 5+ seconds when new broadcast starts
-- Unit test for metric reset missing in test suite
+**Warning signs:**
+- Phase plan includes "map spk_0 to first speaker in participants list" — this is unreliable (order in participants list != order of first utterance in audio)
+- Requirement says "show username next to each transcript segment" without a defined mapping source
 
-**When to address:**
-- Phase 23: Include component test for metric state reset on session transition
+**Phase to address:**
+Phase adding speaker diarization (v1.5 Phase 4) — scope the feature to turn-by-turn display with generic labels; explicitly defer username mapping to a future phase requiring per-participant audio tracks
 
 ---
 
-### Pitfall 8: Featured Creator Avatar/Thumbnail Not Preloaded; Overlay Flickers
+## Moderate Pitfalls
+
+### Pitfall 7: HLS.js Quality Level Switch Causes Buffering Stall on Mobile Safari
 
 **What goes wrong:**
-- Featured creator overlay loads creator avatar from S3 URL lazily
-- Avatar image not cached; first time shown, browser fetches from S3
-- Image takes 200-500ms to arrive; overlay renders without avatar for 200ms
-- Avatar suddenly appears; layout shifts (CLS score increases)
-- Viewer experience: featured creator box flickers / shifts
-- Looks janky despite working correctly
+Adding a manual resolution selector (quality level picker) to the upload video player creates a known HLS.js failure mode on Safari (desktop and iOS): when `hls.currentLevel` is set manually to a higher quality, Safari's Media Source Extensions implementation sometimes stalls the SourceBuffer append operation during the quality transition. The player freezes for 2-10 seconds. On iOS 18, this is exacerbated by a `bufferStalledError` bug. Users see a spinner; they assume the video is broken.
 
 **Why it happens:**
-- Avatar URLs not included in featured broadcast response; fetched separately
-- No image preload on featured broadcast selection UI
-- Frontend doesn't use React lazy load / intersection observer for images
+- HLS.js uses `startFragPrefetch` and segment pre-fetching to smooth quality transitions — but Safari has historically had partial MSE support
+- When switching to a higher quality level, HLS.js must decode a fragment at the new bitrate that does not have a PTS overlap with the currently buffered content — in Safari, if the PTS intersection is not found, the buffer enters a stall state
+- The existing `useReplayPlayer.ts` (used by `UploadViewer.tsx`) does not configure any HLS.js quality-switching parameters — default values may be aggressive for Safari
 
-**Prevention:**
-- **Include avatar URL in response:** When fetching featured broadcast data, include `featuredCreator.avatarUrl` in same response (no extra round-trip)
-- **Preload images:** When broadcaster selects featured creator, preload avatar image: `new Image().src = url`
-- **Skeleton loader:** Show avatar skeleton/placeholder while image loads
-- **Image optimization:** Store avatars in S3 with CloudFront CDN; cache-control headers set to 1 year
+**How to avoid:**
+- Set `hls.config.startLevel = -1` (auto) and `hls.config.capLevelToPlayerSize = true` — never force a specific level on first load
+- For the manual quality picker, use `hls.nextLevel` (sets level at next segment boundary) rather than `hls.currentLevel` (immediate switch) — `nextLevel` is dramatically more stable
+- Add a 500ms debounce on quality selector changes — rapid clicking crashes Safari
+- Detect Safari: `navigator.vendor.includes('Apple')` — for Safari, hide the quality picker and let ABR run automatically
+- Test on real iOS devices (not simulator) — HLS.js bugs in Safari are device-specific and not reproducible in simulators
 
-**Detection:**
-- Featured creator overlay shows blank space for 200ms, then avatar appears
-- Cumulative Layout Shift (CLS) metric increases on pages with featured broadcasts
-- Network waterfall shows avatar image fetched after overlay rendered
+**Warning signs:**
+- Quality selector works in Chrome but hangs in Safari
+- Console shows `bufferStalledError` or `No PTS intersection found` immediately after quality switch
+- Video freezes and never recovers without page refresh
 
-**When to address:**
-- Phase 24 implementation: Include avatar preload in featured broadcast selection handler
-- Phase 24 verification: Test featured broadcast overlay visual stability / CLS score
+**Phase to address:**
+Phase building the upload video player (v1.5 Phase 5) — implement quality switching with Safari detection from the first iteration; do not add it as an afterthought
 
 ---
 
-### Pitfall 9: Metrics Caching Obscures Live Issues; Broadcaster Trusts Stale Data
+### Pitfall 8: CORS on HLS Manifests Blocks Quality Level Fetching on UploadViewer
 
 **What goes wrong:**
-- Backend caches quality metrics for 4-5 seconds (to avoid API storms; see Pitfall 1)
-- Broadcaster's stream quality degrades to nearly unwatchable (bitrate drops from 5 Mbps to 0.5 Mbps)
-- Dashboard still shows "5 Mbps bitrate, excellent" for 4 seconds (cached old data)
-- Broadcaster doesn't know something's wrong until viewers start complaining
-- By then, damage done (viewers buffered, chat became laggy)
+The upload video player loads a CloudFront-served HLS manifest (`recordingHlsUrl`). The manifest references sub-manifests for each quality level (e.g., `1080p/index.m3u8`, `720p/index.m3u8`) using relative paths. If CloudFront's CORS configuration returns the `Access-Control-Allow-Origin` header only for the manifest request but not for the quality-level sub-manifest or segment requests, HLS.js fails to load segments at levels other than the first. The player appears to work at the lowest quality but the quality picker does nothing.
 
 **Why it happens:**
-- Caching strategy implemented to reduce API load
-- No consideration for staleness implications on broadcaster decision-making
-- Broadcaster assumes dashboard is real-time
+- CloudFront CORS configuration is set on S3 bucket origin policies and CloudFront cache behaviors. The existing setup was tested for the replay player (which loads `master.m3u8` at a single quality). The new upload player needs CloudFront to return CORS headers on ALL paths: `*.m3u8`, `*.ts`, `*.mp4`
+- MediaConvert (used for upload encoding) produces an ABR output group with multiple quality tiers — the CloudFront distribution must have CORS enabled for all `recordings/*` path prefixes, not just the master manifest
 
-**Prevention:**
-- **Clear cache on anomaly:** If bitrate drops > 50% from previous reading, invalidate cache and fetch fresh data
-- **Show cache age:** Display "Last updated 4s ago" or "Updates every 5s" on dashboard
-- **Alerting on threshold:** If bitrate < 1 Mbps, show red warning regardless of cache age
-- **Hybrid strategy:** Cache for 4s normally; cache for 1s if previous reading was critical/warning state
-- **Broadcaster education:** Documentation: "Metrics updated every 5 seconds; not real-time; if you see quality issues, check viewer feedback"
+**How to avoid:**
+- Verify CloudFront cache behavior for `recordings/*` includes `Access-Control-Allow-Origin: *` (or origin allowlist) on all responses
+- In CDK `session-stack.ts`, the CloudFront distribution should add CORS response headers policy to the recordings origin
+- Test with browser DevTools Network tab: every `.m3u8` and `.ts` request must return `Access-Control-Allow-Origin` header
+- HLS.js `xhrSetup` callback can add headers for debugging but is not a CORS fix — CORS must be configured server-side
 
-**Detection:**
-- Phase 24 verification includes "quality crisis" scenario: simulate bitrate drop, verify broadcaster notified within 5 seconds
-- User complaint: "Dashboard said stream was fine but viewers saw buffering"
+**Warning signs:**
+- Chrome DevTools shows `CORS policy: No 'Access-Control-Allow-Origin' header` on `720p/index.m3u8` but not on `master.m3u8`
+- Quality level list shows multiple levels in `hls.levels` array but switching to any non-default level produces an error
+- Only the first quality level works; all others fail silently
 
-**When to address:**
-- Phase 23 metrics design: Define cache invalidation strategy based on metric deltas
-- Phase 24 verification: Include edge case tests for rapid metric changes
+**Phase to address:**
+Phase building the upload video player (v1.5 Phase 5) — verify CORS on all manifest paths during CDK stack update, not as a follow-up fix
 
 ---
 
-## SCOPE CREEP AVOIDANCE
+### Pitfall 9: Async Comments Timestamp Drift Relative to Playback Position
 
-### Feature 1: Stream Quality Monitoring — What to INCLUDE
+**What goes wrong:**
+Async comments (timestamped to a video position) are stored with `videoPositionMs` recorded at submission time using `player.currentTime * 1000`. When the comment is displayed during playback, the frontend must highlight or scroll-to comments within a ±500ms window of the current playback position. If the player's `currentTime` drifts (e.g., seek, buffering recovery, quality switch), the comment appears to be out of sync. This manifests as comments appearing a few seconds before or after the relevant moment, or comments never appearing because the playback position never exactly matches the window.
 
-**In scope (Phase 23):**
-- View current viewer experience metrics during live broadcast:
-  - Current viewer count (already have)
-  - Playback join latency (time from broadcast start to first frame)
-  - Buffering events count (how many times viewers experienced buffering)
-  - Current playback quality/bitrate adaptation state
-- Data sourced from IVS GetStream endpoint + CloudWatch logs
-- Visible only to broadcaster (dashboard on broadcast page)
-- Update frequency: 5-second intervals (cached backend)
+**Why it happens:**
+- `player.currentTime` on an HLS.js player during a quality switch may jump forward (when the buffer is consumed during the switch and ABR recalculates the position)
+- The existing `useReplayPlayer.ts` uses `player.getPosition() * 1000` for reaction sync — this is the correct pattern. Comments that use `videoElement.currentTime` directly (without the IVS player abstraction) will drift on quality switches
+- Seek operations compound the issue: a comment stored at 2:34.500 should appear whether the user seeks to 2:34.000 or 2:34.800 — the display window must be wide enough
 
-**Out of scope (defer to v1.5+):**
-- Encoder bitrate / fps / frame drops (requires encoder integration, not available in browser)
-- Per-viewer analytics (privacy concern; not needed for v1.4)
-- Regional viewing statistics (nice-to-have; adds complexity)
-- Historical quality trends (requires analytics database; out of scope for MVP)
-- Quality prediction / AI recommendations (out of scope)
+**How to avoid:**
+- Use a display window of ±1500ms (not ±500ms) for comment highlighting — provides tolerant matching across seek and buffer events
+- Store `videoPositionMs` in seconds (float), not milliseconds — reduces precision mismatch on truncation
+- For comment display: use a polling approach (poll every 250ms, show comments within ±1.5s of current position) rather than event-driven (subscribe to exact timecodes)
+- When user seeks: clear the currently-displayed comment immediately and allow the polling to re-match after seek settles (add a 500ms debounce after seek events)
 
----
+**Warning signs:**
+- Comments are visible in the list but don't highlight during playback
+- Comments appear consistently N seconds late or early (suggests a unit mismatch — ms vs seconds)
+- Comments never appear after a quality switch
 
-### Feature 2: Creator Spotlight — What to INCLUDE
-
-**In scope (Phase 24):**
-- Broadcaster can choose **one active featured creator** from current viewers of broadcast
-- Featured broadcast info shown on viewer page (creator name, viewer count, link to featured broadcast)
-- Featured broadcast selection modal shows only active broadcasts with viewers
-- Featured creator data persisted on Session model (survives broadcast end, shown in replay)
-- Viewers can click featured broadcast link to navigate and watch
-
-**Out of scope (defer to v1.5+):**
-- Featured creator recommendations (ML-based; out of scope)
-- Featured creator rotation / scheduling (too complex)
-- Multiple featured creators per broadcast (scope: one only)
-- Featured creator analytics (who clicked through, metrics)
-- Featured creator tiers / monetization (business logic, out of scope)
-- Search across all global broadcasts for featured creator (scope: viewers of THIS broadcast only)
+**Phase to address:**
+Phase adding async comments (v1.5 Phase 6) — define the timestamp storage format and display window tolerance before implementing the frontend polling hook
 
 ---
 
-## PHASE-SPECIFIC WARNINGS
+### Pitfall 10: EventBridge Pipeline Audit Logging Adds Per-Event DynamoDB Writes That Inflate Costs
 
-| Phase | Topic | Likely Pitfall | Mitigation |
-|-------|-------|-----------------|------------|
-| Phase 23 (Quality Metrics) | Polling cadence selection | Underbounded polling (1-2s) causes API storms | Implement 5s+ minimum with tests; include rate-limit testing gate |
-| Phase 23 | Metrics data model | Quality metrics fields not optional on Session | Add to backward compatibility gate; test with Phase 1-22 sessions |
-| Phase 23 | Frontend polling | useMetrics hook created without cache awareness | Document cache TTL in component; show "last updated X seconds ago" |
-| Phase 24 (Featured Broadcast) | Data model | `featuredCreatorId` field added as required | ALL new fields optional; initialize to undefined defaults; test legacy compatibility |
-| Phase 24 | Query performance | Featured broadcast loaded on every activity feed card | Gate: featured data only on detail views, not lists; query audit required |
-| Phase 24 | UI performance | Search autocomplete on featured creator modal | Gate: search disabled; show viewers of this broadcast only |
-| Phase 24 | Event transport | Spotlight updates sent via IVS Chat | Gate: separate API/transport for spotlight; don't mix with messages |
-| Phase 24 | User data | Featured broadcast link reveals creator identities to viewers | Document privacy implications; featured creator must opt-in (consider for v1.5) |
+**What goes wrong:**
+The `ProcessingEvent` domain model is already defined in `session.ts` (lines 122-171) with a full entity structure including `eventId`, `eventType`, `eventStatus`, `timestamp`, `details`. If the audit logging phase writes a `ProcessingEvent` item to DynamoDB for EVERY pipeline stage (MediaConvert submitted, MediaConvert complete, Transcribe submitted, Transcribe complete, AI started, AI complete), that is 6 DynamoDB writes per session, per pipeline run. At scale with the stuck session cron retrying sessions, these writes multiply. More importantly, these items accumulate in the table permanently (no TTL) and inflate the table size, increasing scan costs for all operations that scan the table.
 
----
+**Why it happens:**
+- `ProcessingEvent` items have `PK: SESSION#${sessionId}` and `SK: EVENT#${timestamp}#${eventId}` — they are session-scoped and never deleted
+- The cron scan reads ALL items under `SESSION#*` prefix — processing event items are returned alongside session metadata items, increasing scan cost without benefit
+- The `recording-ended.ts` handler already writes `transcriptStatus = 'processing'` to the session metadata item — a separate `ProcessingEvent` item is additive cost for the same information
 
-## VALIDATION GATES (MUST PASS BEFORE PHASE SHIP)
+**How to avoid:**
+- Add `TTL` attribute to `ProcessingEvent` items: set to `now + 30 days` — keeps the audit trail available for debugging but cleans up automatically
+- Scope audit events to CloudWatch Logs (structured `console.log`) for real-time debugging, and to DynamoDB only for replay/support investigation
+- The cron scan filter should explicitly exclude `entityType = 'PROCESSING_EVENT'` items — add `entityType = :session` to the FilterExpression so scan does not return event items
+- Alternatively: store audit events in a separate DynamoDB table with its own TTL — keeps the session table clean
 
-### Phase 23 (Quality Metrics) Verification Requirements
+**Warning signs:**
+- DynamoDB table item count grows much faster than session count (10-15x)
+- Cron scan duration increases over weeks even with no growth in active sessions
+- CloudWatch cost report shows unexpected DynamoDB read charges
 
-- [ ] **Load test:** 50 concurrent broadcasters polling metrics at 5s cadence; API latency remains < 200ms, DynamoDB throttle events = 0
-- [ ] **Backward compatibility:** Load and display recordings from Phase 1-22; no validation errors on missing metric fields
-- [ ] **Cache behavior:** Metrics updated display within 5 seconds; "last updated X seconds ago" label accurate
-- [ ] **Fallback:** If IVS GetStream fails, dashboard shows "Metrics unavailable" (not error); broadcast continues normally
-- [ ] **Unit tests:** useBroadcast hook + quality metrics component tests pass; 80%+ code coverage
-
-### Phase 24 (Featured Broadcast) Verification Requirements
-
-- [ ] **Query performance:** Homepage loads in < 2.5s with 30 active broadcasts; featured data pre-fetched in list-activity response
-- [ ] **Featured creator selection:** Modal search latency < 500ms for any query; returns <= 20 broadcasts (viewers of THIS broadcast only)
-- [ ] **Backward compatibility:** Replays of Phase 1-22 broadcasts render without errors; missing featuredCreatorId field handled gracefully
-- [ ] **Avatar preload:** Featured creator overlay loads without CLS shifts; images preloaded during selection
-- [ ] **State reset:** After broadcast ends, starting new broadcast shows clean featured creator state (no stale data from previous broadcast)
-- [ ] **Privacy audit:** Featured creator links only visible to active broadcast viewers; no exposure on public activity feed without opt-in consent
-- [ ] **Integration test:** End-to-end flow: broadcaster selects featured creator → viewers see link → click → navigate to featured broadcast (no timeouts/errors)
+**Phase to address:**
+Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL policy for `ProcessingEvent` items before writing the first one
 
 ---
 
-## RECOMMENDATIONS FOR ROADMAP PLANNING
+## Technical Debt Patterns
 
-1. **Phase 23 (Quality Metrics):** Implement with strict polling interval constraints (5s+) and caching as first task. Include load testing gate before UI code.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Full table DynamoDB scan in cron handler | No GSI change needed | Unbounded cost growth as table grows | Never — add GSI or queue pattern before shipping cron |
+| Store plain-text `transcript` directly on session item | Simple, no extra S3 fetch | 400KB item limit hit on long recordings with diarization | Only for short sessions (<30 min); add S3-only path for diarized output |
+| `DisconnectUser` without token blocklist | Kick is instant and visible | User reconnects in seconds | Never — token blocklist is required for bounce to be meaningful |
+| Use `hls.currentLevel` (immediate) instead of `hls.nextLevel` (graceful) | Simpler API | Buffering stall on Safari | Never for production quality switcher |
+| Logging to CloudWatch only (no DynamoDB) for pipeline events | No DynamoDB cost | No audit trail for manual recovery investigation | Acceptable for phase 1 if DynamoDB audit added later |
 
-2. **Phase 24 (Featured Broadcast):** Implement featured creator selection modal with viewer-only search (not global). Do NOT add featured broadcast data to list views (activity feed, home). Defer global search to v1.5+.
+---
 
-3. **Phase 24b (Privacy gate):** Consider adding opt-in consent for featured creator linkage (if creators don't want to be featured, respect that). Current plan assumes featured creators OK with visibility.
+## Integration Gotchas
 
-4. **Research during Phase 23:** Confirm exact metrics available from IVS GetStream API and WebRTC RTCPeerConnection stats; document limitations for encoder-side metrics.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| IVS Chat `DisconnectUser` | Calling it without backing token blocklist | Block token issuance in `create-chat-token.ts` first; disconnect is cosmetic only |
+| Amazon Transcribe diarization | Setting `MaxSpeakerLabels` to actual participant count | Set to the MAXIMUM possible count (e.g., 5 for hangouts) to avoid misattribution when count is under-specified |
+| Amazon Transcribe diarization | Mapping `spk_0` to first participant in roster | Impossible without per-participant audio tracks; only safe for single-speaker broadcasts |
+| HLS.js quality switching | Calling `hls.currentLevel = N` directly | Use `hls.nextLevel = N` (switches at next segment) or `hls.loadLevel = N` for preloading |
+| HLS.js on Safari | Assuming DevTools CORS errors are a code bug | CORS must be configured on CloudFront; HLS.js cannot work around missing CORS headers |
+| EventBridge `PutEvents` | Publishing without `EventBusName` field | Without `EventBusName`, events go to the default bus; custom rules on custom bus never trigger |
+| DynamoDB cron scan | Using `FilterExpression` to reduce cost | Filter expressions reduce ITEMS returned but NOT RCU consumed — full table is still read |
+| CloudWatch structured logging | Calling `CloudWatchLogsClient.PutLogEvents` from inside Lambda | Prefer `console.log(JSON.stringify(...))` — Lambda runtime handles delivery without SDK calls or log group pre-creation |
 
-5. **Testing infrastructure:** Add load testing suite to CI/CD for Phase 23+ (measure API latency under 50+ concurrent users).
+---
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Cron scanning full DynamoDB table every 5 min | DynamoDB read costs spike; cron duration grows weekly | Add GSI keyed on pipeline status before shipping cron | 10K+ session items (~100K total items including messages/reactions) |
+| Comment fan-out query (all comments for a video, every 250ms) | API rate limit hit; DynamoDB reads spike during playback | Fetch all comments once on load; filter by position client-side | More than 500 comments on a single video |
+| Full diarized JSON stored inline on session item | DynamoDB write failures on recordings >30 min | Store in S3; store only S3 URI on session item | Session with 60-min multi-speaker content |
+| HLS.js downloading all quality levels in parallel (preloading) | High CloudFront egress cost on upload player | Set `hls.config.maxMaxBufferLength` and `hls.config.maxBufferLength` appropriately | Videos longer than 60 min with many quality levels |
+
+---
+
+## Security Mistakes
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Chat bounce without token blocklist | Kicked user reconnects immediately; moderation is cosmetic | Block token issuance per sessionId+userId in `create-chat-token.ts` |
+| Moderation log without userId validation | Broadcaster can log moderation actions against arbitrary userIds not in the session | Validate `targetUserId` is an actual session participant before writing moderation record |
+| S3 path for diarized transcript constructed from user input | Path traversal if sessionId contains `../` | Existing `recording-ended.ts` already validates against path traversal — apply same validation pattern |
+| Cron Lambda with DynamoDB read-all permissions | Over-privileged; can read all session data including private session metadata | Scope IAM permissions to specific GSI or table prefix |
+
+---
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Quality picker visible on Safari but broken | User selects 1080p, video freezes, user thinks platform is broken | Detect Safari and hide manual quality picker; show "Auto" only |
+| Transcript shows `spk_0` / `spk_1` without explanation | Users don't understand why their name isn't shown | Label as "Speaker 1 / Speaker 2" with tooltip: "Speaker names are identified by voice pattern" |
+| Bounce shows no feedback to broadcaster | Broadcaster doesn't know if kick worked | Show toast: "User removed from chat" after `DisconnectUser` API returns 200 |
+| Async comments not visible during buffering | User posts a comment, buffering occurs, timestamp offset by buffer duration | Show comment in list immediately; timestamp assignment uses player position at submit time, not wall clock |
+| Upload player loads at lowest quality (240p) by default | Video looks blurry on first load, user adjusts manually | Set `hls.config.startLevel = -1` (ABR auto) with `capLevelToPlayerSize: true` for sensible default |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **EventBridge audit logging:** Lambda logs appear in CloudWatch — verify the log group was pre-created in CDK, not auto-created on first invocation
+- [ ] **Cron recovery:** Cron fires and re-submits stuck sessions — verify it excludes sessions with `transcriptStatus = 'processing'` AND `mediaconvertJobId` set
+- [ ] **IVS Chat bounce:** `DisconnectUser` API call returns 200 — verify `create-chat-token.ts` blocks token issuance for bounced users before confirming bounce is "done"
+- [ ] **Speaker diarization:** Transcribe job completes and `speaker_labels` section exists in JSON — verify pipeline stores diarized data in S3 only and does NOT inline segment arrays in DynamoDB
+- [ ] **Quality switching:** Resolution picker changes quality in Chrome — verify Safari is handled separately and does not stall
+- [ ] **Async comments:** Comments appear in list view — verify they highlight correctly at the right playback position including after a seek operation
+- [ ] **Moderation log:** Reports and bounces write to DynamoDB — verify `TTL` attribute is set or the table has a TTL cleanup policy to prevent unbounded growth
+
+---
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Audit log group missing; first invocations have no logs | LOW | Create log group manually in AWS console; add explicit CDK resource; re-run affected EventBridge events via SNS or manual Lambda invoke |
+| Cron double-submits MediaConvert jobs | LOW | Identify duplicate jobs in MediaConvert console; cancel the second job; update session `transcriptStatus` manually if second job completed first |
+| Bounced user reconnects (token blocklist missing) | MEDIUM | Add token blocklist check, redeploy `create-chat-token` Lambda; no data recovery needed |
+| Diarized JSON stored in DynamoDB causes item size errors | HIGH | Migration required: move transcript data to S3, update session items with S3 URI, update all read paths; expensive if many sessions affected |
+| Quality switcher stalls Safari; users report broken video | LOW | Deploy Safari detection to hide quality picker; no data recovery needed |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| CloudWatch log group auto-creation race | v1.5 Phase 1 (pipeline audit) | CDK resource list includes explicit `LogGroup` before any Lambda references it |
+| Cron double-execution (re-fires processing sessions) | v1.5 Phase 2 (stuck session cron) | Unit test: session with `transcriptStatus = 'processing'` is excluded from cron candidate set |
+| Cron full table scan cost | v1.5 Phase 2 (stuck session cron) | Query plan documented; GSI or queue mechanism used; scan forbidden |
+| IVS Chat bounce without token blocklist | v1.5 Phase 3 (chat moderation) | Integration test: disconnect user → attempt reconnect → token endpoint returns 403 |
+| Diarized JSON exceeds DynamoDB 400KB limit | v1.5 Phase 4 (speaker diarization) | Test with synthesized 60-min multi-speaker transcript; verify S3-only storage path |
+| Speaker label-to-username mapping impossible | v1.5 Phase 4 (speaker diarization) | Feature spec explicitly says "Speaker 1 / Speaker 2" labels only; no username mapping in scope |
+| HLS.js quality switch stalls Safari | v1.5 Phase 5 (upload video player) | Test on real iOS device or Safari; verify `nextLevel` used; Safari detection hides manual picker |
+| CORS on HLS sub-manifests | v1.5 Phase 5 (upload video player) | Network tab shows `Access-Control-Allow-Origin` on all `.m3u8` and `.ts` requests |
+| Async comment timestamp drift | v1.5 Phase 6 (async comments) | Test: seek to 2:00, verify comment at 2:01 appears; seek rapidly, verify no duplicate display |
+| ProcessingEvent items inflate table without TTL | v1.5 Phase 1 (pipeline audit) | DynamoDB TTL enabled on `ProcessingEvent` items; item count checked 7 days after deploy |
 
 ---
 
 ## Sources
 
-**HIGH confidence:**
-- Project codebase: `backend/src/handlers/get-viewer-count.ts`, `useViewerCount.ts` — polling pattern, 15s cadence rationale
-- Project codebase: `backend/src/services/broadcast-service.ts` — GetStream API caching, rate limit awareness
-- Project codebase: `backend/src/domain/session.ts` — session model structure; optional field pattern established in Phase 20 (aiSummary, aiSummaryStatus)
-- Memory context: Real-time system architecture, auth flow (`cognito:username`), DynamoDB query patterns
+**HIGH confidence (codebase analysis):**
+- `/backend/src/handlers/recording-ended.ts` — existing scan pattern, MediaConvert submission, `transcriptStatus = 'processing'` set on job submission
+- `/backend/src/handlers/start-transcribe.ts` — current transcript-only (no diarization) Transcribe job config
+- `/backend/src/handlers/transcribe-completed.ts` — plain text extraction from `results.transcripts[0].transcript`; speaker_labels section not currently parsed
+- `/backend/src/handlers/on-mediaconvert-complete.ts` — EventBridge `PutEvents` without `EventBusName` being the original bug that was hotfixed
+- `/backend/src/domain/session.ts` — `ProcessingEvent` entity defined with all pipeline stages; `transcript` field is a string stored inline
+- `/web/src/features/chat/useChatRoom.ts` — `disconnect` listener does not branch on reason; no bounce detection
+- `MEMORY.md` hotfix history — phase mismatch, stale condition check, missing PassRole, MediaConvert EventBridge matching bug
 
-**MEDIUM confidence:**
-- AWS IVS documentation (inferred): GetStream API 5 TPS limit mentioned in service docs; CloudWatch metrics integration standard
-- Real-time system patterns: IVS Chat event prioritization (inferred from project's message/reaction polling architecture)
-- Frontend performance: CLS (Cumulative Layout Shift) metrics standard in Lighthouse / PageSpeed
+**HIGH confidence (verified AWS docs):**
+- [IVS Chat DisconnectUser API](https://docs.aws.amazon.com/ivs/latest/ChatAPIReference/API_DisconnectUser.html) — confirmed: disconnect does not invalidate existing token; backend must block token creation to prevent reconnection
+- [Amazon Transcribe diarization output](https://docs.aws.amazon.com/transcribe/latest/dg/diarization.html) — confirmed: labels are `spk_0`/`spk_1`, no username mapping, overlap utterances are serialized by start time
+- [Amazon Transcribe Settings API](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_Settings.html) — confirmed: `MaxSpeakerLabels` range 2-30; accuracy degrades beyond 5 speakers
+- [CloudWatch Logs PutLogEvents](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutLogEvents.html) — confirmed: log group must exist; `logs:CreateLogGroup` required for auto-creation
+- [Lambda log group configuration](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-loggroups.html) — confirmed: auto-creation only for `/aws/lambda/FunctionName` default group
 
-**Domain knowledge:**
-- N+1 query patterns in distributed systems (standard pitfall)
-- Backend caching tradeoffs (staleness vs. load)
-- Feature scope creep in UI-driven projects (common in social/discovery features)
+**MEDIUM confidence (HLS.js community):**
+- [HLS.js GitHub: LL-HLS quality switching Safari issue #7165](https://github.com/video-dev/hls.js/issues/7165) — Safari quality switching stall documented
+- [HLS.js GitHub: bufferStalledError iOS 18 #6890](https://github.com/video-dev/hls.js/issues/6890) — iOS 18 specific buffering bug
+- [HLS.js stopLoad/startLoad causes regression to lowest level #5230](https://github.com/video-dev/hls.js/issues/5230) — `currentLevel` immediate switch is problematic
 
----
-
-**Confidence assessment:**
-- **Quality metrics polling constraints:** HIGH — based on existing polling pattern, IVS API documented limits
-- **Query performance risks:** HIGH — based on N+1 pattern analysis of existing codebase
-- **Event transport conflicts:** HIGH — based on IVS Chat + message polling architecture already in place
-- **Backward compatibility:** HIGH — Phase 20 established optional fields + default patterns
-- **Scope creep prevention:** MEDIUM — requires product/design alignment; technical feasibility clear but product scope not locked
-
-**Research date:** 2026-03-05
-**Valid until:** 2026-04-05 (30 days; refresh if AWS IVS API changes or team product scope clarifies)
+**MEDIUM confidence (AWS patterns):**
+- [Lambda idempotency with DynamoDB conditional writes](https://aws.amazon.com/blogs/compute/handling-lambda-functions-idempotency-with-aws-lambda-powertools/) — at-least-once delivery; cron must be idempotent
+- [Serverless scheduling with EventBridge + DynamoDB](https://aws.amazon.com/blogs/architecture/serverless-scheduling-with-amazon-eventbridge-aws-lambda-and-amazon-dynamodb/) — queue pattern for cron-driven recovery
 
 ---
 
-*Research completed: 2026-03-05*
-*Prepared for: Phase 23-24 planning (Stream Quality Monitoring + Creator Spotlight)*
+*Pitfalls research for: v1.5 Pipeline Reliability, Moderation & Upload Experience*
+*Researched: 2026-03-10*
+*Supersedes: Previous PITFALLS.md (v1.4 Stream Quality & Creator Spotlight)*

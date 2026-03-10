@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Creator Studio & Stream Quality
 status: executing
-last_updated: "2026-03-07T00:59:16Z"
+last_updated: "2026-03-10T13:52:05.850Z"
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 12
+  completed_plans: 11
+  percent: 99
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 ## Current Position
 
 **Active Phase:** Phase 24 — Creator Spotlight Selection & Display
-**Active Plan:** 24-02 (next)
-**Status:** Executing phase 24
-**Progress:** [███░░░░░░░] 33% (1/3 plans complete)
+**Active Plan:** 24-03 (complete)
+**Status:** Phase 24 complete — all 3 plans done
+**Progress:** [██████████] 99%
 
 ## Performance Metrics
 
@@ -94,6 +94,9 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 - REMOVE expression when clearing spotlight (both null) for clean DynamoDB records
 - Non-blocking spotlight cleanup in end-session handler (try/catch with console.warn)
 
+**Phase 24-03 — CDK API Stack Wiring:**
+- Static path segment `live` must be registered before path parameter `{sessionId}` in CDK API Gateway resource tree to prevent routing conflicts (/sessions/live being matched as /sessions/{sessionId})
+
 **Carried Forward from v1.2:**
 - cognito:username (not sub) as userId consistently across all handlers
 - Single-table DynamoDB with optional fields for backward compatibility
@@ -115,6 +118,7 @@ See: .planning/PROJECT.md (updated 2026-03-06)
 | Phase 23-stream-quality-monitoring-dashboard P00 | 4 minutes | 1 tasks | 1 files |
 | Phase 23 P04 | 457 | 2 tasks | 2 files |
 | Phase 23 P05 | 5 | 4 tasks | 2 files |
+| Phase 24 P03 | 26 | 1 tasks | 1 files |
 
 ### Roadmap Evolution
 
@@ -153,7 +157,7 @@ None.
 - Check useStreamMetrics hook implementation in 23-01-SUMMARY.md
 - Review REQUIREMENTS.md for QUAL-* requirement definitions
 
-**Next action:** Execute Phase 24-02 (frontend spotlight components)
+**Next action:** Phase 24 complete. All 3 plans (backend API, frontend components, CDK wiring) done. Ready for next milestone or deployment.
 
 ---
 

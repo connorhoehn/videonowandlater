@@ -112,7 +112,7 @@ Plans:
   4. Featured creator selection is restricted to public broadcasts only (private broadcasts cannot feature or be featured)
   5. When broadcast ends or broadcaster removes featured creator, spotlight is automatically cleared with no stale data persisting
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 24-01-PLAN.md — Backend domain model, repository methods, and API handlers for spotlight
@@ -133,4 +133,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
-| 24 - Creator Spotlight Selection & Display | 1/3 | In Progress|  |
+| 24 - Creator Spotlight Selection & Display | 2/3 | In Progress|  |

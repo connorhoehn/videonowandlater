@@ -19,6 +19,9 @@ import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
 import { StreamQualityOverlay } from './StreamQualityOverlay';
 import { useStreamMetrics } from './useStreamMetrics';
+import { SpotlightBadge } from '../spotlight/SpotlightBadge';
+import { SpotlightModal } from '../spotlight/SpotlightModal';
+import { useSpotlight } from '../spotlight/useSpotlight';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -153,6 +156,19 @@ function BroadcastContent({
 
   // NEW: Add metrics hook
   const { metrics, healthScore } = useStreamMetrics(client, isLive);
+
+  // Spotlight hook
+  const {
+    featuredCreator,
+    liveSessions,
+    isLoadingLive,
+    isModalOpen,
+    openModal,
+    closeModal,
+    selectCreator,
+    removeCreator,
+    refreshLiveSessions,
+  } = useSpotlight({ sessionId, authToken, isLive });
   const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId, authToken });
   const { sendReaction, sending } = useReactionSender(sessionId, authToken);
 
@@ -320,6 +336,13 @@ function BroadcastContent({
                       onReaction={handleReaction}
                       disabled={sending}
                     />
+
+                    <button
+                      onClick={openModal}
+                      className="px-3 py-2 rounded-lg font-semibold text-sm bg-purple-600 text-white hover:bg-purple-700"
+                    >
+                      {featuredCreator ? 'Change Spotlight' : 'Feature Creator'}
+                    </button>
                   </>
                 )}
 
@@ -345,6 +368,15 @@ function BroadcastContent({
               </div>
             </div>
           </div>
+
+          {/* Spotlight badge — shown when broadcaster has featured a creator */}
+          {featuredCreator && (
+            <SpotlightBadge
+              featuredCreator={featuredCreator}
+              onRemove={removeCreator}
+              isBroadcaster={true}
+            />
+          )}
 
           {/* ── Middle: Participants panel (desktop only) ── */}
           {!isMobile && (
@@ -384,6 +416,16 @@ function BroadcastContent({
             onClose={() => setIsChatOpen(false)}
           />
         )}
+
+        {/* Spotlight modal — portal-based, renders into document.body */}
+        <SpotlightModal
+          isOpen={isModalOpen}
+          onClose={closeModal}
+          liveSessions={liveSessions}
+          isLoading={isLoadingLive}
+          onSelect={selectCreator}
+          onRefresh={refreshLiveSessions}
+        />
       </div>
     </ChatRoomProvider>
   );

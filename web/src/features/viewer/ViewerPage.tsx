@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
@@ -16,6 +16,7 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -67,6 +68,28 @@ export function ViewerPage() {
 
     fetchSession();
   }, [sessionId, authToken]);
+
+  // Poll session data every 15s when live to keep featured creator info fresh
+  React.useEffect(() => {
+    if (!authToken || !sessionId || session?.status !== 'live') return;
+
+    const config = getConfig();
+    const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSession(data);
+        }
+      } catch { /* ignore polling errors */ }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [authToken, sessionId, session?.status]);
 
   // Detect mobile
   React.useEffect(() => {
@@ -173,7 +196,7 @@ export function ViewerPage() {
 
             {/* Broadcaster info + status row + reaction picker */}
             <div className="flex items-center justify-between text-sm gap-3">
-              <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center gap-3 flex-1 flex-wrap">
                 {session?.userId && (
                   <div className="flex items-center gap-2 text-gray-700">
                     <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-700">
@@ -190,6 +213,19 @@ export function ViewerPage() {
                     {sessionStatus}
                   </span>
                 )}
+                {/* Featured creator link — shown when broadcaster has spotlighted a creator */}
+                {session?.featuredCreatorId && (
+                  <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                    <span className="w-2 h-2 bg-green-500 rounded-full shrink-0" />
+                    <span className="text-sm text-purple-800 font-medium">Featured:</span>
+                    <Link
+                      to={`/viewer/${session.featuredCreatorId}`}
+                      className="text-sm text-purple-600 hover:text-purple-800 font-medium underline"
+                    >
+                      {session.featuredCreatorName || 'Creator'}
+                    </Link>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <ReactionPicker
@@ -201,6 +237,14 @@ export function ViewerPage() {
                 </div>
               </div>
             </div>
+
+            {/* Read-only SpotlightBadge for viewers — fixed at top-right */}
+            {session?.featuredCreatorId && session?.featuredCreatorName && (
+              <SpotlightBadge
+                featuredCreator={{ sessionId: session.featuredCreatorId, name: session.featuredCreatorName }}
+                isBroadcaster={false}
+              />
+            )}
           </div>
         </div>
 

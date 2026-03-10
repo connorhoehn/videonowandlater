@@ -63,7 +63,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 - [x] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention (completed 2026-03-10)
 - [x] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events (completed 2026-03-10)
-- [ ] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages
+- [x] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages (completed 2026-03-10)
 - [ ] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users
 - [ ] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring
 - [ ] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page
@@ -193,7 +193,7 @@ Plans:
   4. Sessions recorded before this phase (without `diarizedTranscriptS3Path`) continue to display their plain transcript without any error or missing state
   5. A speaker label size guard prevents DynamoDB item size errors on long recordings — segments exceeding the inline size threshold are stored exclusively in S3
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 27-01-PLAN.md — Backend pipeline: speaker diarization, segment parsing, get-speaker-segments handler, CDK S3 write permission
@@ -281,7 +281,7 @@ Plans:
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
-| 27 - Speaker-Attributed Transcripts | 1/2 | In Progress|  |
+| 27 - Speaker-Attributed Transcripts | 2/2 | Complete   | 2026-03-10 |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

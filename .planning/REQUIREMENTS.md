@@ -25,8 +25,8 @@
 - [x] **SPKR-02**: Transcript post-processor extracts per-word speaker labels from Transcribe output and groups them into speaker-turn segments
 - [x] **SPKR-03**: Speaker segments are stored in S3 as a compact JSON file (pointer on session as `diarizedTranscriptS3Path`) — never inline in DynamoDB to respect the 400KB item limit
 - [x] **SPKR-04**: Speakers are labeled "Speaker 1" / "Speaker 2" (not usernames) since composite audio cannot map acoustic labels to identities
-- [ ] **SPKR-05**: Replay and upload video player pages display attributed transcript as alternating speaker turns with timestamps
-- [ ] **SPKR-06**: Diarization is applied to new recordings automatically; existing sessions without `diarizedTranscriptS3Path` fall back gracefully to plain transcript display
+- [x] **SPKR-05**: Replay and upload video player pages display attributed transcript as alternating speaker turns with timestamps
+- [x] **SPKR-06**: Diarization is applied to new recordings automatically; existing sessions without `diarizedTranscriptS3Path` fall back gracefully to plain transcript display
 
 ### Chat Moderation
 
@@ -123,8 +123,8 @@
 | SPKR-02 | Phase 27 | Complete |
 | SPKR-03 | Phase 27 | Complete |
 | SPKR-04 | Phase 27 | Complete |
-| SPKR-05 | Phase 27 | Pending |
-| SPKR-06 | Phase 27 | Pending |
+| SPKR-05 | Phase 27 | Complete |
+| SPKR-06 | Phase 27 | Complete |
 | MOD-01 | Phase 28 | Pending |
 | MOD-02 | Phase 28 | Pending |
 | MOD-03 | Phase 28 | Pending |

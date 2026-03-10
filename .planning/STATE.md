@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-**Active Phase:** Phase 26 — Stuck Session Recovery Cron (COMPLETE)
+**Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
 **Progress:** [██████████] 100%
@@ -151,10 +151,10 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 26-stuck-session-recovery-cron 26-02-PLAN.md
+**Stopped at:** Phase 26 complete, ready to discuss Phase 27
 **Resume file:** None
 
-**Next action:** Run `/gsd:discuss-phase 26` to begin Stuck Session Recovery Cron planning.
+**Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.
 
 ---
 

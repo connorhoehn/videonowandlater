@@ -82,7 +82,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **v1.5 Milestone (Pipeline Reliability, Moderation & Upload Experience):**
 
 - ✓ EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary) — Phase 25
-- [ ] Cron job identifies sessions stuck in pipeline for >30 min and re-fires appropriate recovery event
+- ✓ Cron job identifies sessions stuck in pipeline for >45 min and re-fires appropriate recovery event — Phase 26
 - [ ] Transcripts include speaker diarization with labels mapped to session usernames
 - [ ] Broadcaster can bounce (kick) a user from their active stream
 - [ ] Any user can report a chat message via inline quick action (shown only on other users' messages)
@@ -149,6 +149,9 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Retroactive Phase 01 verification | 9 requirements verified automated, 3 auth flows require manual testing | ✓ Phase 4.1 |
 | Powertools Logger at module scope with appendPersistentKeys | Module-scope init pays cold-start cost once; appendPersistentKeys binds sessionId to all invocation logs | ✓ Phase 25 |
 | CDK logGroup with ONE_MONTH retention on pipeline Lambdas | 30-day window balances cost vs debuggability; DESTROY removal policy keeps cdk destroy clean | ✓ Phase 25 |
+| Dual GSI1 partition query (STATUS#ENDING + STATUS#ENDED) | Stuck sessions are in ENDED (not ENDING) after MediaConvert submission — must query both to catch all cases | ✓ Phase 26 |
+| ConditionalCheckFailedException caught per-session in cron | Concurrent cron runs race on same session; per-session catch lets remaining sessions proceed | ✓ Phase 26 |
+| EventBridge PutEvents for recovery (not Lambda.invoke) | Preserves DLQ and retry semantics; recovery events route through existing EventBridge rules | ✓ Phase 26 |
 
 ## Current State
 
@@ -161,4 +164,4 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-10 after Phase 25 — pipeline observability complete (structured logging + log retention across all 5 pipeline handlers)*
+*Last updated: 2026-03-10 after Phase 26 — stuck session recovery cron complete (scan-stuck-sessions Lambda + RecordingRecoveryRule + recording-ended guard)*

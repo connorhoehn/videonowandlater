@@ -5,9 +5,18 @@ import { MessageRow } from './MessageRow';
 interface MessageListProps {
   messages: ChatMessage[];
   sessionOwnerId: string;
+  currentUserId?: string;
+  onBounce?: (userId: string) => void;
+  onReport?: (msgId: string, userId: string) => void;
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, sessionOwnerId }) => {
+export const MessageList: React.FC<MessageListProps> = ({
+  messages,
+  sessionOwnerId,
+  currentUserId,
+  onBounce,
+  onReport,
+}) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasNewMessages, setHasNewMessages] = React.useState(false);
@@ -51,6 +60,10 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, sessionOwner
             key={message.id}
             message={message}
             isBroadcaster={message.sender?.userId === sessionOwnerId}
+            isBroadcasterViewing={!!currentUserId && currentUserId === sessionOwnerId}
+            isOwnMessage={!!currentUserId && message.sender?.userId === currentUserId}
+            onBounce={onBounce}
+            onReport={onReport}
           />
         ))}
       </div>

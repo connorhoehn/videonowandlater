@@ -6,6 +6,7 @@ import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { EmptyState } from './EmptyState';
 import { LoadingState } from './LoadingState';
+import { getConfig } from '../../config/aws-config';
 
 interface ChatPanelProps {
   sessionId: string;
@@ -15,6 +16,7 @@ interface ChatPanelProps {
   isOpen: boolean;
   connectionState: 'disconnected' | 'connecting' | 'connected';
   onClose?: () => void;
+  currentUserId?: string;
 }
 
 interface ConnectionIndicatorProps {
@@ -37,6 +39,10 @@ interface ChatPanelContentProps {
   onSendMessage: (content: string) => void;
   isMobile: boolean;
   onClose?: () => void;
+  currentUserId?: string;
+  onBounce?: (userId: string) => void;
+  onReport?: (msgId: string, reportedUserId: string) => void;
+  toastMsg?: string | null;
 }
 
 const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
@@ -45,6 +51,10 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
   onSendMessage,
   isMobile,
   onClose,
+  currentUserId,
+  onBounce,
+  onReport,
+  toastMsg,
 }) => {
   const { messages, isLoadingHistory } = useChatMessagesContext();
 
@@ -68,7 +78,13 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
         ) : messages.length === 0 ? (
           <EmptyState />
         ) : (
-          <MessageList messages={messages} sessionOwnerId={sessionOwnerId} />
+          <MessageList
+            messages={messages}
+            sessionOwnerId={sessionOwnerId}
+            currentUserId={currentUserId}
+            onBounce={onBounce}
+            onReport={onReport}
+          />
         )}
       </div>
 
@@ -77,6 +93,13 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
         onSendMessage={onSendMessage}
         disabled={connectionState !== 'connected'}
       />
+
+      {/* Toast */}
+      {toastMsg && (
+        <div className="absolute bottom-16 left-4 right-4 bg-gray-800 text-white text-sm px-3 py-2 rounded shadow-lg text-center pointer-events-none">
+          {toastMsg}
+        </div>
+      )}
     </div>
   );
 };
@@ -89,14 +112,52 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   isOpen,
   connectionState,
   onClose,
+  currentUserId,
 }) => {
   const room = useChatRoomContext();
+  const [toastMsg, setToastMsg] = React.useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const handleSendMessage = async (content: string) => {
     try {
       await room.sendMessage(new SendMessageRequest(content));
     } catch (error) {
       console.error('Failed to send message:', error);
+    }
+  };
+
+  const handleBounce = async (targetUserId: string) => {
+    if (!authToken) return;
+    const apiUrl = getConfig()?.apiUrl;
+    if (!apiUrl) return;
+    try {
+      await fetch(`${apiUrl}/sessions/${sessionId}/bounce`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ userId: targetUserId }),
+      });
+    } catch (err) {
+      console.error('Bounce failed:', err);
+    }
+  };
+
+  const handleReport = async (msgId: string, reportedUserId: string) => {
+    if (!authToken) return;
+    const apiUrl = getConfig()?.apiUrl;
+    if (!apiUrl) return;
+    try {
+      await fetch(`${apiUrl}/sessions/${sessionId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ msgId, reportedUserId }),
+      });
+      showToast('Message reported');
+    } catch (err) {
+      console.error('Report failed:', err);
     }
   };
 
@@ -115,6 +176,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           onSendMessage={handleSendMessage}
           isMobile={isMobile}
           onClose={onClose}
+          currentUserId={currentUserId}
+          onBounce={handleBounce}
+          onReport={handleReport}
+          toastMsg={toastMsg}
         />
       </div>
     </ChatMessagesProvider>

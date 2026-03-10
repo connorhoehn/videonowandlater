@@ -395,6 +395,7 @@ function BroadcastContent({
               <ChatPanel
                 sessionId={sessionId}
                 sessionOwnerId={userId}
+                currentUserId={userId}
                 authToken={authToken}
                 isMobile={false}
                 isOpen={true}
@@ -409,6 +410,7 @@ function BroadcastContent({
           <ChatPanel
             sessionId={sessionId}
             sessionOwnerId={userId}
+            currentUserId={userId}
             authToken={authToken}
             isMobile={true}
             isOpen={isChatOpen}

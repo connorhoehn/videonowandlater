@@ -14,10 +14,10 @@
 - [x] **PIPE-02**: Pipeline log entries use a consistent correlation structure so all events for one session can be retrieved with a single CloudWatch Logs Insights query
 - [x] **PIPE-03**: Lambda Powertools Logger is initialized with persistent `pipelineStage` key per handler so logs are filterable without post-processing
 - [x] **PIPE-04**: All pipeline Lambda CDK definitions specify log group retention (30 days) to prevent unbounded CloudWatch log accumulation
-- [ ] **PIPE-05**: A recovery cron runs every 15 minutes and identifies sessions where `transcriptStatus` is `null` or `pending` and `endedAt` is more than 45 minutes ago
-- [ ] **PIPE-06**: Recovery cron re-fires the appropriate EventBridge event for the earliest failed stage (smart recovery, not full reset) with a `recoveryAttempt` counter on the event
-- [ ] **PIPE-07**: Recovery cron skips sessions with `transcriptStatus = 'processing'` (MediaConvert/Transcribe job actively running) to prevent double-execution
-- [ ] **PIPE-08**: Recovery cron caps retry attempts at 3 per session by writing a `recoveryAttemptCount` field to the session record and skipping sessions that have reached the cap
+- [x] **PIPE-05**: A recovery cron runs every 15 minutes and identifies sessions where `transcriptStatus` is `null` or `pending` and `endedAt` is more than 45 minutes ago
+- [x] **PIPE-06**: Recovery cron re-fires the appropriate EventBridge event for the earliest failed stage (smart recovery, not full reset) with a `recoveryAttempt` counter on the event
+- [x] **PIPE-07**: Recovery cron skips sessions with `transcriptStatus = 'processing'` (MediaConvert/Transcribe job actively running) to prevent double-execution
+- [x] **PIPE-08**: Recovery cron caps retry attempts at 3 per session by writing a `recoveryAttemptCount` field to the session record and skipping sessions that have reached the cap
 
 ### Speaker-Attributed Transcripts
 
@@ -115,10 +115,10 @@
 | PIPE-02 | Phase 25 | Complete |
 | PIPE-03 | Phase 25 | Complete |
 | PIPE-04 | Phase 25 | Complete |
-| PIPE-05 | Phase 26 | Pending |
-| PIPE-06 | Phase 26 | Pending |
-| PIPE-07 | Phase 26 | Pending |
-| PIPE-08 | Phase 26 | Pending |
+| PIPE-05 | Phase 26 | Complete |
+| PIPE-06 | Phase 26 | Complete |
+| PIPE-07 | Phase 26 | Complete |
+| PIPE-08 | Phase 26 | Complete |
 | SPKR-01 | Phase 27 | Pending |
 | SPKR-02 | Phase 27 | Pending |
 | SPKR-03 | Phase 27 | Pending |

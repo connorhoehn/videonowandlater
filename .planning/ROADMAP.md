@@ -171,7 +171,7 @@ Plans:
   3. A session that has already been recovered 3 times has `recoveryAttemptCount = 3` on its DynamoDB record and is excluded from further cron recovery attempts
   4. The recovery cron fires every 15 minutes via EventBridge Scheduler and completes within the Lambda 5-minute timeout for any realistic number of stuck sessions
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 26-01-PLAN.md — scan-stuck-sessions handler + unit tests (detection, filtering, atomic counter, PutEvents)
@@ -280,7 +280,7 @@ Plans:
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
-| 26 - Stuck Session Recovery Cron | 0/2 | Not started | - |
+| 26 - Stuck Session Recovery Cron | 1/2 | In Progress|  |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |

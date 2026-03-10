@@ -269,6 +269,39 @@ export class SessionStack extends Stack {
       description: 'Replenish IVS resource pool every 5 minutes',
     });
 
+    // ============================================================
+    // Stuck Session Recovery Cron (Phase 26)
+    // Scans GSI1 for stalled pipeline sessions and re-fires recovery events
+    // ============================================================
+    const scanStuckSessionsFn = new nodejs.NodejsFunction(this, 'ScanStuckSessions', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/scan-stuck-sessions.ts'),
+      timeout: Duration.minutes(5),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        AWS_ACCOUNT_ID: this.account,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'ScanStuckSessionsLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    this.table.grantReadWriteData(scanStuckSessionsFn);
+
+    scanStuckSessionsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: ['*'],
+    }));
+
+    new events.Rule(this, 'ScanStuckSessionsSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(15)),
+      targets: [new targets.LambdaFunction(scanStuckSessionsFn)],
+      description: 'Scan for stuck pipeline sessions and re-trigger recovery every 15 minutes',
+    });
+
     // Lambda function for stream-started events
     const streamStartedFn = new nodejs.NodejsFunction(this, 'StreamStarted', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -409,6 +442,24 @@ export class SessionStack extends Stack {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
       sourceArn: stageRecordingEndRule.ruleArn,
     });
+
+    // Route synthetic recovery events (from scan-stuck-sessions) to recording-ended handler
+    const recordingRecoveryRule = new events.Rule(this, 'RecordingRecoveryRule', {
+      eventPattern: {
+        source: ['custom.vnl'],
+        detailType: ['Recording Recovery'],
+      },
+      description: 'Route recovery events from scan-stuck-sessions to recording-ended handler',
+    });
+    recordingRecoveryRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
+      deadLetterQueue: recordingEventsDlq,
+      retryAttempts: 2,
+    }));
+    recordingEndedFn.addPermission('AllowEBRecoveryInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: recordingRecoveryRule.ruleArn,
+    });
+
     recordingStartedFn.addPermission('AllowEBRecordingStartInvoke', {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
       sourceArn: this.recordingStartRule.ruleArn,

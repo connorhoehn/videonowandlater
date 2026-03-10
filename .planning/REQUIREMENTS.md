@@ -30,13 +30,13 @@
 
 ### Chat Moderation
 
-- [ ] **MOD-01**: Broadcaster can bounce (kick) a user from their active stream via a button visible only to the broadcaster in the chat participant list
-- [ ] **MOD-02**: Bouncing a user calls IVS Chat `DisconnectUser` to immediately terminate their WebSocket connection
-- [ ] **MOD-03**: A bounce event is written to a DynamoDB moderation log (`PK: SESSION#{id}`, `SK: MOD#{timestamp}#{uuid}`) with `userId`, `actionType: 'bounce'`, and `actorId`
-- [ ] **MOD-04**: `create-chat-token.ts` checks the moderation log before issuing a new token — users with an active bounce on the current session are denied a token with a 403 response
-- [ ] **MOD-05**: Any user can report a chat message via an inline quick-action that appears only on other users' messages (never on own messages)
+- [x] **MOD-01**: Broadcaster can bounce (kick) a user from their active stream via a button visible only to the broadcaster in the chat participant list
+- [x] **MOD-02**: Bouncing a user calls IVS Chat `DisconnectUser` to immediately terminate their WebSocket connection
+- [x] **MOD-03**: A bounce event is written to a DynamoDB moderation log (`PK: SESSION#{id}`, `SK: MOD#{timestamp}#{uuid}`) with `userId`, `actionType: 'bounce'`, and `actorId`
+- [x] **MOD-04**: `create-chat-token.ts` checks the moderation log before issuing a new token — users with an active bounce on the current session are denied a token with a 403 response
+- [x] **MOD-05**: Any user can report a chat message via an inline quick-action that appears only on other users' messages (never on own messages)
 - [ ] **MOD-06**: Clicking report fires a backend request and shows a private toast confirmation — the reported message remains visible and no public label is applied
-- [ ] **MOD-07**: A report event is written to the moderation log with `msgId`, `actionType: 'report'`, `reporterId`, and `reportedUserId`
+- [x] **MOD-07**: A report event is written to the moderation log with `msgId`, `actionType: 'report'`, `reporterId`, and `reportedUserId`
 - [ ] **MOD-08**: Moderation quick-action (report button) is available in all chat rooms (broadcast chat, hangout chat) not just on broadcast pages
 
 ### Upload Video Player
@@ -125,13 +125,13 @@
 | SPKR-04 | Phase 27 | Complete |
 | SPKR-05 | Phase 27 | Complete |
 | SPKR-06 | Phase 27 | Complete |
-| MOD-01 | Phase 28 | Pending |
-| MOD-02 | Phase 28 | Pending |
-| MOD-03 | Phase 28 | Pending |
-| MOD-04 | Phase 28 | Pending |
-| MOD-05 | Phase 28 | Pending |
+| MOD-01 | Phase 28 | Complete |
+| MOD-02 | Phase 28 | Complete |
+| MOD-03 | Phase 28 | Complete |
+| MOD-04 | Phase 28 | Complete |
+| MOD-05 | Phase 28 | Complete |
 | MOD-06 | Phase 28 | Pending |
-| MOD-07 | Phase 28 | Pending |
+| MOD-07 | Phase 28 | Complete |
 | MOD-08 | Phase 28 | Pending |
 | VIDP-01 | Phase 29 | Pending |
 | VIDP-02 | Phase 29 | Pending |

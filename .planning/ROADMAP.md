@@ -215,7 +215,7 @@ Plans:
   4. Each bounce and report event is durably stored in DynamoDB with `sessionId`, `actorId`, `targetUserId`, `actionType`, and timestamp — queryable per session
   5. Moderation quick-actions (report button) appear in both broadcast chat and hangout chat rooms
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 28-01-PLAN.md — Backend: bounce-user.ts + report-message.ts + create-chat-token.ts blocklist + CDK wiring
@@ -282,6 +282,6 @@ Plans:
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 2/2 | Complete    | 2026-03-10 |
-| 28 - Chat Moderation | 0/? | Not started | - |
+| 28 - Chat Moderation | 1/2 | In Progress|  |
 | 29 - Upload Video Player Core | 0/? | Not started | - |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

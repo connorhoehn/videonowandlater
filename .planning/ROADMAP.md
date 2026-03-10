@@ -61,7 +61,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 **Phases:**
 
-- [ ] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention
+- [x] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention (completed 2026-03-10)
 - [ ] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events
 - [ ] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages
 - [ ] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users
@@ -150,7 +150,7 @@ Plans:
   3. All pipeline Lambda log groups have 30-day retention configured in CDK — no log group accumulates indefinitely after deployment
   4. Pipeline log entries are filterable by stage name without post-processing (Powertools `persistentKeys.pipelineStage` per handler)
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
@@ -279,7 +279,7 @@ Plans:
 | 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
-| 25 - Pipeline Observability | 1/2 | In Progress|  |
+| 25 - Pipeline Observability | 2/2 | Complete   | 2026-03-10 |
 | 26 - Stuck Session Recovery Cron | 0/? | Not started | - |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |

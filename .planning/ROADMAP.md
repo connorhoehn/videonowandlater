@@ -62,7 +62,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 **Phases:**
 
 - [x] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention (completed 2026-03-10)
-- [ ] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events
+- [x] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events (completed 2026-03-10)
 - [ ] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages
 - [ ] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users
 - [ ] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring
@@ -171,7 +171,7 @@ Plans:
   3. A session that has already been recovered 3 times has `recoveryAttemptCount = 3` on its DynamoDB record and is excluded from further cron recovery attempts
   4. The recovery cron fires every 15 minutes via EventBridge Scheduler and completes within the Lambda 5-minute timeout for any realistic number of stuck sessions
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 26-01-PLAN.md — scan-stuck-sessions handler + unit tests (detection, filtering, atomic counter, PutEvents)
@@ -280,7 +280,7 @@ Plans:
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
-| 26 - Stuck Session Recovery Cron | 1/2 | In Progress|  |
+| 26 - Stuck Session Recovery Cron | 2/2 | Complete   | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |

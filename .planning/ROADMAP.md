@@ -150,7 +150,11 @@ Plans:
   3. All pipeline Lambda log groups have 30-day retention configured in CDK — no log group accumulates indefinitely after deployment
   4. Pipeline log entries are filterable by stage name without post-processing (Powertools `persistentKeys.pipelineStage` per handler)
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 
@@ -167,7 +171,11 @@ Plans:
   3. A session that has already been recovered 3 times has `recoveryAttemptCount = 3` on its DynamoDB record and is excluded from further cron recovery attempts
   4. The recovery cron fires every 15 minutes via EventBridge Scheduler and completes within the Lambda 5-minute timeout for any realistic number of stuck sessions
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 
@@ -185,7 +193,11 @@ Plans:
   4. Sessions recorded before this phase (without `diarizedTranscriptS3Path`) continue to display their plain transcript without any error or missing state
   5. A speaker label size guard prevents DynamoDB item size errors on long recordings — segments exceeding the inline size threshold are stored exclusively in S3
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 
@@ -203,7 +215,11 @@ Plans:
   4. Each bounce and report event is durably stored in DynamoDB with `sessionId`, `actorId`, `targetUserId`, `actionType`, and timestamp — queryable per session
   5. Moderation quick-actions (report button) appear in both broadcast chat and hangout chat rooms
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 
@@ -220,7 +236,11 @@ Plans:
   3. Selecting a resolution from the quality picker switches the player to that level; Safari users see only "Auto" (native HLS path) with no quality selector exposed
   4. `UploadActivityCard` links in the activity feed navigate to `/video/:sessionId` — the previous upload path is no longer the primary destination
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 
@@ -238,7 +258,11 @@ Plans:
   4. Emoji reactions can be submitted on the video page using the same emoji set as broadcast/replay; reaction summary counts are displayed and reflect submitted reactions
   5. A collapsible info panel below the player shows the AI summary and speaker-attributed transcript (or plain transcript fallback) for sessions without diarization data
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
+- [ ] 25-02-PLAN.md — Add CDK log group retention to all 5 pipeline Lambda constructs
 
 ---
 

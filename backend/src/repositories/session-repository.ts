@@ -525,6 +525,42 @@ export async function updateTranscriptStatus(
 }
 
 /**
+ * Update diarized transcript S3 path on a session record
+ * Called by transcribe-completed handler after writing speaker-segments.json to S3
+ * Does NOT affect transcriptStatus or any other pipeline fields
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param diarizedTranscriptS3Path S3 key where speaker-segments.json is stored
+ */
+export async function updateDiarizedTranscriptPath(
+  tableName: string,
+  sessionId: string,
+  diarizedTranscriptS3Path: string
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #diarizedTranscriptS3Path = :path, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#diarizedTranscriptS3Path': 'diarizedTranscriptS3Path',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':path': diarizedTranscriptS3Path,
+      ':inc': 1,
+    },
+  }));
+
+  console.log('Diarized transcript path updated:', { sessionId, diarizedTranscriptS3Path });
+}
+
+/**
  * Update session AI summary fields (aiSummary and/or aiSummaryStatus)
  * Non-blocking pattern: used to store Bedrock-generated summaries without affecting transcript
  * Selective updates only affect provided fields; transcriptText is never touched

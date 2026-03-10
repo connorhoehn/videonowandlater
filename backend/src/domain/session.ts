@@ -68,6 +68,7 @@ export interface Session {
   // Transcription pipeline state (populated after recording is available)
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   transcriptS3Path?: string;
+  diarizedTranscriptS3Path?: string;
   transcript?: string;
   // Hangout participant tracking (populated at session end)
   participantCount?: number;

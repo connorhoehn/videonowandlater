@@ -64,7 +64,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 - [x] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention (completed 2026-03-10)
 - [x] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events (completed 2026-03-10)
 - [x] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages (completed 2026-03-10)
-- [ ] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users
+- [x] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users (completed 2026-03-10)
 - [ ] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring
 - [ ] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page
 
@@ -215,7 +215,7 @@ Plans:
   4. Each bounce and report event is durably stored in DynamoDB with `sessionId`, `actorId`, `targetUserId`, `actionType`, and timestamp — queryable per session
   5. Moderation quick-actions (report button) appear in both broadcast chat and hangout chat rooms
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 28-01-PLAN.md — Backend: bounce-user.ts + report-message.ts + create-chat-token.ts blocklist + CDK wiring
@@ -282,6 +282,6 @@ Plans:
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 2/2 | Complete    | 2026-03-10 |
-| 28 - Chat Moderation | 1/2 | In Progress|  |
+| 28 - Chat Moderation | 2/2 | Complete   | 2026-03-10 |
 | 29 - Upload Video Player Core | 0/? | Not started | - |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

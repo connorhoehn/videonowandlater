@@ -92,6 +92,25 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Phase 24: Creator Spotlight — list live public sessions
+    // IMPORTANT: 'live' must be added BEFORE '{sessionId}' to prevent API Gateway
+    // from treating /sessions/live as /sessions/{sessionId} where sessionId="live"
+    const liveResource = sessions.addResource('live');
+    const listLiveSessionsHandler = new NodejsFunction(this, 'ListLiveSessionsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-live-sessions.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listLiveSessionsHandler);
+    liveResource.addMethod('GET', new apigateway.LambdaIntegration(listLiveSessionsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // GET /sessions/{sessionId}
     const sessionIdResource = sessions.addResource('{sessionId}');
 
@@ -382,6 +401,23 @@ export class ApiStack extends Stack {
     );
 
     joinHangoutResource.addMethod('POST', new apigateway.LambdaIntegration(joinHangoutHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // Phase 24: Creator Spotlight — set/clear featured creator
+    const spotlightResource = sessionIdResource.addResource('spotlight');
+    const updateSpotlightHandler = new NodejsFunction(this, 'UpdateSpotlightHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/update-spotlight.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(updateSpotlightHandler);
+    spotlightResource.addMethod('PUT', new apigateway.LambdaIntegration(updateSpotlightHandler), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });

@@ -218,8 +218,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 28-01-PLAN.md — To be planned
-- [ ] 28-02-PLAN.md — To be planned
+- [ ] 28-01-PLAN.md — Backend: bounce-user.ts + report-message.ts + create-chat-token.ts blocklist + CDK wiring
+- [ ] 28-02-PLAN.md — Frontend: MessageRow hover buttons + ChatPanel API calls + toast + page wiring
 
 ---
 

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
-status: roadmap_complete
-last_updated: "2026-03-10T00:00:00Z"
+status: planning
+last_updated: "2026-03-10T16:26:20.318Z"
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 9
+  completed_phases: 3
+  total_plans: 14
+  completed_plans: 13
+  percent: 99
 ---
 
 # Project State
@@ -24,10 +24,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-**Active Phase:** Phase 25 — Pipeline Observability (not yet started)
-**Active Plan:** —
-**Status:** Roadmap defined. Ready to plan Phase 25.
-**Progress:** [░░░░░░░░░░] 0%
+**Active Phase:** Phase 25 — Pipeline Observability (plans 01-02 complete)
+**Active Plan:** 25-02 complete — ready for Phase 26
+**Status:** Phase 25 complete. CDK log group retention and Powertools Logger added to all 5 pipeline handlers.
+**Progress:** [██████████] 99%
+**Last session:** 2026-03-10T16:25:31Z — Completed 25-pipeline-observability-02-PLAN.md
 
 ## Performance Metrics
 
@@ -104,6 +105,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | HLS.js quality switch stall on Safari | MEDIUM | Use `hls.currentLevel` on Chrome/Firefox; hide quality picker on Safari (Hls.isSupported() = false) |
 | CORS on HLS sub-manifests blocks quality levels | MEDIUM | Verify CloudFront cache behavior returns Access-Control-Allow-Origin on all *.m3u8 and *.ts paths |
 | Cron full table scan cost | HIGH | Must use GSI1 STATUS#ENDING query — full scan is forbidden |
+| Phase 25-pipeline-observability P02 | 2 | 1 tasks | 1 files |
 
 ### Roadmap Evolution
 

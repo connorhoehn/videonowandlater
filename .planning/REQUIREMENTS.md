@@ -13,7 +13,7 @@
 - [ ] **PIPE-01**: Every Lambda handler in the recording pipeline emits a structured JSON log entry at start and completion with `sessionId`, `stage`, `status`, and `durationMs`
 - [ ] **PIPE-02**: Pipeline log entries use a consistent correlation structure so all events for one session can be retrieved with a single CloudWatch Logs Insights query
 - [ ] **PIPE-03**: Lambda Powertools Logger is initialized with persistent `pipelineStage` key per handler so logs are filterable without post-processing
-- [ ] **PIPE-04**: All pipeline Lambda CDK definitions specify log group retention (30 days) to prevent unbounded CloudWatch log accumulation
+- [x] **PIPE-04**: All pipeline Lambda CDK definitions specify log group retention (30 days) to prevent unbounded CloudWatch log accumulation
 - [ ] **PIPE-05**: A recovery cron runs every 15 minutes and identifies sessions where `transcriptStatus` is `null` or `pending` and `endedAt` is more than 45 minutes ago
 - [ ] **PIPE-06**: Recovery cron re-fires the appropriate EventBridge event for the earliest failed stage (smart recovery, not full reset) with a `recoveryAttempt` counter on the event
 - [ ] **PIPE-07**: Recovery cron skips sessions with `transcriptStatus = 'processing'` (MediaConvert/Transcribe job actively running) to prevent double-execution
@@ -114,7 +114,7 @@
 | PIPE-01 | Phase 25 | Pending |
 | PIPE-02 | Phase 25 | Pending |
 | PIPE-03 | Phase 25 | Pending |
-| PIPE-04 | Phase 25 | Pending |
+| PIPE-04 | Phase 25 | Complete |
 | PIPE-05 | Phase 26 | Pending |
 | PIPE-06 | Phase 26 | Pending |
 | PIPE-07 | Phase 26 | Pending |

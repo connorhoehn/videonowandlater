@@ -150,7 +150,7 @@ Plans:
   3. All pipeline Lambda log groups have 30-day retention configured in CDK — no log group accumulates indefinitely after deployment
   4. Pipeline log entries are filterable by stage name without post-processing (Powertools `persistentKeys.pipelineStage` per handler)
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 25-01-PLAN.md — Add Powertools Logger to all 5 pipeline handler files
@@ -279,7 +279,7 @@ Plans:
 | 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
-| 25 - Pipeline Observability | 0/? | Not started | - |
+| 25 - Pipeline Observability | 1/2 | In Progress|  |
 | 26 - Stuck Session Recovery Cron | 0/? | Not started | - |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |

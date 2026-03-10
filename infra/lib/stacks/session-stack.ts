@@ -614,8 +614,8 @@ export class SessionStack extends Stack {
     // Grant DynamoDB access to transcribe-completed handler
     this.table.grantReadWriteData(transcribeCompletedFn);
 
-    // Grant S3 read access to transcription bucket (for transcript.json fetch)
-    transcriptionBucket.grantRead(transcribeCompletedFn);
+    // Grant S3 read+write access to transcription bucket (reads transcript.json, writes speaker-segments.json)
+    transcriptionBucket.grantReadWrite(transcribeCompletedFn);
 
     // Add EventBridge target
     transcribeCompletedRule.addTarget(new targets.LambdaFunction(transcribeCompletedFn, {

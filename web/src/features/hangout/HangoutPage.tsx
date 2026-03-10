@@ -54,7 +54,7 @@ export function HangoutPage() {
   });
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
-  const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId: sessionId || '', authToken });
+  const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId: sessionId || '', authToken });
 
   // Merge activeSpeakerId into participants array
   const participantsWithSpeaking = useMemo(
@@ -209,6 +209,7 @@ export function HangoutPage() {
                 isMobile={false}
                 isOpen={true}
                 connectionState={chatConnectionState}
+                chatError={chatError}
               />
             </div>
           )}
@@ -226,6 +227,7 @@ export function HangoutPage() {
           isOpen={isChatOpen}
           connectionState={chatConnectionState}
           onClose={() => setIsChatOpen(false)}
+          chatError={chatError}
         />
       )}
 

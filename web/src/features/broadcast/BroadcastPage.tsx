@@ -169,7 +169,7 @@ function BroadcastContent({
     removeCreator,
     refreshLiveSessions,
   } = useSpotlight({ sessionId, authToken, isLive });
-  const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId, authToken });
+  const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId, authToken });
   const { sendReaction, sending } = useReactionSender(sessionId, authToken);
 
   // Detect mobile
@@ -400,6 +400,7 @@ function BroadcastContent({
                 isMobile={false}
                 isOpen={true}
                 connectionState={chatConnectionState}
+                chatError={chatError}
               />
             </div>
           )}
@@ -416,6 +417,7 @@ function BroadcastContent({
             isOpen={isChatOpen}
             connectionState={chatConnectionState}
             onClose={() => setIsChatOpen(false)}
+            chatError={chatError}
           />
         )}
 

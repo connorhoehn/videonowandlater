@@ -343,6 +343,10 @@ export class SessionStack extends Stack {
         LAMBDA_VERSION: '2026-03-06-16:15',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'RecordingEndedLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     // Grant DynamoDB permissions
@@ -497,6 +501,10 @@ export class SessionStack extends Stack {
         LAMBDA_VERSION: '2026-03-06-19:10',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'TranscodeCompletedLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     // Grant DynamoDB access to transcode-completed handler
@@ -546,6 +554,10 @@ export class SessionStack extends Stack {
         TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'TranscribeCompletedLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     // Grant DynamoDB access to transcribe-completed handler
@@ -603,6 +615,10 @@ export class SessionStack extends Stack {
         BEDROCK_MODEL_ID: 'amazon.nova-pro-v1:0',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'StoreSummaryLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     // Grant DynamoDB permissions (read for getSession, write for updateSessionAiSummary)
@@ -746,6 +762,10 @@ export class SessionStack extends Stack {
       },
       timeout: Duration.seconds(30),
       memorySize: 512,
+      logGroup: new logs.LogGroup(this, 'StartTranscribeLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     // Grant necessary permissions to start-transcribe handler

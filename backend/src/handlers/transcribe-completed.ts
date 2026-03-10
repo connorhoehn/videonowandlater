@@ -4,10 +4,10 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { updateTranscriptStatus } from '../repositories/session-repository';
+import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../repositories/session-repository';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -28,7 +28,91 @@ interface TranscribeOutput {
     transcripts: Array<{
       transcript: string;
     }>;
+    items?: Array<{
+      type: 'pronunciation' | 'punctuation';
+      start_time?: string;
+      end_time?: string;
+      alternatives: Array<{
+        content: string;
+        confidence?: string;
+        speaker_label?: string; // present when ShowSpeakerLabels: true
+      }>;
+    }>;
   };
+}
+
+interface SpeakerSegment {
+  speaker: string;  // 'Speaker 1' or 'Speaker 2'
+  startTime: number; // ms
+  endTime: number;   // ms
+  text: string;
+}
+
+const SPEAKER_MAP: Record<string, string> = { spk_0: 'Speaker 1', spk_1: 'Speaker 2' };
+
+/**
+ * Group word-level speaker labels from Transcribe results into turn segments.
+ * Consecutive same-speaker words are merged; a flush occurs when speaker changes or gap > 1000ms.
+ * Punctuation items are appended to the current segment text without affecting speaker/timing.
+ */
+function buildSpeakerSegments(items: NonNullable<TranscribeOutput['results']['items']>): SpeakerSegment[] {
+  const segments: SpeakerSegment[] = [];
+  let currentSpeaker: string | null = null;
+  let currentStart: number | null = null;
+  let currentEnd: number | null = null;
+  let currentWords: string[] = [];
+
+  function flush(): void {
+    if (currentSpeaker !== null && currentStart !== null && currentEnd !== null && currentWords.length > 0) {
+      segments.push({
+        speaker: SPEAKER_MAP[currentSpeaker] ?? currentSpeaker,
+        startTime: currentStart,
+        endTime: currentEnd,
+        text: currentWords.join(' '),
+      });
+    }
+    currentSpeaker = null;
+    currentStart = null;
+    currentEnd = null;
+    currentWords = [];
+  }
+
+  for (const item of items) {
+    if (item.type === 'punctuation') {
+      // Append punctuation to current segment text without a space
+      if (currentWords.length > 0) {
+        currentWords[currentWords.length - 1] += item.alternatives[0]?.content ?? '';
+      }
+      continue;
+    }
+
+    // Pronunciation item
+    const speakerLabel = item.alternatives[0]?.speaker_label;
+    if (!speakerLabel) {
+      // No speaker label — skip
+      continue;
+    }
+
+    const startMs = Math.round(parseFloat(item.start_time ?? '0') * 1000);
+    const endMs = Math.round(parseFloat(item.end_time ?? '0') * 1000);
+    const word = item.alternatives[0]?.content ?? '';
+
+    // Flush if speaker changes or gap > 1000ms
+    const gapExceeded = currentEnd !== null && startMs - currentEnd > 1000;
+    if (currentSpeaker !== null && (speakerLabel !== currentSpeaker || gapExceeded)) {
+      flush();
+    }
+
+    if (currentSpeaker === null) {
+      currentSpeaker = speakerLabel;
+      currentStart = startMs;
+    }
+    currentEnd = endMs;
+    currentWords.push(word);
+  }
+
+  flush();
+  return segments;
 }
 
 export const handler = async (
@@ -85,6 +169,28 @@ export const handler = async (
 
     // Extract plain text transcript
     const plainText = transcribeOutput.results?.transcripts?.[0]?.transcript || '';
+
+    // Build speaker segments from word-level items (non-blocking — failures do not block transcript storage)
+    const items = transcribeOutput.results?.items;
+    if (items && items.length > 0) {
+      try {
+        const speakerSegments = buildSpeakerSegments(items);
+        if (speakerSegments.length > 0) {
+          const speakerSegmentsKey = `${sessionId}/speaker-segments.json`;
+          await s3Client.send(new PutObjectCommand({
+            Bucket: transcriptionBucket,
+            Key: speakerSegmentsKey,
+            Body: JSON.stringify(speakerSegments),
+            ContentType: 'application/json',
+          }));
+          await updateDiarizedTranscriptPath(tableName, sessionId, speakerSegmentsKey);
+          logger.info('Speaker segments written to S3:', { sessionId, speakerSegmentsKey, segmentCount: speakerSegments.length });
+        }
+      } catch (speakerError: any) {
+        logger.error('Failed to write speaker segments (non-blocking):', { sessionId, errorMessage: speakerError.message });
+        // Non-blocking: transcript processing continues regardless
+      }
+    }
 
     if (!plainText) {
       logger.warn('Transcript text is empty for session:', { sessionId });

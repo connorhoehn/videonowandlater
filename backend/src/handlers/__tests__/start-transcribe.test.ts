@@ -174,6 +174,39 @@ describe('start-transcribe handler', () => {
     expect(command.input.OutputKey).toBe('output-test-session/transcript.json');
   });
 
+  it('should include ShowSpeakerLabels: true and MaxSpeakerLabels: 2 in transcribe params', async () => {
+    const mockEvent: EventBridgeEvent<'Upload Recording Available', any> = {
+      version: '0',
+      id: 'test-event-speaker',
+      'detail-type': 'Upload Recording Available',
+      source: 'vnl.upload',
+      account: '123456789012',
+      time: '2026-03-10T10:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'speaker-test-session',
+        recordingHlsUrl: 's3://test-bucket/hls/speaker-test-session/master.m3u8',
+      },
+    };
+
+    transcribeMock.on(StartTranscriptionJobCommand).resolves({
+      TranscriptionJob: {
+        TranscriptionJobName: `vnl-speaker-test-session-${Date.now()}`,
+        TranscriptionJobStatus: 'IN_PROGRESS',
+      },
+    });
+
+    await handler(mockEvent);
+
+    expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(1);
+    const command = transcribeMock.commandCalls(StartTranscriptionJobCommand)[0].args[0];
+    expect(command.input.Settings).toEqual({
+      ShowSpeakerLabels: true,
+      MaxSpeakerLabels: 2,
+    });
+  });
+
   it('should handle different HLS URL formats correctly', async () => {
     const mockEvent: EventBridgeEvent<'Upload Recording Available', any> = {
       version: '0',

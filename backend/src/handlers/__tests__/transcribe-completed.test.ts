@@ -6,8 +6,8 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../transcribe-completed';
-import { updateTranscriptStatus } from '../../repositories/session-repository';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../../repositories/session-repository';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
 jest.mock('@aws-sdk/client-s3');
@@ -17,6 +17,7 @@ jest.mock('../../repositories/session-repository');
 const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockEventBridgeClient = EventBridgeClient as jest.Mocked<typeof EventBridgeClient>;
 const mockUpdateTranscriptStatus = updateTranscriptStatus as jest.MockedFunction<typeof updateTranscriptStatus>;
+const mockUpdateDiarizedTranscriptPath = updateDiarizedTranscriptPath as jest.MockedFunction<typeof updateDiarizedTranscriptPath>;
 
 describe('transcribe-completed handler', () => {
   const originalEnv = process.env;
@@ -32,6 +33,7 @@ describe('transcribe-completed handler', () => {
     };
     jest.clearAllMocks();
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);
+    mockUpdateDiarizedTranscriptPath.mockResolvedValue(undefined);
 
     // Mock S3Client instance
     (mockS3Client as any).mockImplementation(() => ({
@@ -352,6 +354,173 @@ describe('transcribe-completed handler', () => {
 
     // Should not attempt to process
     expect(mockUpdateTranscriptStatus).not.toHaveBeenCalled();
+  });
+
+  it('groups word-level speaker labels into SpeakerSegment array', async () => {
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'Hello world. How are you?' }],
+        items: [
+          { type: 'pronunciation', start_time: '0.0', end_time: '0.5', alternatives: [{ content: 'Hello', speaker_label: 'spk_0' }] },
+          { type: 'pronunciation', start_time: '0.6', end_time: '1.0', alternatives: [{ content: 'world', speaker_label: 'spk_0' }] },
+          { type: 'punctuation', alternatives: [{ content: '.' }] },
+          { type: 'pronunciation', start_time: '2.0', end_time: '2.3', alternatives: [{ content: 'How', speaker_label: 'spk_1' }] },
+          { type: 'pronunciation', start_time: '2.4', end_time: '2.6', alternatives: [{ content: 'are', speaker_label: 'spk_1' }] },
+          { type: 'pronunciation', start_time: '2.7', end_time: '3.0', alternatives: [{ content: 'you', speaker_label: 'spk_1' }] },
+          { type: 'punctuation', alternatives: [{ content: '?' }] },
+        ],
+      },
+    };
+
+    mockS3Send
+      .mockResolvedValueOnce({
+        Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+      })
+      .mockResolvedValueOnce({}); // PutObjectCommand for speaker-segments.json
+
+    mockEventBridgeSend.mockResolvedValueOnce({});
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      version: '0',
+      id: 'test-speaker-grouping',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-10T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        TranscriptionJobName: 'vnl-speakersession-1234567890',
+        TranscriptionJob: { TranscriptFileUri: 's3://bucket/speakersession/transcript.json' },
+      },
+    };
+
+    await handler(event);
+
+    // Should write speaker-segments.json to S3 (second S3 call)
+    const s3Calls = mockS3Send.mock.calls;
+    expect(s3Calls.length).toBeGreaterThanOrEqual(2);
+
+    // Should update DynamoDB with diarized transcript path
+    expect(mockUpdateDiarizedTranscriptPath).toHaveBeenCalledWith(
+      'test-table',
+      'speakersession',
+      'speakersession/speaker-segments.json'
+    );
+
+    // Transcript status should still be updated to available
+    expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
+      'test-table',
+      'speakersession',
+      'available',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('writes PutObjectCommand with correct bucket and key for speaker segments', async () => {
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'Speaker one speaks.' }],
+        items: [
+          { type: 'pronunciation', start_time: '0.0', end_time: '0.5', alternatives: [{ content: 'Speaker', speaker_label: 'spk_0' }] },
+          { type: 'pronunciation', start_time: '0.6', end_time: '1.0', alternatives: [{ content: 'one', speaker_label: 'spk_0' }] },
+          { type: 'pronunciation', start_time: '1.1', end_time: '1.5', alternatives: [{ content: 'speaks', speaker_label: 'spk_0' }] },
+          { type: 'punctuation', alternatives: [{ content: '.' }] },
+        ],
+      },
+    };
+
+    // Capture PutObjectCommand calls to verify bucket and key
+    mockS3Send
+      .mockResolvedValueOnce({
+        Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+      })
+      .mockResolvedValueOnce({}); // PutObjectCommand
+
+    mockEventBridgeSend.mockResolvedValueOnce({});
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      version: '0',
+      id: 'test-put-object',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-10T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        TranscriptionJobName: 'vnl-putobjectsession-1234567890',
+        TranscriptionJob: { TranscriptFileUri: 's3://bucket/putobjectsession/transcript.json' },
+      },
+    };
+
+    await handler(event);
+
+    // Verify S3 PutObject was attempted (second call)
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
+
+    // Verify DynamoDB pointer written
+    expect(mockUpdateDiarizedTranscriptPath).toHaveBeenCalledWith(
+      'test-table',
+      'putobjectsession',
+      'putobjectsession/speaker-segments.json'
+    );
+  });
+
+  it('does not block transcript=available when S3 speaker-segments write fails', async () => {
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'Resilient transcript.' }],
+        items: [
+          { type: 'pronunciation', start_time: '0.0', end_time: '0.5', alternatives: [{ content: 'Resilient', speaker_label: 'spk_0' }] },
+          { type: 'pronunciation', start_time: '0.6', end_time: '1.0', alternatives: [{ content: 'transcript', speaker_label: 'spk_0' }] },
+          { type: 'punctuation', alternatives: [{ content: '.' }] },
+        ],
+      },
+    };
+
+    // First S3 call (GetObject) succeeds, second (PutObject for speaker-segments) fails
+    mockS3Send
+      .mockResolvedValueOnce({
+        Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+      })
+      .mockRejectedValueOnce(new Error('S3 PutObject permission denied'));
+
+    mockEventBridgeSend.mockResolvedValueOnce({});
+
+    const event: EventBridgeEvent<string, Record<string, any>> = {
+      version: '0',
+      id: 'test-s3-fail-nonblocking',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-10T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        TranscriptionJobName: 'vnl-resilient-1234567890',
+        TranscriptionJob: { TranscriptFileUri: 's3://bucket/resilient/transcript.json' },
+      },
+    };
+
+    // Should not throw
+    await expect(handler(event)).resolves.not.toThrow();
+
+    // Transcript status should still be set to available (not blocked by S3 failure)
+    expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
+      'test-table',
+      'resilient',
+      'available',
+      expect.any(String),
+      'Resilient transcript.'
+    );
+
+    // EventBridge event should still be emitted
+    expect(mockEventBridgeSend).toHaveBeenCalled();
   });
 
   it('handles S3 fetch failure gracefully', async () => {

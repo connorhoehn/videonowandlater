@@ -62,6 +62,10 @@ export async function handler(
       OutputBucketName: process.env.TRANSCRIPTION_BUCKET!,
       OutputKey: `${sessionId}/transcript.json`,
       LanguageCode: 'en-US' as const,
+      Settings: {
+        ShowSpeakerLabels: true,
+        MaxSpeakerLabels: 2,
+      },
     };
 
     logger.info('Starting Transcribe job:', {

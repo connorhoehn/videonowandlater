@@ -193,7 +193,7 @@ Plans:
   4. Sessions recorded before this phase (without `diarizedTranscriptS3Path`) continue to display their plain transcript without any error or missing state
   5. A speaker label size guard prevents DynamoDB item size errors on long recordings — segments exceeding the inline size threshold are stored exclusively in S3
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 27-01-PLAN.md — Backend pipeline: speaker diarization, segment parsing, get-speaker-segments handler, CDK S3 write permission
@@ -281,7 +281,7 @@ Plans:
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
-| 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
+| 27 - Speaker-Attributed Transcripts | 1/2 | In Progress|  |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
 status: planning
-stopped_at: Completed 26-stuck-session-recovery-cron 26-02-PLAN.md
-last_updated: "2026-03-10T17:06:49.907Z"
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-03-10T18:44:41.126Z"
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_plans: 18
+  completed_plans: 17
+  percent: 99
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
-**Progress:** [██████████] 100%
-**Last session:** 2026-03-10T16:57:03.228Z
+**Progress:** [██████████] 99%
+**Last session:** 2026-03-10T18:44:41.125Z
 
 ## Performance Metrics
 
@@ -110,6 +110,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 25-pipeline-observability P01 | 7 | 2 tasks | 7 files |
 | Phase 26-stuck-session-recovery-cron P01 | 114 | 2 tasks | 2 files |
 | Phase 26-stuck-session-recovery-cron P02 | 229 | 2 tasks | 2 files |
+| Phase 27-speaker-attributed-transcripts P01 | 258 | 3 tasks | 9 files |
 
 ### Roadmap Evolution
 
@@ -151,7 +152,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Phase 26 complete, ready to discuss Phase 27
+**Stopped at:** Completed 27-01-PLAN.md
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

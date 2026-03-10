@@ -21,10 +21,10 @@
 
 ### Speaker-Attributed Transcripts
 
-- [ ] **SPKR-01**: Transcription jobs are submitted with `ShowSpeakerLabels: true` and `MaxSpeakerLabels: 2` to enable diarization
-- [ ] **SPKR-02**: Transcript post-processor extracts per-word speaker labels from Transcribe output and groups them into speaker-turn segments
-- [ ] **SPKR-03**: Speaker segments are stored in S3 as a compact JSON file (pointer on session as `diarizedTranscriptS3Path`) — never inline in DynamoDB to respect the 400KB item limit
-- [ ] **SPKR-04**: Speakers are labeled "Speaker 1" / "Speaker 2" (not usernames) since composite audio cannot map acoustic labels to identities
+- [x] **SPKR-01**: Transcription jobs are submitted with `ShowSpeakerLabels: true` and `MaxSpeakerLabels: 2` to enable diarization
+- [x] **SPKR-02**: Transcript post-processor extracts per-word speaker labels from Transcribe output and groups them into speaker-turn segments
+- [x] **SPKR-03**: Speaker segments are stored in S3 as a compact JSON file (pointer on session as `diarizedTranscriptS3Path`) — never inline in DynamoDB to respect the 400KB item limit
+- [x] **SPKR-04**: Speakers are labeled "Speaker 1" / "Speaker 2" (not usernames) since composite audio cannot map acoustic labels to identities
 - [ ] **SPKR-05**: Replay and upload video player pages display attributed transcript as alternating speaker turns with timestamps
 - [ ] **SPKR-06**: Diarization is applied to new recordings automatically; existing sessions without `diarizedTranscriptS3Path` fall back gracefully to plain transcript display
 
@@ -119,10 +119,10 @@
 | PIPE-06 | Phase 26 | Complete |
 | PIPE-07 | Phase 26 | Complete |
 | PIPE-08 | Phase 26 | Complete |
-| SPKR-01 | Phase 27 | Pending |
-| SPKR-02 | Phase 27 | Pending |
-| SPKR-03 | Phase 27 | Pending |
-| SPKR-04 | Phase 27 | Pending |
+| SPKR-01 | Phase 27 | Complete |
+| SPKR-02 | Phase 27 | Complete |
+| SPKR-03 | Phase 27 | Complete |
+| SPKR-04 | Phase 27 | Complete |
 | SPKR-05 | Phase 27 | Pending |
 | SPKR-06 | Phase 27 | Pending |
 | MOD-01 | Phase 28 | Pending |

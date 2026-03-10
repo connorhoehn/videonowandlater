@@ -4,6 +4,10 @@ import type { ChatMessage } from 'amazon-ivs-chat-messaging';
 interface MessageRowProps {
   message: ChatMessage;
   isBroadcaster: boolean;
+  isBroadcasterViewing?: boolean;
+  isOwnMessage?: boolean;
+  onBounce?: (userId: string) => void;
+  onReport?: (msgId: string, reportedUserId: string) => void;
 }
 
 function calculateRelativeTime(sentAt: Date | undefined): string {
@@ -18,7 +22,14 @@ function calculateRelativeTime(sentAt: Date | undefined): string {
   return `${days}d ago`;
 }
 
-export const MessageRow: React.FC<MessageRowProps> = ({ message, isBroadcaster }) => {
+export const MessageRow: React.FC<MessageRowProps> = ({
+  message,
+  isBroadcaster,
+  isBroadcasterViewing,
+  isOwnMessage,
+  onBounce,
+  onReport,
+}) => {
   const [relativeTime, setRelativeTime] = React.useState(() =>
     calculateRelativeTime(message.sendTime)
   );
@@ -32,7 +43,7 @@ export const MessageRow: React.FC<MessageRowProps> = ({ message, isBroadcaster }
   }, [message.sendTime]);
 
   return (
-    <div className="mb-2">
+    <div className="mb-2 group relative">
       <div className="flex items-baseline space-x-2 text-sm">
         <span className="font-semibold text-gray-900">
           {message.sender?.attributes?.displayName || message.sender?.userId}
@@ -45,6 +56,28 @@ export const MessageRow: React.FC<MessageRowProps> = ({ message, isBroadcaster }
         <span className="text-xs text-gray-500">{relativeTime}</span>
       </div>
       <p className="text-sm text-gray-800 mt-0.5">{message.content}</p>
+      {(isBroadcasterViewing || !isOwnMessage) && (
+        <div className="absolute right-0 top-0 hidden group-hover:flex gap-1 items-center">
+          {isBroadcasterViewing && !isOwnMessage && onBounce && (
+            <button
+              onClick={() => onBounce(message.sender?.userId ?? '')}
+              className="text-xs text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
+              title="Remove from chat"
+            >
+              Kick
+            </button>
+          )}
+          {!isOwnMessage && onReport && (
+            <button
+              onClick={() => onReport(message.id, message.sender?.userId ?? '')}
+              className="text-xs text-gray-400 hover:text-gray-600 px-1 py-0.5 rounded hover:bg-gray-100"
+              title="Report message"
+            >
+              Report
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

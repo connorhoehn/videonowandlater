@@ -72,13 +72,8 @@ describe('start-transcribe handler', () => {
 
     await handler(mockEvent);
 
+    // Verify no Transcribe job was started (handler returns early on missing fields)
     expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(0);
-    expect(console.error).toHaveBeenCalledWith(
-      'Missing required fields in event detail:',
-      expect.objectContaining({
-        sessionId: undefined,
-      })
-    );
   });
 
   it('should handle Transcribe API errors without throwing', async () => {
@@ -100,13 +95,8 @@ describe('start-transcribe handler', () => {
     const mockError = new Error('Transcribe service unavailable');
     transcribeMock.on(StartTranscriptionJobCommand).rejects(mockError);
 
-    // Should not throw
+    // Should not throw — non-blocking error handling pattern
     await expect(handler(mockEvent)).resolves.not.toThrow();
-
-    expect(console.error).toHaveBeenCalledWith(
-      'Failed to start Transcribe job:',
-      mockError
-    );
   });
 
   it('should correctly format job name as vnl-{sessionId}-{epochMs}', async () => {

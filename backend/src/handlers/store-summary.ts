@@ -8,7 +8,13 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { updateSessionAiSummary } from '../repositories/session-repository';
+
+const logger = new Logger({
+  serviceName: 'vnl-pipeline',
+  persistentKeys: { pipelineStage: 'store-summary' },
+});
 
 interface TranscriptStoreDetail {
   sessionId: string;
@@ -23,6 +29,10 @@ export const handler = async (
   const bedrockRegion = process.env.BEDROCK_REGION || process.env.AWS_REGION!;
   const modelId = process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0';
 
+  const startMs = Date.now();
+  logger.appendPersistentKeys({ sessionId });
+  logger.info('Pipeline stage entered', { transcriptS3Uri });
+
   const s3Client = new S3Client({ region: process.env.AWS_REGION });
   const bedrockClient = new BedrockRuntimeClient({ region: bedrockRegion });
 
@@ -36,7 +46,7 @@ export const handler = async (
 
     const [, bucketName, key] = s3Match;
 
-    console.log('Fetching transcript from S3:', { sessionId, bucketName, key });
+    logger.info('Fetching transcript from S3:', { sessionId, bucketName, key });
 
     const getObjectCommand = new GetObjectCommand({
       Bucket: bucketName,
@@ -47,19 +57,19 @@ export const handler = async (
     const transcriptText = await s3Response.Body?.transformToString();
 
     if (!transcriptText || transcriptText.trim().length === 0) {
-      console.warn('Empty transcript from S3:', { sessionId, transcriptS3Uri });
+      logger.warn('Empty transcript from S3:', { sessionId, transcriptS3Uri });
       // Non-blocking: set failed status but don't throw
       try {
         await updateSessionAiSummary(tableName, sessionId, {
           aiSummaryStatus: 'failed',
         });
       } catch (updateError: any) {
-        console.error('Failed to update session with failed summary status:', updateError.message);
+        logger.error('Failed to update session with failed summary status:', { errorMessage: updateError.message });
       }
       return;
     }
 
-    console.log('Transcript fetched successfully:', { sessionId, textLength: transcriptText.length });
+    logger.info('Transcript fetched successfully:', { sessionId, textLength: transcriptText.length });
 
     // Prepare summarization prompt
     const systemPrompt = 'Generate a concise one-paragraph summary (2-3 sentences) of the following video session transcript.';
@@ -102,7 +112,7 @@ export const handler = async (
       };
     }
 
-    console.log('Using model:', { modelId, isClaudeModel });
+    logger.info('Using model:', { modelId, isClaudeModel });
 
     const command = new InvokeModelCommand({
       contentType: 'application/json',
@@ -130,13 +140,15 @@ export const handler = async (
         aiSummary: summary,
         aiSummaryStatus: 'available',
       });
-      console.log('AI summary stored:', { sessionId, summaryLength: summary.length });
+      logger.info('AI summary stored:', { sessionId, summaryLength: summary.length });
+      logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
     } catch (storeError: any) {
-      console.error('Failed to store AI summary (non-blocking):', storeError.message);
+      logger.error('Failed to store AI summary (non-blocking):', { errorMessage: storeError.message });
       // Don't throw — summarization succeeded but storage failed; this is logged for manual recovery
     }
   } catch (error: any) {
-    console.error('Bedrock summarization failed:', error.message);
+    logger.error('Bedrock summarization failed:', { errorMessage: error.message });
+    logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error instanceof Error ? error.message : String(error) });
 
     // Mark summary as failed but preserve the transcript (CRITICAL)
     try {
@@ -145,7 +157,7 @@ export const handler = async (
         // aiSummary is NOT touched — existing transcript remains intact
       });
     } catch (updateError: any) {
-      console.error('Failed to mark summary as failed:', updateError.message);
+      logger.error('Failed to mark summary as failed:', { errorMessage: updateError.message });
     }
 
     // Don't throw — EventBridge can retry if configured; transcript is safe

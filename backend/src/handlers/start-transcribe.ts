@@ -1,7 +1,13 @@
 import { EventBridgeEvent } from 'aws-lambda';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
+import { Logger } from '@aws-lambda-powertools/logger';
 
 const transcribe = new TranscribeClient({});
+
+const logger = new Logger({
+  serviceName: 'vnl-pipeline',
+  persistentKeys: { pipelineStage: 'start-transcribe' },
+});
 
 interface UploadRecordingAvailableDetail {
   sessionId?: string;
@@ -17,15 +23,20 @@ interface UploadRecordingAvailableDetail {
 export async function handler(
   event: EventBridgeEvent<'Upload Recording Available', UploadRecordingAvailableDetail>
 ): Promise<void> {
-  console.log('Received Upload Recording Available event:', JSON.stringify(event.detail));
+  const startMs = Date.now();
+
+  logger.info('Received Upload Recording Available event:', { detail: event.detail });
 
   try {
     // Extract required fields from event detail
     const { sessionId, recordingHlsUrl } = event.detail;
 
+    logger.appendPersistentKeys({ sessionId: sessionId ?? 'unknown' });
+    logger.info('Pipeline stage entered', { recordingHlsUrl });
+
     // Validate required fields
     if (!sessionId || !recordingHlsUrl) {
-      console.error('Missing required fields in event detail:', {
+      logger.error('Missing required fields in event detail:', {
         sessionId,
         recordingHlsUrl,
       });
@@ -53,7 +64,7 @@ export async function handler(
       LanguageCode: 'en-US' as const,
     };
 
-    console.log('Starting Transcribe job:', {
+    logger.info('Starting Transcribe job:', {
       jobName,
       audioFileUri,
       outputLocation: `s3://${process.env.TRANSCRIPTION_BUCKET}/${sessionId}/transcript.json`,
@@ -63,13 +74,14 @@ export async function handler(
     const command = new StartTranscriptionJobCommand(transcribeParams);
     const response = await transcribe.send(command);
 
-    console.log('Transcribe job started successfully:', {
+    logger.info('Transcribe job started successfully:', {
       jobName: response.TranscriptionJob?.TranscriptionJobName,
       status: response.TranscriptionJob?.TranscriptionJobStatus,
     });
+    logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
 
   } catch (error) {
     // Log error but don't throw - non-blocking pattern
-    console.error('Failed to start Transcribe job:', error);
+    logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error instanceof Error ? error.message : String(error) });
   }
 }

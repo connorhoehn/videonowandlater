@@ -4,7 +4,7 @@ milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
 status: planning
 stopped_at: Completed 28-03-PLAN.md — bounced user error display complete
-last_updated: "2026-03-10T19:45:41.023Z"
+last_updated: "2026-03-10T19:48:29.921Z"
 progress:
   total_phases: 9
   completed_phases: 7

@@ -7,6 +7,7 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { GetCommand, UpdateCommand as UpdateCommandDirect } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import {
   updateSessionStatus,
@@ -55,6 +56,120 @@ export const handler = async (
   const awsAccountId = process.env.AWS_ACCOUNT_ID!;
 
   const startMs = Date.now();
+
+  // Recovery event path: dispatched by scan-stuck-sessions.ts for stalled pipeline sessions.
+  // Recovery events use source 'custom.vnl' and carry session context in event.detail directly.
+  if (event.detail?.recoveryAttempt === true) {
+    const recoverySessionId = event.detail.sessionId as string | undefined;
+    if (!recoverySessionId) {
+      logger.error('Recovery event missing sessionId in detail');
+      return;
+    }
+    logger.appendPersistentKeys({ sessionId: recoverySessionId });
+    logger.info('Pipeline stage entered (recovery)', {
+      recoveryAttemptCount: event.detail.recoveryAttemptCount,
+    });
+
+    // Re-submit MediaConvert using stored recordingHlsUrl from session.
+    // The session already has recordingHlsUrl from the first recording-ended pass.
+    // We fetch the session to get the full recordingHlsUrl and validate it.
+    try {
+      const docClient = getDocumentClient();
+      const getResult = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `SESSION#${recoverySessionId}`, SK: 'METADATA' },
+      }));
+
+      const recoverySession = getResult.Item;
+      if (!recoverySession) {
+        logger.warn('Recovery: session not found in DynamoDB', { sessionId: recoverySessionId });
+        return;
+      }
+
+      const hlsUrl = recoverySession.recordingHlsUrl as string | undefined;
+      if (!hlsUrl) {
+        logger.warn('Recovery: session has no recordingHlsUrl, cannot resubmit MediaConvert', {
+          sessionId: recoverySessionId,
+        });
+        return;
+      }
+
+      // Re-submit MediaConvert job using hlsUrl
+      // Extract s3 bucket and key from CloudFront URL is unreliable;
+      // derive from recordingS3Path if available, otherwise skip
+      const s3Path = recoverySession.recordingS3Path as string | undefined;
+      if (!s3Path) {
+        logger.warn('Recovery: session has no recordingS3Path, cannot construct MediaConvert input', {
+          sessionId: recoverySessionId,
+        });
+        return;
+      }
+
+      const mediaConvertClient = new MediaConvertClient({ region: awsRegion });
+      const hlsInputPath = `s3://${s3Path}/media/hls/master.m3u8`;
+      const mp4OutputPath = `s3://${transcriptionBucket}/${recoverySessionId}/`;
+
+      const result = await mediaConvertClient.send(new CreateJobCommand({
+        Role: mediaConvertRoleArn,
+        Queue: `arn:aws:mediaconvert:${awsRegion}:${awsAccountId}:queues/Default`,
+        Settings: {
+          Inputs: [{
+            FileInput: hlsInputPath,
+            AudioSelectors: { default: { DefaultSelection: 'DEFAULT' } },
+          }],
+          OutputGroups: [{
+            Name: 'File Group',
+            OutputGroupSettings: {
+              Type: 'FILE_GROUP_SETTINGS',
+              FileGroupSettings: { Destination: mp4OutputPath },
+            },
+            Outputs: [{
+              NameModifier: 'recording',
+              ContainerSettings: { Container: 'MP4' },
+              VideoDescription: {
+                CodecSettings: {
+                  Codec: 'H_264',
+                  H264Settings: { Bitrate: 5000000, MaxBitrate: 5000000, RateControlMode: 'VBR', CodecProfile: 'MAIN' },
+                },
+              },
+              AudioDescriptions: [{
+                AudioSourceName: 'default',
+                CodecSettings: {
+                  Codec: 'AAC',
+                  AacSettings: { Bitrate: 128000, CodingMode: 'CODING_MODE_2_0', SampleRate: 48000 },
+                },
+              }],
+            }],
+          }],
+        },
+        Tags: { sessionId: recoverySessionId, phase: '19-transcription' },
+        UserMetadata: { sessionId: recoverySessionId, phase: '19-transcription' },
+      }));
+
+      const jobId = result.Job?.Id;
+      if (jobId) {
+        await docClient.send(new UpdateCommandDirect({
+          TableName: tableName,
+          Key: { PK: `SESSION#${recoverySessionId}`, SK: 'METADATA' },
+          UpdateExpression: 'SET mediaconvertJobId = :jobId, transcriptStatus = :status, #version = #version + :inc',
+          ExpressionAttributeNames: { '#version': 'version' },
+          ExpressionAttributeValues: { ':jobId': jobId, ':status': 'processing', ':inc': 1 },
+        }));
+        logger.info('Recovery: MediaConvert job resubmitted', { jobId, sessionId: recoverySessionId });
+      }
+    } catch (recoveryError: any) {
+      logger.error('Recovery: failed to resubmit MediaConvert job', {
+        sessionId: recoverySessionId,
+        error: recoveryError.message,
+      });
+    }
+
+    logger.info('Pipeline stage completed (recovery)', {
+      status: 'success',
+      durationMs: Date.now() - startMs,
+    });
+    return;
+  }
 
   const resourceArn = event.resources?.[0];
   if (!resourceArn) {

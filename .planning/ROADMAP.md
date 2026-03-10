@@ -196,8 +196,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 27-01-PLAN.md — To be planned
-- [ ] 27-02-PLAN.md — To be planned
+- [ ] 27-01-PLAN.md — Backend pipeline: speaker diarization, segment parsing, get-speaker-segments handler, CDK S3 write permission
+- [ ] 27-02-PLAN.md — Frontend: TranscriptDisplay bubble mode, ReplayViewer prop pass, CDK API route
 
 ---
 

@@ -4,7 +4,7 @@ milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
 status: planning
 stopped_at: Completed 27-02-PLAN.md
-last_updated: "2026-03-10T18:47:47.540Z"
+last_updated: "2026-03-10T18:49:36.146Z"
 progress:
   total_phases: 9
   completed_phases: 6
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
 **Progress:** [██████████] 100%
-**Last session:** 2026-03-10T18:47:47.539Z
+**Last session:** 2026-03-10T18:49:36.145Z
 
 ## Performance Metrics
 
@@ -112,6 +112,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 26-stuck-session-recovery-cron P02 | 229 | 2 tasks | 2 files |
 | Phase 27-speaker-attributed-transcripts P01 | 258 | 3 tasks | 9 files |
 | Phase 27 P02 | 12 | 2 tasks | 3 files |
+| Phase 27-speaker-attributed-transcripts P02 | 15 | 3 tasks | 3 files |
 
 ### Roadmap Evolution
 

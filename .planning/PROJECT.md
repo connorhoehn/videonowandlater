@@ -81,7 +81,7 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 **v1.5 Milestone (Pipeline Reliability, Moderation & Upload Experience):**
 
-- [ ] EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary)
+- ✓ EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary) — Phase 25
 - [ ] Cron job identifies sessions stuck in pipeline for >30 min and re-fires appropriate recovery event
 - [ ] Transcripts include speaker diarization with labels mapped to session usernames
 - [ ] Broadcaster can bounce (kick) a user from their active stream
@@ -147,6 +147,8 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Conditional writes for atomic operations | Prevents race conditions in concurrent resource claims | ✓ Phase 2 |
 | EventBridge Scheduler for pool replenishment | Serverless, reliable, 5-minute intervals maintain pool readiness | ✓ Phase 2 |
 | Retroactive Phase 01 verification | 9 requirements verified automated, 3 auth flows require manual testing | ✓ Phase 4.1 |
+| Powertools Logger at module scope with appendPersistentKeys | Module-scope init pays cold-start cost once; appendPersistentKeys binds sessionId to all invocation logs | ✓ Phase 25 |
+| CDK logGroup with ONE_MONTH retention on pipeline Lambdas | 30-day window balances cost vs debuggability; DESTROY removal policy keeps cdk destroy clean | ✓ Phase 25 |
 
 ## Current State
 
@@ -159,4 +161,4 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 **Next:** Planning v1.3 Secure Sharing milestone
 
 ---
-*Last updated: 2026-03-10 after shipping v1.4 (24 phases total); starting v1.5 Pipeline Reliability, Moderation & Upload Experience*
+*Last updated: 2026-03-10 after Phase 25 — pipeline observability complete (structured logging + log retention across all 5 pipeline handlers)*

@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-**Active Phase:** Phase 25 — Pipeline Observability (plans 01-02 complete)
-**Active Plan:** 25-02 complete — ready for Phase 26
+**Active Phase:** Phase 26 — Stuck Session Recovery Cron
+**Active Plan:** Not started
 **Status:** Ready to plan
-**Progress:** [██████████] 100%
-**Last session:** 2026-03-10T16:29:05.306Z
+**Progress:** [████████████████████] 78/78 plans (100%)
+**Last session:** 2026-03-10
 
 ## Performance Metrics
 
@@ -115,7 +115,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ### Pending Todos
 
-- [ ] Phase 25: Pipeline Observability — add Powertools Logger to all 5 pipeline handlers
+- [x] Phase 25: Pipeline Observability — add Powertools Logger to all 5 pipeline handlers (DONE)
 - [ ] Phase 26: Stuck Session Recovery — new scan-stuck-sessions.ts Lambda + EventBridge Scheduler
 - [ ] Phase 27: Speaker Diarization — modify start-transcribe.ts + transcribe-completed.ts + frontend display
 - [ ] Phase 28: Chat Moderation — new bounce-user.ts + report-message.ts + frontend buttons
@@ -137,17 +137,20 @@ None.
 ## Session Continuity
 
 **If resuming work:**
-1. Check current phase in .planning/ROADMAP.md (Phase 25 is next)
-2. Run `/gsd:plan-phase 25` to generate the Phase 25 plan
-3. Phase 25 requirements: PIPE-01, PIPE-02, PIPE-03, PIPE-04
-4. Key file to modify: backend/src/handlers/ (recording-ended, transcode-completed, transcribe-completed, store-summary, start-transcribe) + infra/lib/stacks/session-stack.ts
+1. Check current phase in .planning/ROADMAP.md (Phase 26 is next)
+2. Run `/gsd:discuss-phase 26` to gather context for Stuck Session Recovery
+3. Phase 26 requirements: PIPE-05, PIPE-06
+4. Key files to create: backend/src/handlers/scan-stuck-sessions.ts + CDK Scheduler construct in session-stack.ts
 
 **If blocked:**
-- Consult .planning/research/ARCHITECTURE.md for integration point details
-- Consult .planning/research/STACK.md for Powertools Logger API usage pattern
-- Consult .planning/research/PITFALLS.md for known failure modes per phase
+- Consult .planning/phases/25-pipeline-observability/*-SUMMARY.md for established patterns
+- Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
-**Next action:** Roadmap complete. Run `/gsd:plan-phase 25` to begin Pipeline Observability.
+**Last session:** 2026-03-10
+**Stopped at:** Phase 25 complete, ready to discuss Phase 26
+**Resume file:** None
+
+**Next action:** Run `/gsd:discuss-phase 26` to begin Stuck Session Recovery Cron planning.
 
 ---
 

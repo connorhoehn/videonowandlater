@@ -6,6 +6,7 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import {
   updateSessionStatus,
@@ -18,6 +19,11 @@ import {
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import type { Session } from '../domain/session';
+
+const logger = new Logger({
+  serviceName: 'vnl-pipeline',
+  persistentKeys: { pipelineStage: 'recording-ended' },
+});
 
 interface BroadcastRecordingEndDetail {
   channel_name: string;          // Human-readable channel name (NOT the ARN)
@@ -48,13 +54,15 @@ export const handler = async (
   const awsRegion = process.env.AWS_REGION!;
   const awsAccountId = process.env.AWS_ACCOUNT_ID!;
 
+  const startMs = Date.now();
+
   const resourceArn = event.resources?.[0];
   if (!resourceArn) {
-    console.error('No resource ARN in event.resources');
+    logger.error('No resource ARN in event.resources');
     throw new Error('Invalid event: missing resource ARN');
   }
 
-  console.log('Recording End event received for resource:', resourceArn);
+  logger.info('Recording End event received for resource:', { resourceArn });
 
   // Detect ARN type: Channel or Stage
   // ARN format: arn:aws:ivs:region:account:channel/id or arn:aws:ivs:region:account:stage/id
@@ -65,7 +73,7 @@ export const handler = async (
   let session: Session | null = null;
 
   if (resourceType === 'channel') {
-    console.log('Detected Channel ARN, finding session by channel');
+    logger.info('Detected Channel ARN, finding session by channel');
     const docClient = getDocumentClient();
     const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
 
@@ -91,26 +99,29 @@ export const handler = async (
       session = sessionData as Session;
     }
   } else if (resourceType === 'stage') {
-    console.log('Detected Stage ARN, finding session by stage');
+    logger.info('Detected Stage ARN, finding session by stage');
     session = await findSessionByStageArn(tableName, resourceArn);
   } else {
-    console.error('Unknown resource type in ARN:', resourceArn);
+    logger.error('Unknown resource type in ARN:', { resourceArn });
     return;
   }
 
   if (!session) {
-    console.warn('No session found for resource:', resourceArn);
+    logger.warn('No session found for resource:', { resourceArn });
     return;
   }
 
   const sessionId = session.sessionId;
 
-  console.log('Found session:', sessionId, 'transitioning to ENDED');
+  logger.appendPersistentKeys({ sessionId });
+  logger.info('Pipeline stage entered', { resourceArn, resourceType });
+
+  logger.info('Found session, transitioning to ENDED', { sessionId });
 
   try {
     // Update session: ENDING -> ENDED
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
-    console.log('Session transitioned to ENDED:', sessionId);
+    logger.info('Session transitioned to ENDED:', { sessionId });
 
     // Update recording metadata
     let finalStatus: 'available' | 'failed' = 'failed';
@@ -158,13 +169,13 @@ export const handler = async (
         recordingStatus: finalStatus,
       });
 
-      console.log('Recording metadata updated:', {
+      logger.info('Recording metadata updated:', {
         sessionId,
         recordingDuration: event.detail.recording_duration_ms,
         recordingStatus: finalStatus,
       });
     } catch (metadataError: any) {
-      console.error('Failed to update recording metadata (non-blocking):', metadataError.message);
+      logger.error('Failed to update recording metadata (non-blocking):', { errorMessage: metadataError.message });
       // Don't throw - metadata update is best-effort, don't block session cleanup
     }
 
@@ -172,7 +183,7 @@ export const handler = async (
     try {
       await computeAndStoreReactionSummary(tableName, sessionId);
     } catch (summaryError: any) {
-      console.error('Failed to compute reaction summary (non-blocking):', summaryError.message);
+      logger.error('Failed to compute reaction summary (non-blocking):', { errorMessage: summaryError.message });
       // Don't throw - summary computation is best-effort, don't block session cleanup
     }
 
@@ -182,10 +193,10 @@ export const handler = async (
         const participants = await getHangoutParticipants(tableName, sessionId);
         if (participants.length > 0) {
           await updateParticipantCount(tableName, sessionId, participants.length);
-          console.log('Participant count updated:', { sessionId, count: participants.length });
+          logger.info('Participant count updated:', { sessionId, count: participants.length });
         }
       } catch (participantCountError: any) {
-        console.error('Failed to update participant count (non-blocking):', participantCountError.message);
+        logger.error('Failed to update participant count (non-blocking):', { errorMessage: participantCountError.message });
       }
     }
 
@@ -302,13 +313,13 @@ export const handler = async (
           },
         }));
 
-        console.log('MediaConvert job submitted:', {
+        logger.info('MediaConvert job submitted:', {
           jobId,
           jobName,
           sessionId,
         });
       } catch (mediaConvertError: any) {
-        console.error('Failed to submit MediaConvert job (non-blocking):', {
+        logger.error('Failed to submit MediaConvert job (non-blocking):', {
           sessionId,
           error: mediaConvertError.message,
           code: mediaConvertError.Code || mediaConvertError.$metadata?.httpStatusCode,
@@ -321,22 +332,24 @@ export const handler = async (
     // Release pool resources (Channel or Stage)
     if (session.claimedResources?.channel) {
       await releasePoolResource(tableName, session.claimedResources.channel);
-      console.log('Released channel resource:', session.claimedResources.channel);
+      logger.info('Released channel resource:', { channel: session.claimedResources.channel });
     }
 
     if (session.claimedResources?.stage) {
       await releasePoolResource(tableName, session.claimedResources.stage);
-      console.log('Released stage resource:', session.claimedResources.stage);
+      logger.info('Released stage resource:', { stage: session.claimedResources.stage });
     }
 
     if (session.claimedResources?.chatRoom) {
       await releasePoolResource(tableName, session.claimedResources.chatRoom);
-      console.log('Released chat room resource:', session.claimedResources.chatRoom);
+      logger.info('Released chat room resource:', { chatRoom: session.claimedResources.chatRoom });
     }
 
-    console.log('Session cleanup complete:', sessionId);
+    logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
+    logger.info('Session cleanup complete:', { sessionId });
   } catch (error: any) {
-    console.error('Failed to clean up session:', error.message);
+    logger.error('Failed to clean up session:', { errorMessage: error.message });
+    logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
     // Don't throw - EventBridge will retry on error
   }
 };

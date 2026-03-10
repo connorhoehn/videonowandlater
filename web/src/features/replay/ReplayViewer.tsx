@@ -36,6 +36,7 @@ interface Session {
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   mediaConvertJobName?: string;
+  diarizedTranscriptS3Path?: string;
 }
 
 /**
@@ -411,7 +412,7 @@ export function ReplayViewer() {
               {activeTab === 'chat' ? (
                 <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
               ) : (
-                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} />
+                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} />
               )}
             </div>
           </div>

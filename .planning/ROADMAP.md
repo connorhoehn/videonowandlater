@@ -6,7 +6,8 @@
 - ✅ **v1.1 Replay, Reactions & Hangouts** - Phases 5-15 (shipped 2026-03-05)
 - ✅ **v1.2 Activity Feed & Intelligence** - Phases 16-22 (shipped 2026-03-06)
 - ✅ **v1.3 Secure Sharing** - Phases 21-22 (shipped 2026-03-06 as part of v1.2)
-- 🚧 **v1.4 Creator Studio & Stream Quality** - Phases 22.1, 23-24 (in progress)
+- ✅ **v1.4 Creator Studio & Stream Quality** - Phases 22.1, 23-24 (shipped 2026-03-10)
+- 🚧 **v1.5 Pipeline Reliability, Moderation & Upload Experience** - Phases 25-30 (in progress)
 
 ## Phases
 
@@ -42,15 +43,30 @@ See milestones/v1.2-ROADMAP.md for full details.
 
 </details>
 
-### v1.4 Creator Studio & Stream Quality (In Progress)
+<details>
+<summary>✅ v1.4 Creator Studio & Stream Quality (Phases 22.1, 23-24) - SHIPPED 2026-03-10</summary>
 
 **Milestone Goal:** Give broadcasters professional tools to monitor stream health and showcase other creators in real-time.
 
+**What Was Built:**
+- Phase 22.1: Pipeline Fixes & UI Enhancements — Urgent fixes and enhancements from v1.2 completion
+- Phase 23: Stream Quality Monitoring Dashboard — Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters
+- Phase 24: Creator Spotlight Selection & Display — Feature another live creator during broadcast with elegant overlay UI
+
+</details>
+
+### v1.5 Pipeline Reliability, Moderation & Upload Experience (In Progress)
+
+**Milestone Goal:** Harden the recording/transcription/AI pipeline with structured observability and automatic recovery, give broadcasters and users moderation tools, and build a rich dedicated player page for uploaded videos.
+
 **Phases:**
 
-- ✅ **Phase 22.1: Pipeline Fixes & UI Enhancements** - Urgent fixes and enhancements from v1.2 completion [3/3 plans complete]
-- 🚧 **Phase 23: Stream Quality Monitoring Dashboard** - Real-time metrics display (bitrate, FPS, resolution, network status, health score) for broadcasters [5 plans, verification gaps found]
-- [ ] **Phase 24: Creator Spotlight Selection & Display** - Feature another live creator during broadcast with elegant overlay UI
+- [ ] **Phase 25: Pipeline Observability** - Structured logging across all pipeline Lambdas with consistent correlation keys and 30-day log retention
+- [ ] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events
+- [ ] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages
+- [ ] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users
+- [ ] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring
+- [ ] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page
 
 ## Phase Details
 
@@ -121,16 +137,127 @@ Plans:
 
 ---
 
+### Phase 25: Pipeline Observability
+**Goal:** Every stage of the recording-to-transcript pipeline emits structured, correlated logs that a developer can query by sessionId to reconstruct the full pipeline timeline.
+
+**Depends on:** Phase 24 (v1.4 complete)
+
+**Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04
+
+**Success Criteria** (what must be TRUE):
+  1. A developer can run a single CloudWatch Logs Insights query filtered by `sessionId` and see log entries from every pipeline Lambda (recording-ended, transcode-completed, transcribe-completed, store-summary) in chronological order
+  2. Every log entry includes `pipelineStage`, `sessionId`, `status`, and `durationMs` fields so failures are identifiable without reading handler source code
+  3. All pipeline Lambda log groups have 30-day retention configured in CDK — no log group accumulates indefinitely after deployment
+  4. Pipeline log entries are filterable by stage name without post-processing (Powertools `persistentKeys.pipelineStage` per handler)
+
+**Plans:** TBD
+
+---
+
+### Phase 26: Stuck Session Recovery Cron
+**Goal:** Sessions that enter the pipeline but never reach a completed transcript status are automatically detected and re-triggered without developer intervention.
+
+**Depends on:** Phase 25 (pipeline logs make cron recovery verifiable in CloudWatch)
+
+**Requirements:** PIPE-05, PIPE-06, PIPE-07, PIPE-08
+
+**Success Criteria** (what must be TRUE):
+  1. A session with `transcriptStatus` null or `pending` and `endedAt` more than 45 minutes ago is identified by the cron and a recovery EventBridge event is emitted to re-enter the pipeline at the appropriate stage
+  2. A session with `transcriptStatus = 'processing'` (MediaConvert or Transcribe job actively running) is skipped by the cron — no double-submission occurs
+  3. A session that has already been recovered 3 times has `recoveryAttemptCount = 3` on its DynamoDB record and is excluded from further cron recovery attempts
+  4. The recovery cron fires every 15 minutes via EventBridge Scheduler and completes within the Lambda 5-minute timeout for any realistic number of stuck sessions
+
+**Plans:** TBD
+
+---
+
+### Phase 27: Speaker-Attributed Transcripts
+**Goal:** Recordings produce a speaker-turn transcript where each segment is attributed to a labeled speaker, displayed in Replay and Upload Video pages as alternating turns with timestamps.
+
+**Depends on:** Phase 25 (pipeline logging must be in place before modifying transcription handlers, so debug output is captured)
+
+**Requirements:** SPKR-01, SPKR-02, SPKR-03, SPKR-04, SPKR-05, SPKR-06
+
+**Success Criteria** (what must be TRUE):
+  1. New transcription jobs are submitted with `ShowSpeakerLabels: true` — Transcribe output JSON contains a `speaker_labels` section with per-segment attribution
+  2. The `transcribe-completed.ts` handler parses speaker segments and stores them in S3 with the path written to `diarizedTranscriptS3Path` on the session — no segment arrays are stored inline in DynamoDB
+  3. Replay page and Upload Video page display the transcript as alternating speaker turns with "Speaker 1" / "Speaker 2" labels and segment start timestamps
+  4. Sessions recorded before this phase (without `diarizedTranscriptS3Path`) continue to display their plain transcript without any error or missing state
+  5. A speaker label size guard prevents DynamoDB item size errors on long recordings — segments exceeding the inline size threshold are stored exclusively in S3
+
+**Plans:** TBD
+
+---
+
+### Phase 28: Chat Moderation
+**Goal:** Broadcasters can remove disruptive users from their active chat session, and any user can privately report a message — all actions are recorded in a durable moderation log.
+
+**Depends on:** Phase 24 (v1.4 complete; no dependency on Phases 25-27)
+
+**Requirements:** MOD-01, MOD-02, MOD-03, MOD-04, MOD-05, MOD-06, MOD-07, MOD-08
+
+**Success Criteria** (what must be TRUE):
+  1. Broadcaster sees a bounce button on each non-own message in the participant chat list; clicking it calls the backend which disconnects the target user's WebSocket and writes a moderation log entry
+  2. A bounced user who attempts to reconnect to the chat session is denied a new chat token with a 403 response — the bounce persists for the duration of the session
+  3. Any user can click a report action on any message not their own; the action fires a backend request, shows a private toast to the reporter, and the reported message stays visible to all other participants with no public label
+  4. Each bounce and report event is durably stored in DynamoDB with `sessionId`, `actorId`, `targetUserId`, `actionType`, and timestamp — queryable per session
+  5. Moderation quick-actions (report button) appear in both broadcast chat and hangout chat rooms
+
+**Plans:** TBD
+
+---
+
+### Phase 29: Upload Video Player Core
+**Goal:** Uploaded videos have a dedicated page at /video/:sessionId with adaptive bitrate playback, a user-controlled resolution selector, and correct navigation wiring from the activity feed.
+
+**Depends on:** Phase 27 (diarized transcript data must be available for the transcript panel in Phase 30; core player and navigation can ship first)
+
+**Requirements:** VIDP-01, VIDP-02, VIDP-03, VIDP-04, VIDP-10
+
+**Success Criteria** (what must be TRUE):
+  1. Navigating to `/video/:sessionId` renders a dedicated player page separate from `/replay` with its own layout and back-navigation — the route is registered in App.tsx and deep-linkable
+  2. The video player loads the HLS manifest and begins adaptive bitrate playback automatically; a quality selector UI shows available resolution levels (e.g. "1080p", "720p", "Auto") populated from `hls.levels` after `MANIFEST_PARSED`
+  3. Selecting a resolution from the quality picker switches the player to that level; Safari users see only "Auto" (native HLS path) with no quality selector exposed
+  4. `UploadActivityCard` links in the activity feed navigate to `/video/:sessionId` — the previous upload path is no longer the primary destination
+
+**Plans:** TBD
+
+---
+
+### Phase 30: Upload Video Player Social
+**Goal:** The upload video page is a full social viewing experience: users can leave timestamped comments, react with emoji, and read the AI summary and speaker-attributed transcript in a collapsible panel.
+
+**Depends on:** Phase 29 (player page must exist), Phase 27 (diarized transcript data for the info panel)
+
+**Requirements:** VIDP-05, VIDP-06, VIDP-07, VIDP-08, VIDP-09
+
+**Success Criteria** (what must be TRUE):
+  1. User can post a comment anchored to the current video position; the comment appears in the comment list immediately and persists across page reloads — fetched via polling, not WebSocket
+  2. Comments within ±1500ms of the current playback position are visually highlighted as the video plays, including after seek operations
+  3. Comments are displayable sorted newest-first or by video position; the default sort shows the most recent comments at the top
+  4. Emoji reactions can be submitted on the video page using the same emoji set as broadcast/replay; reaction summary counts are displayed and reflect submitted reactions
+  5. A collapsible info panel below the player shows the AI summary and speaker-attributed transcript (or plain transcript fallback) for sessions without diarization data
+
+**Plans:** TBD
+
+---
+
 ## Progress
 
-**Latest Milestone:** v1.4 Creator Studio & Stream Quality
-- **Status:** 🚧 Phase 23 gap closure pending, Phase 24 planned
-- **Phases:** 3 (22.1 ✅, 23 🚧, 24)
-- **Plans:** 3/3 complete (Phase 22.1), 5/6 complete (Phase 23), 0/3 (Phase 24)
-- **Tests:** 343/343 backend tests passing (from v1.3)
+**Latest Milestone:** v1.5 Pipeline Reliability, Moderation & Upload Experience
+- **Status:** Planning — roadmap created, phases 25-30 defined
+- **Phases:** 6 (25, 26, 27, 28, 29, 30)
+- **Plans:** 0 complete across all phases
+- **Tests:** 360/360 backend tests passing (from v1.4)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 22.1 - Pipeline Fixes & UI Enhancements | 3/3 | Complete    | 2026-03-06 |
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
-| 24 - Creator Spotlight Selection & Display | 2/3 | In Progress|  |
+| 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
+| 25 - Pipeline Observability | 0/? | Not started | - |
+| 26 - Stuck Session Recovery Cron | 0/? | Not started | - |
+| 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
+| 28 - Chat Moderation | 0/? | Not started | - |
+| 29 - Upload Video Player Core | 0/? | Not started | - |
+| 30 - Upload Video Player Social | 0/? | Not started | - |

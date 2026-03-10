@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
-status: executing
+status: planning
 stopped_at: Completed 26-stuck-session-recovery-cron 26-02-PLAN.md
-last_updated: "2026-03-10T16:57:03.230Z"
+last_updated: "2026-03-10T17:06:49.907Z"
 progress:
   total_phases: 9
   completed_phases: 5
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Active Phase:** Phase 26 — Stuck Session Recovery Cron (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
-**Status:** Complete — next: Phase 27 Speaker Diarization
+**Status:** Ready to plan
 **Progress:** [██████████] 100%
 **Last session:** 2026-03-10T16:57:03.228Z
 

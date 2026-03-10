@@ -280,7 +280,7 @@ Plans:
 | 23 - Stream Quality Monitoring Dashboard | 6/6 | Complete    | 2026-03-06 |
 | 24 - Creator Spotlight Selection & Display | 2/3 | Complete   | 2026-03-10 |
 | 25 - Pipeline Observability | 2/2 | Complete    | 2026-03-10 |
-| 26 - Stuck Session Recovery Cron | 2/2 | Complete   | 2026-03-10 |
+| 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 0/? | Not started | - |
 | 28 - Chat Moderation | 0/? | Not started | - |
 | 29 - Upload Video Player Core | 0/? | Not started | - |

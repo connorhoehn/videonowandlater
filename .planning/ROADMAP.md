@@ -65,7 +65,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 - [x] **Phase 26: Stuck Session Recovery Cron** - Cron that identifies sessions stuck in the pipeline and re-fires recovery events (completed 2026-03-10)
 - [x] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages (completed 2026-03-10)
 - [x] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users (completed 2026-03-10)
-- [ ] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring
+- [x] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring (completed 2026-03-11)
 - [ ] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page
 
 ## Phase Details
@@ -236,7 +236,7 @@ Plans:
   3. Selecting a resolution from the quality picker switches the player to that level; Safari users see only "Auto" (native HLS path) with no quality selector exposed
   4. `UploadActivityCard` links in the activity feed navigate to `/video/:sessionId` — the previous upload path is no longer the primary destination
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 29-01-PLAN.md — useHlsPlayer hook + QualitySelector component (hls.js install, ABR quality switching, Safari fallback)
@@ -283,5 +283,5 @@ Plans:
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 2/2 | Complete    | 2026-03-10 |
 | 28 - Chat Moderation | 3/3 | Complete    | 2026-03-10 |
-| 29 - Upload Video Player Core | 1/2 | In Progress|  |
+| 29 - Upload Video Player Core | 2/2 | Complete   | 2026-03-11 |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

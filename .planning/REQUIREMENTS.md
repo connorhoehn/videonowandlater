@@ -41,7 +41,7 @@
 
 ### Upload Video Player
 
-- [ ] **VIDP-01**: Uploaded videos open at `/video/:sessionId` — a dedicated page separate from the `/replay` path with its own navigation and layout
+- [x] **VIDP-01**: Uploaded videos open at `/video/:sessionId` — a dedicated page separate from the `/replay` path with its own navigation and layout
 - [x] **VIDP-02**: Video player uses HLS.js with adaptive bitrate enabled by default; user can manually override to a specific resolution from a quality selector UI
 - [x] **VIDP-03**: Quality selector reads available levels from `hls.levels` after `MANIFEST_PARSED` and displays them as human-readable labels (e.g., "1080p", "720p", "Auto")
 - [x] **VIDP-04**: Quality selector uses `hls.nextLevel` on Safari to prevent buffer stall errors; falls back gracefully if only one quality level is present
@@ -50,7 +50,7 @@
 - [ ] **VIDP-07**: Comments are fetched on page load (polling, not WebSocket) and displayed sorted newest-first with an option to sort by video position
 - [ ] **VIDP-08**: Comments within ±1500ms of the current playback position are visually highlighted during playback
 - [ ] **VIDP-09**: Upload video page supports emoji reactions (same emoji set as broadcast/replay) stored and displayed as reaction summary counts
-- [ ] **VIDP-10**: Activity feed `UploadActivityCard` links navigate to `/video/:sessionId` instead of the previous upload path
+- [x] **VIDP-10**: Activity feed `UploadActivityCard` links navigate to `/video/:sessionId` instead of the previous upload path
 
 ## v1.4 Requirements: Creator Studio & Stream Quality (COMPLETE)
 
@@ -133,7 +133,7 @@
 | MOD-06 | Phase 28 | Complete |
 | MOD-07 | Phase 28 | Complete |
 | MOD-08 | Phase 28 | Complete |
-| VIDP-01 | Phase 29 | Pending |
+| VIDP-01 | Phase 29 | Complete |
 | VIDP-02 | Phase 29 | Complete |
 | VIDP-03 | Phase 29 | Complete |
 | VIDP-04 | Phase 29 | Complete |
@@ -142,7 +142,7 @@
 | VIDP-07 | Phase 30 | Pending |
 | VIDP-08 | Phase 30 | Pending |
 | VIDP-09 | Phase 30 | Pending |
-| VIDP-10 | Phase 29 | Pending |
+| VIDP-10 | Phase 29 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 28 total

@@ -13,6 +13,8 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as path from 'path';
 import { Construct } from 'constructs';
@@ -939,6 +941,30 @@ export class SessionStack extends Stack {
     ivsEventAuditFn.addPermission('AllowEBIvsAuditInvoke', {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
       sourceArn: ivsEventAuditRule.ruleArn,
+    });
+
+    // ============================================================
+    // Pipeline Alarms & Dashboard (Phase 33)
+    // OBS-01: DLQ depth alarms (1-min period, any message = ALARM)
+    // OBS-02: Lambda error rate alarms (5-min period, any error = ALARM)
+    // OBS-03: SNS topic with optional alertEmail context subscription
+    // OBS-04: VNL-Pipeline CloudWatch dashboard
+    // ============================================================
+    const pipelineAlarmTopic = new sns.Topic(this, 'PipelineAlarmTopic', {
+      displayName: 'VNL Pipeline Alarms',
+      topicName: 'vnl-pipeline-alarms',
+    });
+
+    const alertEmail = this.node.tryGetContext('alertEmail') as string | undefined;
+    if (alertEmail) {
+      pipelineAlarmTopic.addSubscription(
+        new sns_subscriptions.EmailSubscription(alertEmail)
+      );
+    }
+
+    new CfnOutput(this, 'PipelineAlarmTopicArn', {
+      value: pipelineAlarmTopic.topicArn,
+      description: 'SNS Topic ARN for pipeline alarms — subscribe additional endpoints here',
     });
   }
 }

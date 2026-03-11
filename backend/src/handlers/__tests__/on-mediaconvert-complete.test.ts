@@ -407,7 +407,7 @@ describe('on-mediaconvert-complete handler', () => {
   });
 
   describe('Error handling', () => {
-    it('should not rethrow handler errors (non-blocking)', async () => {
+    it('should throw on DynamoDB errors (critical error)', async () => {
       mockGetSessionById.mockRejectedValueOnce(new Error('DynamoDB error'));
 
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -426,8 +426,8 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      // Should not throw
-      await expect(handler(event)).resolves.toBeUndefined();
+      // Should throw — DynamoDB failure is a critical error
+      await expect(handler(event)).rejects.toThrow('DynamoDB error');
 
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
@@ -608,7 +608,7 @@ describe('on-mediaconvert-complete handler', () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
-    it('should log error if EventBridge publish fails', async () => {
+    it('should throw if EventBridge publish fails (critical failure, EventBridge retries)', async () => {
       const mockSend = jest.fn().mockRejectedValue(new Error('EventBridge publish failed'));
       const mockEventBridgeClient = {
         send: mockSend,
@@ -646,11 +646,11 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      // Should not throw
-      await expect(handler(event)).resolves.toBeUndefined();
+      // Should throw — PutEvents failure is a critical error; EventBridge will retry
+      await expect(handler(event)).rejects.toThrow('EventBridge publish failed');
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Failed to publish transcription event/),
+        expect.stringMatching(/on-mediaconvert-complete error/),
         expect.any(Error)
       );
 

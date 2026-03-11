@@ -167,8 +167,8 @@
 
 - [x] **HARD-01**: `recording-ended.ts` throws (does not silently catch) on MediaConvert job submission failure so SQS retries the event instead of the pipeline silently stalling
 - [ ] **HARD-02**: `transcode-completed.ts` throws on Transcribe job submission failure; idempotency key (sessionId + mediaconvert jobId) prevents duplicate Transcribe jobs on retry
-- [ ] **HARD-03**: `on-mediaconvert-complete.ts` throws on EventBridge PutEvents failure so the upload flow event is guaranteed to be published
-- [ ] **HARD-04**: `scan-stuck-sessions.ts` recovers sessions where `transcriptStatus = 'processing'` and `updatedAt > 2h ago` (fixes PIPE-06 trap where stale 'processing' sessions were permanently excluded)
+- [x] **HARD-03**: `on-mediaconvert-complete.ts` throws on EventBridge PutEvents failure so the upload flow event is guaranteed to be published
+- [x] **HARD-04**: `scan-stuck-sessions.ts` recovers sessions where `transcriptStatus = 'processing'` and `updatedAt > 2h ago` (fixes PIPE-06 trap where stale 'processing' sessions were permanently excluded)
 - [ ] **HARD-05**: `transcribe-completed.ts` job name parsing falls back gracefully: if regex fails, logs a structured error with the raw job name and skips without silently corrupting session state
 
 ### Phase 33 — Pipeline Alarms & Dashboard (Observability)

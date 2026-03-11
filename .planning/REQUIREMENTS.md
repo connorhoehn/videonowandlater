@@ -42,9 +42,9 @@
 ### Upload Video Player
 
 - [ ] **VIDP-01**: Uploaded videos open at `/video/:sessionId` — a dedicated page separate from the `/replay` path with its own navigation and layout
-- [ ] **VIDP-02**: Video player uses HLS.js with adaptive bitrate enabled by default; user can manually override to a specific resolution from a quality selector UI
-- [ ] **VIDP-03**: Quality selector reads available levels from `hls.levels` after `MANIFEST_PARSED` and displays them as human-readable labels (e.g., "1080p", "720p", "Auto")
-- [ ] **VIDP-04**: Quality selector uses `hls.nextLevel` on Safari to prevent buffer stall errors; falls back gracefully if only one quality level is present
+- [x] **VIDP-02**: Video player uses HLS.js with adaptive bitrate enabled by default; user can manually override to a specific resolution from a quality selector UI
+- [x] **VIDP-03**: Quality selector reads available levels from `hls.levels` after `MANIFEST_PARSED` and displays them as human-readable labels (e.g., "1080p", "720p", "Auto")
+- [x] **VIDP-04**: Quality selector uses `hls.nextLevel` on Safari to prevent buffer stall errors; falls back gracefully if only one quality level is present
 - [ ] **VIDP-05**: Upload video page displays the AI summary and speaker-attributed transcript (or plain transcript) in a collapsible info panel below the player
 - [ ] **VIDP-06**: Upload video page supports async comments: users can leave a timestamped comment anchored to the current video position
 - [ ] **VIDP-07**: Comments are fetched on page load (polling, not WebSocket) and displayed sorted newest-first with an option to sort by video position
@@ -134,9 +134,9 @@
 | MOD-07 | Phase 28 | Complete |
 | MOD-08 | Phase 28 | Complete |
 | VIDP-01 | Phase 29 | Pending |
-| VIDP-02 | Phase 29 | Pending |
-| VIDP-03 | Phase 29 | Pending |
-| VIDP-04 | Phase 29 | Pending |
+| VIDP-02 | Phase 29 | Complete |
+| VIDP-03 | Phase 29 | Complete |
+| VIDP-04 | Phase 29 | Complete |
 | VIDP-05 | Phase 30 | Pending |
 | VIDP-06 | Phase 30 | Pending |
 | VIDP-07 | Phase 30 | Pending |

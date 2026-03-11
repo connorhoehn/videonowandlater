@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
 status: planning
-stopped_at: Completed 28-03-PLAN.md — bounced user error display complete
-last_updated: "2026-03-10T19:48:29.921Z"
+stopped_at: Completed 29-01-PLAN.md — useHlsPlayer hook and QualitySelector component
+last_updated: "2026-03-11T03:20:59.509Z"
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
+  total_plans: 23
+  completed_plans: 22
+  percent: 99
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
-**Progress:** [██████████] 100%
-**Last session:** 2026-03-10T19:45:41.021Z
+**Progress:** [██████████] 99%
+**Last session:** 2026-03-11T03:20:59.507Z
 
 ## Performance Metrics
 
@@ -117,6 +117,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 28-chat-moderation P02 | 5 | 2 tasks | 5 files |
 | Phase 28-chat-moderation P02 | 525561 | 3 tasks | 5 files |
 | Phase 28-chat-moderation P03 | 10 | 2 tasks | 3 files |
+| Phase 29-upload-video-player-core P01 | 103 | 2 tasks | 4 files |
 
 ### Roadmap Evolution
 
@@ -158,7 +159,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 28-03-PLAN.md — bounced user error display complete
+**Stopped at:** Completed 29-01-PLAN.md — useHlsPlayer hook and QualitySelector component
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

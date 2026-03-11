@@ -699,7 +699,7 @@ export class SessionStack extends Stack {
       environment: {
         TABLE_NAME: this.table.tableName,
         BEDROCK_REGION: this.region,
-        BEDROCK_MODEL_ID: 'amazon.nova-pro-v1:0',
+        BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
       logGroup: new logs.LogGroup(this, 'StoreSummaryLogGroup', {
@@ -711,13 +711,14 @@ export class SessionStack extends Stack {
     // Grant DynamoDB permissions (read for getSession, write for updateSessionAiSummary)
     this.table.grantReadWriteData(storeSummaryFn);
 
-    // Grant Bedrock InvokeModel permission for both Nova Pro and Claude models (backward compatibility)
+    // Grant Bedrock InvokeModel permission for Nova Lite (default), Nova Pro, and Claude (backward compat via env var override)
     storeSummaryFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
         resources: [
-          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
-          `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-*`,
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,  // default model
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,   // backward compat
+          `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-*`,     // backward compat
         ],
         effect: iam.Effect.ALLOW,
       })

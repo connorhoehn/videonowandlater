@@ -697,16 +697,37 @@ describe('session-repository', () => {
               PK: 'SESSION#session-123',
               SK: 'METADATA',
             },
-            UpdateExpression: 'SET #transcriptStatus = :status, #version = #version + :inc',
+            UpdateExpression: expect.stringContaining('#transcriptStatus = :status'),
             ExpressionAttributeNames: expect.objectContaining({
               '#transcriptStatus': 'transcriptStatus',
+              '#transcriptStatusUpdatedAt': 'transcriptStatusUpdatedAt',
             }),
             ExpressionAttributeValues: expect.objectContaining({
               ':status': 'processing',
+              ':now': expect.any(String),
             }),
           }),
         })
       );
+    });
+
+    it('always writes transcriptStatusUpdatedAt as ISO timestamp on every call', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const before = new Date().toISOString();
+      await updateTranscriptStatus(tableName, 'session-ts', 'available');
+      const after = new Date().toISOString();
+
+      const call = mockSend.mock.calls[0][0];
+      const values = call.input.ExpressionAttributeValues;
+      const names = call.input.ExpressionAttributeNames;
+      const expr = call.input.UpdateExpression as string;
+
+      expect(names['#transcriptStatusUpdatedAt']).toBe('transcriptStatusUpdatedAt');
+      expect(expr).toContain('#transcriptStatusUpdatedAt = :now');
+      expect(values[':now']).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(values[':now'] >= before).toBe(true);
+      expect(values[':now'] <= after).toBe(true);
     });
 
     it('updates transcriptStatus and s3Path when both provided', async () => {

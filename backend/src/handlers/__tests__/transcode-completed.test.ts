@@ -260,7 +260,46 @@ describe('transcode-completed handler', () => {
     expect(mockTranscribeSend).not.toHaveBeenCalled();
   });
 
-  it('handles Transcribe submission failure without throwing (non-blocking)', async () => {
+  it('treats ConflictException as idempotent success', async () => {
+    const conflictError = Object.assign(new Error('Job already exists'), { name: 'ConflictException' });
+    mockTranscribeSend.mockRejectedValueOnce(conflictError);
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-event-conflict',
+      'detail-type': 'MediaConvert Job State Change',
+      source: 'aws.mediaconvert',
+      account: '123456789012',
+      time: '2026-03-11T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        status: 'COMPLETE',
+        jobId: '1741723938123-abc123',
+        userMetadata: {
+          sessionId: 'session-conflict-test',
+          phase: '19-transcription',
+        },
+        outputGroupDetails: [{
+          outputDetails: [{
+            outputFilePaths: ['s3://transcription-bucket/session-conflict-test/recording.mp4'],
+          }],
+        }],
+      },
+    }));
+
+    // ConflictException is idempotent — no failure
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // Should still mark as processing (job was already submitted)
+    expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
+      'test-table',
+      'session-conflict-test',
+      'processing'
+    );
+  });
+
+  it('returns batchItemFailure when Transcribe submission fails (non-ConflictException)', async () => {
     mockTranscribeSend.mockRejectedValueOnce(new Error('Transcribe service unavailable'));
 
     const result = await handler(makeSqsEvent({
@@ -287,13 +326,14 @@ describe('transcode-completed handler', () => {
       },
     }));
 
-    // processEvent catches Transcribe failure and marks session as failed
-    expect(result.batchItemFailures).toHaveLength(0);
+    // Non-ConflictException error → throw → batchItemFailure
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
 
-    // Should mark as failed after Transcribe submission fails
-    expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
-      'test-table',
-      'session-transcribe-fail',
+    // updateTranscriptStatus('failed') must NOT be called — leaves status as 'processing' for HARD-04 recovery
+    expect(mockUpdateTranscriptStatus).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
       'failed'
     );
   });

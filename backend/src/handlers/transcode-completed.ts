@@ -80,8 +80,7 @@ async function processEvent(
 
   try {
     const transcribeClient = new TranscribeClient({ region: process.env.AWS_REGION });
-    const epochMs = Date.now();
-    const transcribeJobName = `vnl-${sessionId}-${epochMs}`;
+    const transcribeJobName = `vnl-${sessionId}-${jobId}`;
 
     const startJobCommand = new StartTranscriptionJobCommand({
       TranscriptionJobName: transcribeJobName,
@@ -111,14 +110,23 @@ async function processEvent(
     await updateTranscriptStatus(tableName, sessionId, 'processing');
     logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
   } catch (error: any) {
-    logger.error('Failed to submit Transcribe job:', { errorMessage: error.message });
-    logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
-    // Non-blocking: update session status to failed
-    try {
-      await updateTranscriptStatus(tableName, sessionId, 'failed');
-    } catch (updateError: any) {
-      logger.error('Failed to update transcript status:', { errorMessage: updateError.message });
+    if (error.name === 'ConflictException') {
+      // Job was already submitted in a previous attempt — idempotent success
+      logger.info('Transcribe job already exists (idempotent retry)', {
+        transcribeJobName: `vnl-${sessionId}-${jobId}`,
+        sessionId,
+      });
+      // Ensure status is marked processing (may not be set if previous attempt failed after submit)
+      await updateTranscriptStatus(tableName, sessionId, 'processing');
+      return;
     }
+    logger.error('Failed to submit Transcribe job:', {
+      errorMessage: error.message,
+      sessionId,
+      transcribeJobName: `vnl-${sessionId}-${jobId}`,
+    });
+    logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
+    throw error; // Transient failure — let SQS retry
   }
 }
 

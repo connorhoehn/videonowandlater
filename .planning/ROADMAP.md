@@ -93,7 +93,8 @@ See milestones/v1.5-ROADMAP.md for full details.
 - [ ] Phase 32: Handler Hardening & Idempotency (0/? plans)
 - [ ] Phase 33: Pipeline Alarms & Dashboard (0/? plans)
 - [ ] Phase 34: Nova Lite for AI Summaries (0/? plans)
-- [ ] Phase 35: Pipeline Debug CLI (0/? plans)
+- [ ] Phase 35: Pipeline Debug CLI (1 plan)
+  - [ ] 35-01-PLAN.md — tools/debug-pipeline.js (DynamoDB pipeline status report) and tools/replay-pipeline.js (EventBridge stage replay)
 
 ### Phase 31: SQS Pipeline Buffers
 
@@ -156,6 +157,8 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** DEVEX-01, DEVEX-02, DEVEX-03
 
+**Plans:** 1 plan
+
 **Success Criteria:**
 1. tools/debug-pipeline.js --sessionId <id> prints all pipeline fields from DynamoDB (transcriptStatus, aiSummaryStatus, mediaconvertJobId, recoveryAttemptCount, etc.)
 2. tools/replay-pipeline.js --sessionId <id> --from <stage> publishes the correct EventBridge event for stages: recording-ended, mediaconvert, transcribe, summary
@@ -164,4 +167,4 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 ## Progress
 
-v1.5 shipped. v1.6 in progress — Phase 31 planned (2 plans).
+v1.5 shipped. v1.6 in progress — Phase 31 complete (2 plans), Phase 35 planned (1 plan).

@@ -33,3 +33,4 @@ Thumbs.db
 !backend/package.json
 !backend/tsconfig.json
 !backend/jest.config.js
+!tools/*.js

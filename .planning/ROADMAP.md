@@ -100,7 +100,7 @@ See milestones/v1.5-ROADMAP.md for full details.
   - [ ] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
 - [ ] Phase 34: Nova Lite for AI Summaries (1 plan)
   - [ ] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
-- [ ] Phase 35: Pipeline Debug CLI (1 plan)
+- [x] Phase 35: Pipeline Debug CLI (1 plan) (completed 2026-03-11)
   - [ ] 35-01-PLAN.md — tools/debug-pipeline.js (DynamoDB pipeline status report) and tools/replay-pipeline.js (EventBridge stage replay)
 
 ### Phase 31: SQS Pipeline Buffers
@@ -168,7 +168,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** DEVEX-01, DEVEX-02, DEVEX-03
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Success Criteria:**
 1. tools/debug-pipeline.js --sessionId <id> prints all pipeline fields from DynamoDB (transcriptStatus, aiSummaryStatus, mediaconvertJobId, recoveryAttemptCount, etc.)

@@ -186,9 +186,9 @@
 
 ### Phase 35 — Pipeline Debug CLI (DevEx)
 
-- [ ] **DEVEX-01**: `tools/debug-pipeline.js --sessionId <id>` reads the DynamoDB session record and prints a human-readable pipeline status report (all pipeline fields: transcriptStatus, aiSummaryStatus, mediaconvertJobId, etc.)
-- [ ] **DEVEX-02**: `tools/replay-pipeline.js --sessionId <id> --from <stage>` publishes the correct EventBridge event to the default bus to resume pipeline from a given stage (`recording-ended`, `mediaconvert`, `transcribe`, `summary`)
-- [ ] **DEVEX-03**: Both CLI tools use the AWS SDK credential chain (environment variables, `~/.aws/credentials`, or EC2/Lambda role) and read `AWS_REGION` from environment or fall back to `us-east-1`
+- [x] **DEVEX-01**: `tools/debug-pipeline.js --sessionId <id>` reads the DynamoDB session record and prints a human-readable pipeline status report (all pipeline fields: transcriptStatus, aiSummaryStatus, mediaconvertJobId, etc.)
+- [x] **DEVEX-02**: `tools/replay-pipeline.js --sessionId <id> --from <stage>` publishes the correct EventBridge event to the default bus to resume pipeline from a given stage (`recording-ended`, `mediaconvert`, `transcribe`, `summary`)
+- [x] **DEVEX-03**: Both CLI tools use the AWS SDK credential chain (environment variables, `~/.aws/credentials`, or EC2/Lambda role) and read `AWS_REGION` from environment or fall back to `us-east-1`
 
 ## Traceability (v1.6)
 

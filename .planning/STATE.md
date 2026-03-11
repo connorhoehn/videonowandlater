@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
-stopped_at: "Completed 31-02-PLAN.md — SQS handler signature refactor: 5 handlers wrapped, transcode-completed.test.ts created, 453 tests passing"
-last_updated: "2026-03-11T19:35:54.887Z"
+stopped_at: "Completed 35-01-PLAN.md — Pipeline Debug CLI: debug-pipeline.js + replay-pipeline.js shipped in tools/"
+last_updated: "2026-03-11T19:39:58.141Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 2
-  percent: 97
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 4
+  percent: 92
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
-**Progress:** [██████████] 97%
-**Last session:** 2026-03-11T19:32:44.290Z
+**Progress:** [█████████░] 92%
+**Last session:** 2026-03-11T19:39:58.139Z
 
 ## Performance Metrics
 
@@ -130,6 +130,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 30-upload-video-player-social P03 | 117 | 2 tasks | 4 files |
 | Phase 31-sqs-pipeline-buffers P01 | 246 | 2 tasks | 1 files |
 | Phase 31-sqs-pipeline-buffers P02 | 583 | 2 tasks | 10 files |
+| Phase 35-pipeline-debug-cli P01 | 2 | 2 tasks | 3 files |
 
 ### Roadmap Evolution
 
@@ -171,7 +172,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 31-02-PLAN.md — SQS handler signature refactor: 5 handlers wrapped, transcode-completed.test.ts created, 453 tests passing
+**Stopped at:** Completed 35-01-PLAN.md — Pipeline Debug CLI: debug-pipeline.js + replay-pipeline.js shipped in tools/
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

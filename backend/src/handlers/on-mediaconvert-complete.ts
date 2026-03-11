@@ -79,7 +79,6 @@ export const handler = async (
           ],
         })
       );
-
       console.log(`Transcription pipeline triggered for session: ${sessionId}`);
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed

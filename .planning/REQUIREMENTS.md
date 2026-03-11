@@ -46,8 +46,8 @@
 - [x] **VIDP-03**: Quality selector reads available levels from `hls.levels` after `MANIFEST_PARSED` and displays them as human-readable labels (e.g., "1080p", "720p", "Auto")
 - [x] **VIDP-04**: Quality selector uses `hls.nextLevel` on Safari to prevent buffer stall errors; falls back gracefully if only one quality level is present
 - [ ] **VIDP-05**: Upload video page displays the AI summary and speaker-attributed transcript (or plain transcript) in a collapsible info panel below the player
-- [ ] **VIDP-06**: Upload video page supports async comments: users can leave a timestamped comment anchored to the current video position
-- [ ] **VIDP-07**: Comments are fetched on page load (polling, not WebSocket) and displayed sorted newest-first with an option to sort by video position
+- [x] **VIDP-06**: Upload video page supports async comments: users can leave a timestamped comment anchored to the current video position
+- [x] **VIDP-07**: Comments are fetched on page load (polling, not WebSocket) and displayed sorted newest-first with an option to sort by video position
 - [ ] **VIDP-08**: Comments within ±1500ms of the current playback position are visually highlighted during playback
 - [ ] **VIDP-09**: Upload video page supports emoji reactions (same emoji set as broadcast/replay) stored and displayed as reaction summary counts
 - [x] **VIDP-10**: Activity feed `UploadActivityCard` links navigate to `/video/:sessionId` instead of the previous upload path
@@ -138,8 +138,8 @@
 | VIDP-03 | Phase 29 | Complete |
 | VIDP-04 | Phase 29 | Complete |
 | VIDP-05 | Phase 30 | Pending |
-| VIDP-06 | Phase 30 | Pending |
-| VIDP-07 | Phase 30 | Pending |
+| VIDP-06 | Phase 30 | Complete |
+| VIDP-07 | Phase 30 | Complete |
 | VIDP-08 | Phase 30 | Pending |
 | VIDP-09 | Phase 30 | Pending |
 | VIDP-10 | Phase 29 | Complete |

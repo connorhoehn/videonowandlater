@@ -84,8 +84,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 |-------|------|------|
 | 31 | SQS Pipeline Buffers | Complete (2026-03-11) |
 | 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
-| 33 | Pipeline Alarms & Dashboard | CloudWatch alarms on DLQ depth and Lambda error rate, SNS email alerts, and a CloudWatch dashboard for pipeline health at a glance |
-| 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
+| 33 | 1/1 | Complete   | 2026-03-11 | 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
 
 - [x] Phase 31: SQS Pipeline Buffers (2/2 plans) (completed 2026-03-11)
   - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
@@ -95,7 +94,7 @@ See milestones/v1.5-ROADMAP.md for full details.
   - [ ] 32-02-PLAN.md — transcode-completed: stable idempotency key + ConflictException handling; transcribe-completed: logger.error with rawJobName on parse failure
   - [ ] 32-03-PLAN.md — on-mediaconvert-complete: remove PutEvents inner catch, outer catch rethrows
   - [ ] 32-04-PLAN.md — scan-stuck-sessions: stale-processing threshold; session-repository: transcriptStatusUpdatedAt timestamp
-- [ ] Phase 33: Pipeline Alarms & Dashboard (1 plan)
+- [x] Phase 33: Pipeline Alarms & Dashboard (1 plan) (completed 2026-03-11)
   - [ ] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
 - [x] Phase 34: Nova Lite for AI Summaries (1 plan) (completed 2026-03-11)
   - [ ] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
@@ -140,7 +139,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** OBS-01, OBS-02, OBS-03, OBS-04
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Success Criteria:**
 1. CloudWatch alarm fires when any pipeline SQS DLQ has ApproximateNumberOfMessagesVisible > 0

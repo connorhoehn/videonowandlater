@@ -173,10 +173,10 @@
 
 ### Phase 33 — Pipeline Alarms & Dashboard (Observability)
 
-- [ ] **OBS-01**: CloudWatch alarm fires when any pipeline SQS DLQ has `ApproximateNumberOfMessagesVisible > 0`; alarm state is ALARM within 1 evaluation period
-- [ ] **OBS-02**: CloudWatch alarm fires when any pipeline Lambda has `Errors > 0` in a 5-minute period (error rate alarm per handler)
-- [ ] **OBS-03**: An SNS topic receives all alarm state-change notifications; CDK accepts an optional `alertEmail` context variable to subscribe an email endpoint
-- [ ] **OBS-04**: A CloudWatch dashboard (`VNL-Pipeline`) shows invocation count, error count, and DLQ depth for each of the 5 pipeline Lambdas in a single view
+- [x] **OBS-01**: CloudWatch alarm fires when any pipeline SQS DLQ has `ApproximateNumberOfMessagesVisible > 0`; alarm state is ALARM within 1 evaluation period
+- [x] **OBS-02**: CloudWatch alarm fires when any pipeline Lambda has `Errors > 0` in a 5-minute period (error rate alarm per handler)
+- [x] **OBS-03**: An SNS topic receives all alarm state-change notifications; CDK accepts an optional `alertEmail` context variable to subscribe an email endpoint
+- [x] **OBS-04**: A CloudWatch dashboard (`VNL-Pipeline`) shows invocation count, error count, and DLQ depth for each of the 5 pipeline Lambdas in a single view
 
 ### Phase 34 — Nova Lite for AI Summaries (Cost)
 

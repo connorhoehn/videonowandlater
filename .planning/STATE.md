@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Pipeline Reliability, Moderation & Upload Experience
-status: planning
+status: completed
 stopped_at: "Completed 30-03-PLAN.md — VideoPage social layer: CommentThread, VideoInfoPanel, reactions wired"
-last_updated: "2026-03-11T13:28:09.980Z"
+last_updated: "2026-03-11T13:31:28.410Z"
 progress:
   total_phases: 9
   completed_phases: 9
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
-**Status:** Ready to plan
+**Status:** Milestone complete
 **Progress:** [██████████] 100%
 **Last session:** 2026-03-11T13:28:09.977Z
 

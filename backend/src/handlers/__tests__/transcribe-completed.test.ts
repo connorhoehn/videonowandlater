@@ -365,10 +365,55 @@ describe('transcribe-completed handler', () => {
       },
     }));
 
+    // Parse failure is non-fatal (not our pipeline job) — message must NOT be retried
     expect(result.batchItemFailures).toHaveLength(0);
 
-    // Should not attempt to process
+    // Should not attempt to process (early return after logger.error with rawJobName)
     expect(mockUpdateTranscriptStatus).not.toHaveBeenCalled();
+  });
+
+  it('accepts new MediaConvert job ID format in job name (idempotency key)', async () => {
+    // Job name format after HARD-02: vnl-{sessionId}-{mediaconvertJobId}
+    // MediaConvert job IDs contain letters+hyphens (e.g. 1741723938123-abc123)
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'Hello from new format.' }],
+      },
+    };
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+    });
+    mockEventBridgeSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-event-new-format',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-11T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        // New stable composite key: vnl-{sessionId}-{mediaconvertJobId}
+        TranscriptionJobName: 'vnl-newsession-1741723938123-abc123',
+        TranscriptionJob: {
+          TranscriptFileUri: 's3://bucket/newsession/transcript.json',
+        },
+      },
+    }));
+
+    // Updated regex must accept this format — no parse failure
+    expect(result.batchItemFailures).toHaveLength(0);
+    expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
+      'test-table',
+      'newsession',
+      'available',
+      expect.stringContaining('newsession/transcript.json'),
+      'Hello from new format.'
+    );
   });
 
   it('groups word-level speaker labels into SpeakerSegment array', async () => {

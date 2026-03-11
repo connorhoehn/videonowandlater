@@ -127,10 +127,16 @@ async function processEvent(
   const jobName = detail.TranscriptionJobName;
   logger.info('Transcribe job event received:', { jobName, status: detail.TranscriptionJobStatus });
 
-  // Parse sessionId from job name (format: vnl-{sessionId}-{epochMs})
-  const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
+  // Parse sessionId from job name (format: vnl-{sessionId}-{mediaconvertJobId})
+  // Anchors on the epoch-ms prefix of the job ID (≥10 digits) so backtracking correctly
+  // terminates at the sessionId boundary even when sessionId contains hyphens (UUIDs).
+  // Accepts: vnl-{sessionId}-{epochMs} (legacy) and vnl-{sessionId}-{epochMs}-{hex} (new format)
+  const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-(\d{10,}(?:-[a-f0-9]+)?)$/);
   if (!jobNameMatch) {
-    logger.warn('Cannot parse sessionId from job name:', { jobName });
+    logger.error('Failed to parse sessionId from Transcribe job name', {
+      rawJobName: jobName,
+      expectedPattern: 'vnl-{sessionId}-{mediaconvertJobId}',
+    });
     return;
   }
 

@@ -194,26 +194,26 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DUR-01 | Phase 31 | Planned |
-| DUR-02 | Phase 31 | Planned |
-| DUR-03 | Phase 31 | Planned |
-| DUR-04 | Phase 31 | Planned |
-| DUR-05 | Phase 31 | Planned |
-| HARD-01 | Phase 32 | Planned |
-| HARD-02 | Phase 32 | Planned |
-| HARD-03 | Phase 32 | Planned |
-| HARD-04 | Phase 32 | Planned |
-| HARD-05 | Phase 32 | Planned |
-| OBS-01 | Phase 33 | Planned |
-| OBS-02 | Phase 33 | Planned |
-| OBS-03 | Phase 33 | Planned |
-| OBS-04 | Phase 33 | Planned |
-| COST-01 | Phase 34 | Planned |
-| COST-02 | Phase 34 | Planned |
-| COST-03 | Phase 34 | Planned |
-| DEVEX-01 | Phase 35 | Planned |
-| DEVEX-02 | Phase 35 | Planned |
-| DEVEX-03 | Phase 35 | Planned |
+| DUR-01 | Phase 31 | Completed |
+| DUR-02 | Phase 31 | Completed |
+| DUR-03 | Phase 31 | Completed |
+| DUR-04 | Phase 31 | Completed |
+| DUR-05 | Phase 31 | Completed |
+| HARD-01 | Phase 32 | Completed |
+| HARD-02 | Phase 32 | Completed |
+| HARD-03 | Phase 32 | Completed |
+| HARD-04 | Phase 32 | Completed |
+| HARD-05 | Phase 32 | Completed |
+| OBS-01 | Phase 33 | Completed |
+| OBS-02 | Phase 33 | Completed |
+| OBS-03 | Phase 33 | Completed |
+| OBS-04 | Phase 33 | Completed |
+| COST-01 | Phase 34 | Completed |
+| COST-02 | Phase 34 | Completed |
+| COST-03 | Phase 34 | Completed |
+| DEVEX-01 | Phase 35 | Completed |
+| DEVEX-02 | Phase 35 | Completed |
+| DEVEX-03 | Phase 35 | Completed |
 
 ---
 *Requirements defined: 2026-03-10 for milestone v1.5*

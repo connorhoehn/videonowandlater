@@ -89,16 +89,16 @@ See milestones/v1.5-ROADMAP.md for full details.
   - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
   - [x] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
 - [x] Phase 32: Handler Hardening & Idempotency (4 plans) (completed 2026-03-11)
-  - [ ] 32-01-PLAN.md — recording-ended: remove MediaConvert error suppression, move pool release to finally
-  - [ ] 32-02-PLAN.md — transcode-completed: stable idempotency key + ConflictException handling; transcribe-completed: logger.error with rawJobName on parse failure
-  - [ ] 32-03-PLAN.md — on-mediaconvert-complete: remove PutEvents inner catch, outer catch rethrows
-  - [ ] 32-04-PLAN.md — scan-stuck-sessions: stale-processing threshold; session-repository: transcriptStatusUpdatedAt timestamp
+  - [x] 32-01-PLAN.md — recording-ended: remove MediaConvert error suppression, move pool release to finally
+  - [x] 32-02-PLAN.md — transcode-completed: stable idempotency key + ConflictException handling; transcribe-completed: logger.error with rawJobName on parse failure
+  - [x] 32-03-PLAN.md — on-mediaconvert-complete: remove PutEvents inner catch, outer catch rethrows
+  - [x] 32-04-PLAN.md — scan-stuck-sessions: stale-processing threshold; session-repository: transcriptStatusUpdatedAt timestamp
 - [x] Phase 33: Pipeline Alarms & Dashboard (1 plan) (completed 2026-03-11)
-  - [ ] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
+  - [x] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
 - [x] Phase 34: Nova Lite for AI Summaries (1 plan) (completed 2026-03-11)
-  - [ ] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
+  - [x] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
 - [x] Phase 35: Pipeline Debug CLI (1 plan) (completed 2026-03-11)
-  - [ ] 35-01-PLAN.md — tools/debug-pipeline.js (DynamoDB pipeline status report) and tools/replay-pipeline.js (EventBridge stage replay)
+  - [x] 35-01-PLAN.md — tools/debug-pipeline.js (DynamoDB pipeline status report) and tools/replay-pipeline.js (EventBridge stage replay)
 
 ### Phase 31: SQS Pipeline Buffers
 

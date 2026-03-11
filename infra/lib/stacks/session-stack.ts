@@ -13,6 +13,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as path from 'path';
 import { Construct } from 'constructs';
 import { IvsCleanupResource } from '../constructs/ivs-cleanup-resource';
@@ -838,6 +839,99 @@ export class SessionStack extends Stack {
       targets: [new targets.LambdaFunction(startTranscribeFn)],
       description: 'Start Transcribe job when recording is available',
     });
+
+    // ============================================================
+    // Per-handler SQS Queue Pairs (Phase 31)
+    // Each pipeline handler gets its own queue + DLQ for at-least-once delivery
+    // Visibility timeout = 6× Lambda timeout per AWS recommendation
+    // ============================================================
+
+    // recording-ended queue (serves 3 rules: recordingEndRule, stageRecordingEndRule, recordingRecoveryRule)
+    const recordingEndedDlq = new sqs.Queue(this, 'RecordingEndedDlq', {
+      queueName: 'vnl-recording-ended-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const recordingEndedQueue = new sqs.Queue(this, 'RecordingEndedQueue', {
+      queueName: 'vnl-recording-ended',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: recordingEndedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // transcode-completed queue
+    const transcodeCompletedDlq = new sqs.Queue(this, 'TranscodeCompletedDlq', {
+      queueName: 'vnl-transcode-completed-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const transcodeCompletedQueue = new sqs.Queue(this, 'TranscodeCompletedQueue', {
+      queueName: 'vnl-transcode-completed',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: transcodeCompletedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // transcribe-completed queue
+    const transcribeCompletedDlq = new sqs.Queue(this, 'TranscribeCompletedDlq', {
+      queueName: 'vnl-transcribe-completed-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const transcribeCompletedQueue = new sqs.Queue(this, 'TranscribeCompletedQueue', {
+      queueName: 'vnl-transcribe-completed',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: transcribeCompletedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // store-summary queue (60s Lambda timeout → 360s visibility)
+    const storeSummaryDlq = new sqs.Queue(this, 'StoreSummaryDlq', {
+      queueName: 'vnl-store-summary-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const storeSummaryQueue = new sqs.Queue(this, 'StoreSummaryQueue', {
+      queueName: 'vnl-store-summary',
+      visibilityTimeout: Duration.seconds(6 * 60), // 6× Lambda timeout (60s)
+      deadLetterQueue: { queue: storeSummaryDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // start-transcribe queue
+    const startTranscribeDlq = new sqs.Queue(this, 'StartTranscribeDlq', {
+      queueName: 'vnl-start-transcribe-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const startTranscribeQueue = new sqs.Queue(this, 'StartTranscribeQueue', {
+      queueName: 'vnl-start-transcribe',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: startTranscribeDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // SQS event source mappings — each Lambda polls its dedicated queue (batchSize: 1)
+    recordingEndedFn.addEventSource(new SqsEventSource(recordingEndedQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
+    transcodeCompletedFn.addEventSource(new SqsEventSource(transcodeCompletedQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
+    transcribeCompletedFn.addEventSource(new SqsEventSource(transcribeCompletedQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
+    storeSummaryFn.addEventSource(new SqsEventSource(storeSummaryQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
+    startTranscribeFn.addEventSource(new SqsEventSource(startTranscribeQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
 
     // S3 lifecycle rule for orphaned multipart uploads (clean up after 24 hours)
     this.recordingsBucket.addLifecycleRule({

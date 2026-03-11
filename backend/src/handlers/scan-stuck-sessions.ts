@@ -22,6 +22,7 @@ const logger = new Logger({
 });
 
 const STUCK_THRESHOLD_MS = 45 * 60 * 1000; // 45 minutes
+const PROCESSING_STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DEFAULT_MAX_RECOVERY_PER_RUN = 25;
 const RECOVERY_ATTEMPT_CAP = 3;
 
@@ -153,18 +154,30 @@ export const handler: Handler = async (): Promise<void> => {
   // Query both GSI1 partitions
   const allItems = await queryEndingSessions(tableName);
 
-  // Compute 45-minute cutoff
+  // Compute 45-minute cutoff and 2-hour stale-processing cutoff
   const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS).toISOString();
+  const staleProcessingCutoff = new Date(Date.now() - PROCESSING_STALE_THRESHOLD_MS).toISOString();
 
   // In-Lambda filter: endedAt threshold, transcriptStatus gate, count cap
   const eligibleSessions = allItems.filter((item) => {
     if (!item.endedAt || item.endedAt >= cutoff) {
       return false; // Not old enough or no endedAt
     }
+
     const ts = item.transcriptStatus;
-    if (ts === 'processing' || ts === 'available' || ts === 'failed') {
-      return false; // Already in progress or terminal state
+    if (ts === 'available' || ts === 'failed') {
+      return false; // Terminal states — no recovery needed
     }
+
+    if (ts === 'processing') {
+      const statusUpdatedAt = item.transcriptStatusUpdatedAt as string | undefined;
+      // No timestamp: unknown when it entered processing — skip conservatively
+      if (!statusUpdatedAt) return false;
+      // Updated recently: job may still be running — skip
+      if (statusUpdatedAt >= staleProcessingCutoff) return false;
+      // Falls through: processing AND updatedAt > 2h → eligible for recovery
+    }
+
     const count: number = item.recoveryAttemptCount ?? 0;
     if (count >= RECOVERY_ATTEMPT_CAP) {
       return false; // Permanently excluded

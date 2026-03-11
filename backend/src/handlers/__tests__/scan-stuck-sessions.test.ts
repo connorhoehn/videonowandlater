@@ -104,8 +104,9 @@ describe('scan-stuck-sessions handler', () => {
   // Skip criteria
   // -------------------------------------------------------------------------
 
-  it('should skip sessions with transcriptStatus = processing', async () => {
+  it('should skip sessions with transcriptStatus = processing and no transcriptStatusUpdatedAt', async () => {
     mockQueryWithSession({ ...stuckSession, transcriptStatus: 'processing' });
+    // transcriptStatusUpdatedAt absent → skip conservatively
 
     await handler({} as any, {} as any, jest.fn());
 
@@ -113,6 +114,35 @@ describe('scan-stuck-sessions handler', () => {
     expect(UpdateCommand).not.toHaveBeenCalled();
     expect(PutEventsCommand).not.toHaveBeenCalled();
     expect(mockEbSend).not.toHaveBeenCalled();
+  });
+
+  it('should skip sessions with transcriptStatus = processing updated less than 2h ago', async () => {
+    const recentlyUpdated = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 min ago
+    mockQueryWithSession({
+      ...stuckSession,
+      transcriptStatus: 'processing',
+      transcriptStatusUpdatedAt: recentlyUpdated,
+    });
+
+    await handler({} as any, {} as any, jest.fn());
+
+    expect(UpdateCommand).not.toHaveBeenCalled();
+    expect(mockEbSend).not.toHaveBeenCalled();
+  });
+
+  it('should recover sessions with transcriptStatus = processing updated more than 2h ago', async () => {
+    const staleUpdated = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(); // 3 hours ago
+    mockDdbSend
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [{ ...stuckSession, transcriptStatus: 'processing', transcriptStatusUpdatedAt: staleUpdated }] })
+      .mockResolvedValueOnce({}); // UpdateCommand succeeds
+
+    mockEbSend.mockResolvedValueOnce({});
+
+    await handler({} as any, {} as any, jest.fn());
+
+    expect(PutEventsCommand).toHaveBeenCalled(); // recovery event published
+    expect(mockEbSend).toHaveBeenCalledTimes(1);
   });
 
   it('should skip sessions with transcriptStatus = available', async () => {

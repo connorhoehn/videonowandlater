@@ -1,9 +1,10 @@
 /**
- * EventBridge handler for MediaConvert job completion events
+ * SQS-wrapped handler for MediaConvert job completion events
  * Processes successful MediaConvert jobs and submits Transcribe jobs for transcription
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support.
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { updateTranscriptStatus } from '../repositories/session-repository';
@@ -26,9 +27,9 @@ interface MediaConvertJobDetail {
   };
 }
 
-export const handler = async (
+async function processEvent(
   event: EventBridgeEvent<string, Record<string, any>>
-): Promise<void> => {
+): Promise<void> {
   const startMs = Date.now();
   const tableName = process.env.TABLE_NAME!;
   const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
@@ -119,4 +120,23 @@ export const handler = async (
       logger.error('Failed to update transcript status:', { errorMessage: updateError.message });
     }
   }
+}
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
+      await processEvent(ebEvent);
+    } catch (err: any) {
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures: failures };
 };

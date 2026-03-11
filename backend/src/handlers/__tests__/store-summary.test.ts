@@ -1,9 +1,9 @@
 /**
  * Tests for store-summary handler
- * EventBridge handler that fetches transcripts from S3 and invokes Bedrock to generate AI summaries
+ * SQS-wrapped handler that fetches transcripts from S3 and invokes Bedrock to generate AI summaries
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../store-summary';
 import { updateSessionAiSummary } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -26,6 +26,27 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
 const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockBedrockClient = BedrockRuntimeClient as jest.Mocked<typeof BedrockRuntimeClient>;
 const mockUpdateSessionAiSummary = updateSessionAiSummary as jest.MockedFunction<typeof updateSessionAiSummary>;
+
+function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
+  return {
+    Records: [{
+      messageId: 'test-message-id',
+      receiptHandle: 'test-receipt-handle',
+      body: JSON.stringify(ebEvent),
+      attributes: {
+        ApproximateReceiveCount: '1',
+        SentTimestamp: '1234567890',
+        SenderId: 'test-sender',
+        ApproximateFirstReceiveTimestamp: '1234567890',
+      },
+      messageAttributes: {},
+      md5OfBody: 'test-md5',
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-store-summary',
+      awsRegion: 'us-east-1',
+    }],
+  };
+}
 
 describe('store-summary handler', () => {
   const originalEnv = process.env;
@@ -81,7 +102,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-1',
       'detail-type': 'Transcript Stored',
@@ -94,9 +115,9 @@ describe('store-summary handler', () => {
         sessionId: 'session-123',
         transcriptS3Uri: 's3://transcription-bucket/session-123/transcript.json',
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Verify S3 fetch was called
     expect(mockS3Send).toHaveBeenCalledWith(expect.any(GetObjectCommand));
@@ -137,7 +158,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-2',
       'detail-type': 'Transcript Stored',
@@ -150,9 +171,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-abc',
         transcriptS3Uri: 's3://transcription-bucket/session-abc/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify the exact summary text was extracted and passed
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
@@ -178,7 +197,7 @@ describe('store-summary handler', () => {
     // Mock Bedrock failure
     mockBedrockSend.mockRejectedValueOnce(new Error('Access Denied - Bedrock not available'));
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-3',
       'detail-type': 'Transcript Stored',
@@ -191,9 +210,9 @@ describe('store-summary handler', () => {
         sessionId: 'session-fail',
         transcriptS3Uri: 's3://transcription-bucket/session-fail/transcript.json',
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should NOT update with aiSummary value, only set status to failed
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith('test-table', 'session-fail', {
@@ -220,7 +239,7 @@ describe('store-summary handler', () => {
     // Mock Bedrock error
     mockBedrockSend.mockRejectedValueOnce(new Error('Timeout calling Bedrock API'));
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-4',
       'detail-type': 'Transcript Stored',
@@ -233,9 +252,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-bedrock-error',
         transcriptS3Uri: 's3://transcription-bucket/session-bedrock-error/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
       'test-table',
@@ -275,7 +292,7 @@ describe('store-summary handler', () => {
       new Error('ConditionalCheckFailedException')
     );
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-5',
       'detail-type': 'Transcript Stored',
@@ -288,10 +305,10 @@ describe('store-summary handler', () => {
         sessionId: 'session-ddb-fail',
         transcriptS3Uri: 's3://transcription-bucket/session-ddb-fail/transcript.json',
       },
-    };
+    }));
 
-    // Should NOT throw despite DynamoDB write failure
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should NOT fail despite DynamoDB write failure
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Still attempted to store summary (error is caught and logged, not re-thrown)
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
@@ -322,7 +339,7 @@ describe('store-summary handler', () => {
       new Error('DynamoDB unavailable')
     );
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-6',
       'detail-type': 'Transcript Stored',
@@ -335,17 +352,17 @@ describe('store-summary handler', () => {
         sessionId: 'session-double-error',
         transcriptS3Uri: 's3://transcription-bucket/session-double-error/transcript.json',
       },
-    };
+    }));
 
-    // Should NOT throw even with both failures
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should NOT fail even with both failures
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('should handle S3 fetch errors gracefully', async () => {
     // Mock S3 fetch failure
     mockS3Send.mockRejectedValueOnce(new Error('S3 access denied'));
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-s3-fail',
       'detail-type': 'Transcript Stored',
@@ -358,9 +375,9 @@ describe('store-summary handler', () => {
         sessionId: 'session-s3-fail',
         transcriptS3Uri: 's3://transcription-bucket/session-s3-fail/transcript.json',
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should set failed status
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
@@ -383,7 +400,7 @@ describe('store-summary handler', () => {
       },
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-empty',
       'detail-type': 'Transcript Stored',
@@ -396,9 +413,9 @@ describe('store-summary handler', () => {
         sessionId: 'session-empty-transcript',
         transcriptS3Uri: 's3://transcription-bucket/session-empty-transcript/transcript.json',
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should NOT invoke Bedrock for empty transcript
     expect(mockBedrockSend).not.toHaveBeenCalled();
@@ -440,7 +457,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-7',
       'detail-type': 'Transcript Stored',
@@ -453,9 +470,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-env-test',
         transcriptS3Uri: 's3://transcription-bucket/session-env-test/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify Bedrock was invoked
     expect(mockBedrockSend).toHaveBeenCalled();
@@ -491,7 +506,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-8',
       'detail-type': 'Transcript Stored',
@@ -504,9 +519,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-default-model',
         transcriptS3Uri: 's3://transcription-bucket/session-default-model/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     expect(mockBedrockSend).toHaveBeenCalled();
   });
@@ -537,7 +550,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-nova-default',
       'detail-type': 'Transcript Stored',
@@ -550,9 +563,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-nova-default',
         transcriptS3Uri: 's3://transcription-bucket/session-nova-default/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify Nova Pro model ID was used
     expect(lastInvokeModelCommand).toBeDefined();
@@ -595,7 +606,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-nova-payload',
       'detail-type': 'Transcript Stored',
@@ -608,9 +619,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-nova-payload',
         transcriptS3Uri: 's3://transcription-bucket/session-nova-payload/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify Nova Pro payload format
     expect(lastInvokeModelCommand).toBeDefined();
@@ -657,7 +666,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-claude-compat',
       'detail-type': 'Transcript Stored',
@@ -670,9 +679,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-claude-compat',
         transcriptS3Uri: 's3://transcription-bucket/session-claude-compat/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify Claude model ID was used
     expect(lastInvokeModelCommand).toBeDefined();
@@ -722,7 +729,7 @@ describe('store-summary handler', () => {
       ),
     });
 
-    const event: EventBridgeEvent<'Transcript Stored', { sessionId: string; transcriptS3Uri: string }> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-9',
       'detail-type': 'Transcript Stored',
@@ -735,9 +742,7 @@ describe('store-summary handler', () => {
         sessionId: 'session-region-fallback',
         transcriptS3Uri: 's3://transcription-bucket/session-region-fallback/transcript.json',
       },
-    };
-
-    await handler(event);
+    }));
 
     expect(mockBedrockClient).toHaveBeenCalledWith(expect.objectContaining({
       region: 'ap-southeast-1',

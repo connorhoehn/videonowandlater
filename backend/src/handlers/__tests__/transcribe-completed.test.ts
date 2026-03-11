@@ -1,10 +1,10 @@
 /**
  * Tests for transcribe-completed handler
- * EventBridge handler that processes Transcribe job completion events
+ * SQS-wrapped handler that processes Transcribe job completion events
  * Verifies transcript storage and EventBridge event emission
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../transcribe-completed';
 import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -18,6 +18,27 @@ const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockEventBridgeClient = EventBridgeClient as jest.Mocked<typeof EventBridgeClient>;
 const mockUpdateTranscriptStatus = updateTranscriptStatus as jest.MockedFunction<typeof updateTranscriptStatus>;
 const mockUpdateDiarizedTranscriptPath = updateDiarizedTranscriptPath as jest.MockedFunction<typeof updateDiarizedTranscriptPath>;
+
+function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
+  return {
+    Records: [{
+      messageId: 'test-message-id',
+      receiptHandle: 'test-receipt-handle',
+      body: JSON.stringify(ebEvent),
+      attributes: {
+        ApproximateReceiveCount: '1',
+        SentTimestamp: '1234567890',
+        SenderId: 'test-sender',
+        ApproximateFirstReceiveTimestamp: '1234567890',
+      },
+      messageAttributes: {},
+      md5OfBody: 'test-md5',
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-transcribe-completed',
+      awsRegion: 'us-east-1',
+    }],
+  };
+}
 
 describe('transcribe-completed handler', () => {
   const originalEnv = process.env;
@@ -69,7 +90,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-1',
       'detail-type': 'Transcribe',
@@ -85,9 +106,9 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/session123/transcript.json',
         },
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Verify transcript was stored
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -118,7 +139,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-2',
       'detail-type': 'Transcribe',
@@ -134,9 +155,7 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/session456/transcript.json',
         },
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify EventBridgeClient.send was called with correct source and detail type
     expect(mockEventBridgeSend).toHaveBeenCalled();
@@ -165,7 +184,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-3',
       'detail-type': 'Transcribe',
@@ -181,9 +200,7 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/testsession789/transcript.json',
         },
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify event was sent and transcript stored with correct sessionId
     expect(mockEventBridgeSend).toHaveBeenCalled();
@@ -216,7 +233,7 @@ describe('transcribe-completed handler', () => {
     // EventBridge emission fails
     mockEventBridgeSend.mockRejectedValueOnce(new Error('EventBridge unavailable'));
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-4',
       'detail-type': 'Transcribe',
@@ -232,10 +249,10 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/sessionnonblock/transcript.json',
         },
       },
-    };
+    }));
 
-    // Should not throw even if event emission fails
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should not fail even if event emission fails
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Verify updateTranscriptStatus was still called (transcript persisted)
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -266,7 +283,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-5',
       'detail-type': 'Transcribe',
@@ -282,9 +299,7 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/sessionempty/transcript.json',
         },
       },
-    };
-
-    await handler(event);
+    }));
 
     // Transcript should be stored as empty
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -300,7 +315,7 @@ describe('transcribe-completed handler', () => {
   });
 
   it('handles FAILED Transcribe job status', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-6',
       'detail-type': 'Transcribe',
@@ -316,9 +331,9 @@ describe('transcribe-completed handler', () => {
           FailureReason: 'Audio quality too low',
         },
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should mark as failed but not emit event
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -332,7 +347,7 @@ describe('transcribe-completed handler', () => {
   });
 
   it('handles invalid job name format gracefully', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-7',
       'detail-type': 'Transcribe',
@@ -348,9 +363,9 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/transcript.json',
         },
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should not attempt to process
     expect(mockUpdateTranscriptStatus).not.toHaveBeenCalled();
@@ -380,7 +395,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-speaker-grouping',
       'detail-type': 'Transcribe',
@@ -394,9 +409,7 @@ describe('transcribe-completed handler', () => {
         TranscriptionJobName: 'vnl-speakersession-1234567890',
         TranscriptionJob: { TranscriptFileUri: 's3://bucket/speakersession/transcript.json' },
       },
-    };
-
-    await handler(event);
+    }));
 
     // Should write speaker-segments.json to S3 (second S3 call)
     const s3Calls = mockS3Send.mock.calls;
@@ -441,7 +454,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    await handler(makeSqsEvent({
       version: '0',
       id: 'test-put-object',
       'detail-type': 'Transcribe',
@@ -455,9 +468,7 @@ describe('transcribe-completed handler', () => {
         TranscriptionJobName: 'vnl-putobjectsession-1234567890',
         TranscriptionJob: { TranscriptFileUri: 's3://bucket/putobjectsession/transcript.json' },
       },
-    };
-
-    await handler(event);
+    }));
 
     // Verify S3 PutObject was attempted (second call)
     expect(mockS3Send).toHaveBeenCalledTimes(2);
@@ -491,7 +502,7 @@ describe('transcribe-completed handler', () => {
 
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-s3-fail-nonblocking',
       'detail-type': 'Transcribe',
@@ -505,10 +516,10 @@ describe('transcribe-completed handler', () => {
         TranscriptionJobName: 'vnl-resilient-1234567890',
         TranscriptionJob: { TranscriptFileUri: 's3://bucket/resilient/transcript.json' },
       },
-    };
+    }));
 
-    // Should not throw
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should not fail
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Transcript status should still be set to available (not blocked by S3 failure)
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -526,7 +537,7 @@ describe('transcribe-completed handler', () => {
   it('handles S3 fetch failure gracefully', async () => {
     mockS3Send.mockRejectedValueOnce(new Error('S3 access denied'));
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-8',
       'detail-type': 'Transcribe',
@@ -542,9 +553,9 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/sessions3fail/transcript.json',
         },
       },
-    };
+    }));
 
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should mark as failed
     expect(mockUpdateTranscriptStatus).toHaveBeenCalledWith(
@@ -577,7 +588,7 @@ describe('transcribe-completed handler', () => {
     // But event emission should still be attempted (or catch and continue)
     mockEventBridgeSend.mockResolvedValueOnce({});
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       version: '0',
       id: 'test-event-9',
       'detail-type': 'Transcribe',
@@ -593,10 +604,10 @@ describe('transcribe-completed handler', () => {
           TranscriptFileUri: 's3://bucket/sessionddbfail/transcript.json',
         },
       },
-    };
+    }));
 
-    // Handler should catch the error and mark as failed
-    await expect(handler(event)).resolves.not.toThrow();
+    // Handler should catch the error
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Should attempt to update (which will fail)
     expect(mockUpdateTranscriptStatus).toHaveBeenCalled();

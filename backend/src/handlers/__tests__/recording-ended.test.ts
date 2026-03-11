@@ -1,10 +1,10 @@
 /**
  * Tests for recording-ended handler
- * EventBridge handler for IVS Recording End events
+ * SQS-wrapped handler for IVS Recording End events
  * Covers both IVS Low-Latency (broadcast) and IVS RealTime Stage (hangout) event shapes.
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../recording-ended';
 import { updateRecordingMetadata, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount } from '../../repositories/session-repository';
 
@@ -33,6 +33,27 @@ const mockComputeAndStoreReactionSummary = computeAndStoreReactionSummary as jes
 const mockGetHangoutParticipants = getHangoutParticipants as jest.MockedFunction<typeof getHangoutParticipants>;
 const mockUpdateParticipantCount = updateParticipantCount as jest.MockedFunction<typeof updateParticipantCount>;
 
+function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
+  return {
+    Records: [{
+      messageId: 'test-message-id',
+      receiptHandle: 'test-receipt-handle',
+      body: JSON.stringify(ebEvent),
+      attributes: {
+        ApproximateReceiveCount: '1',
+        SentTimestamp: '1234567890',
+        SenderId: 'test-sender',
+        ApproximateFirstReceiveTimestamp: '1234567890',
+      },
+      messageAttributes: {},
+      md5OfBody: 'test-md5',
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-recording-ended',
+      awsRegion: 'us-east-1',
+    }],
+  };
+}
+
 describe('recording-ended handler', () => {
   const originalEnv = process.env;
 
@@ -51,7 +72,7 @@ describe('recording-ended handler', () => {
   });
 
   it('processes Recording End event and transitions session to ENDED', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -68,14 +89,13 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
+    }));
 
-    // Should not throw (even if DynamoDB connection fails in unit test)
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('releases channel and chat room resources back to pool', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -92,14 +112,13 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
+    }));
 
-    // Should complete without error
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('detects Channel ARN format and calls findSessionByChannelArn', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -116,14 +135,13 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/channel/',
         recording_duration_ms: 300000,
       },
-    };
+    }));
 
-    // Should complete without error
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('detects Stage ARN format and calls findSessionByStageArn', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -140,14 +158,13 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/stage/',
         recording_duration_ms: 300000,
       },
-    };
+    }));
 
-    // Should complete without error
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('logs error and returns early if ARN format unrecognized', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -164,14 +181,16 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/unknown/',
         recording_duration_ms: 300000,
       },
-    };
+    }));
 
     // Should complete without error (logs warning and returns early)
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('updates recording metadata for Stage sessions', async () => {
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Recording State Change',
@@ -188,12 +207,9 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'hangouts/session-123/',
         recording_duration_ms: 450000,
       },
-    };
+    }));
 
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-
-    // Should complete without error and update recording metadata
-    await expect(handler(event)).resolves.not.toThrow();
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   // =========================================================================
@@ -209,7 +225,9 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
-    const event = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'stage-event-id',
       'detail-type': 'IVS Participant Recording State Change',
@@ -226,9 +244,9 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'stage-id/session-id/participant-id/2024-01-01T00-00-00Z',
         recording_duration_ms: 450000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-    await expect(handler(event as any)).resolves.not.toThrow();
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(0);
     expect(mockFindSessionByStageArn).toHaveBeenCalledWith('test-table', 'arn:aws:ivs:us-east-1:123456789012:stage/hangout123');
   });
 
@@ -242,7 +260,9 @@ describe('recording-ended handler', () => {
     } as any);
 
     const prefix = 'stage-id/session-id/participant-id/2024-01-01T00-00-00Z';
-    const event = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
       'version': '0',
       'id': 'stage-url-test',
       'detail-type': 'IVS Participant Recording State Change',
@@ -259,9 +279,8 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: prefix,
         recording_duration_ms: 450000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-    await handler(event as any);
+    }));
+
     expect(mockUpdateRecordingMetadata).toHaveBeenCalledWith(
       'test-table',
       'hangout-session-123',
@@ -282,7 +301,9 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
-    const event = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
       'version': '0',
       'id': 'stage-status-test',
       'detail-type': 'IVS Participant Recording State Change',
@@ -299,9 +320,8 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'some/prefix',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-    await handler(event as any);
+    }));
+
     expect(mockUpdateRecordingMetadata).toHaveBeenCalledWith(
       'test-table',
       'hangout-session-123',
@@ -331,7 +351,9 @@ describe('recording-ended handler', () => {
       surprised: 3,
     });
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Participant Recording State Change',
@@ -348,10 +370,7 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-
-    await handler(event);
+    }));
 
     expect(mockComputeAndStoreReactionSummary).toHaveBeenCalledWith('test-table', 'session-with-reactions');
   });
@@ -371,7 +390,9 @@ describe('recording-ended handler', () => {
 
     mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Reaction summary computation failed'));
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Participant Recording State Change',
@@ -388,11 +409,10 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+    }));
 
-    // Should not throw - pool release should still happen
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should not fail - pool release should still happen
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Verify pool release was called despite reaction summary error
     expect(mockReleasePoolResource).toHaveBeenCalled();
@@ -410,7 +430,9 @@ describe('recording-ended handler', () => {
 
     mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Test reaction error'));
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'test-event-id',
       'detail-type': 'IVS Participant Recording State Change',
@@ -427,11 +449,10 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+    }));
 
-    // Verify the handler completes without throwing even when reaction summary fails (non-blocking)
-    await expect(handler(event)).resolves.toBeUndefined();
+    // Verify the handler completes without failing (non-blocking)
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   // =========================================================================
@@ -454,7 +475,9 @@ describe('recording-ended handler', () => {
       { sessionId: 'hangout-participants', userId: 'user-3', displayName: 'user-3', participantId: 'p-3', joinedAt: '2024-01-01T00:03:00Z' },
     ]);
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
       'version': '0',
       'id': 'participant-count-test',
       'detail-type': 'IVS Participant Recording State Change',
@@ -471,10 +494,7 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-
-    await handler(event);
+    }));
 
     expect(mockGetHangoutParticipants).toHaveBeenCalledWith('test-table', 'hangout-participants');
     expect(mockUpdateParticipantCount).toHaveBeenCalledWith('test-table', 'hangout-participants', 3);
@@ -488,7 +508,9 @@ describe('recording-ended handler', () => {
     // and our mock returns Items: [], the handler returns early with "No session found".
     // This test verifies getHangoutParticipants is NOT called for channel ARN events.
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
       'version': '0',
       'id': 'broadcast-skip-test',
       'detail-type': 'IVS Recording State Change',
@@ -505,10 +527,7 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
-
-    await handler(event);
+    }));
 
     // getHangoutParticipants should NOT be called for broadcast sessions
     expect(mockGetHangoutParticipants).not.toHaveBeenCalled();
@@ -529,7 +548,9 @@ describe('recording-ended handler', () => {
 
     mockGetHangoutParticipants.mockRejectedValueOnce(new Error('DynamoDB query failed'));
 
-    const event: EventBridgeEvent<string, Record<string, any>> = {
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
       'version': '0',
       'id': 'count-error-test',
       'detail-type': 'IVS Participant Recording State Change',
@@ -546,11 +567,10 @@ describe('recording-ended handler', () => {
         recording_s3_key_prefix: 'prefix/',
         recording_duration_ms: 300000,
       },
-    };
-    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+    }));
 
-    // Should not throw - participant count error is non-blocking
-    await expect(handler(event)).resolves.not.toThrow();
+    // Should not fail - participant count error is non-blocking
+    expect(result.batchItemFailures).toHaveLength(0);
 
     // Pool release should still happen
     expect(mockReleasePoolResource).toHaveBeenCalled();

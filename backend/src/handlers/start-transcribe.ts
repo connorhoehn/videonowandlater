@@ -1,4 +1,10 @@
-import { EventBridgeEvent } from 'aws-lambda';
+/**
+ * SQS-wrapped handler that starts AWS Transcribe jobs when recordings are available.
+ * Triggered by 'Upload Recording Available' events from the MediaConvert completion handler.
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support.
+ */
+
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
 import { Logger } from '@aws-lambda-powertools/logger';
 
@@ -14,13 +20,7 @@ interface UploadRecordingAvailableDetail {
   recordingHlsUrl?: string;
 }
 
-/**
- * EventBridge handler that starts AWS Transcribe jobs when recordings are available.
- * Triggered by 'Upload Recording Available' events from the MediaConvert completion handler.
- *
- * @param event - EventBridge event containing sessionId and recordingHlsUrl
- */
-export async function handler(
+async function processEvent(
   event: EventBridgeEvent<'Upload Recording Available', UploadRecordingAvailableDetail>
 ): Promise<void> {
   const startMs = Date.now();
@@ -89,3 +89,22 @@ export async function handler(
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error instanceof Error ? error.message : String(error) });
   }
 }
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<'Upload Recording Available', UploadRecordingAvailableDetail>;
+      await processEvent(ebEvent);
+    } catch (err: any) {
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures: failures };
+};

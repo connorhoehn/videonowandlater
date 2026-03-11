@@ -1,9 +1,10 @@
 /**
- * EventBridge handler for Transcribe job completion events
+ * SQS-wrapped handler for Transcribe job completion events
  * Processes successful Transcribe jobs, fetches transcripts from S3, and stores on session records
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support.
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { Logger } from '@aws-lambda-powertools/logger';
@@ -115,9 +116,9 @@ function buildSpeakerSegments(items: NonNullable<TranscribeOutput['results']['it
   return segments;
 }
 
-export const handler = async (
+async function processEvent(
   event: EventBridgeEvent<string, Record<string, any>>
-): Promise<void> => {
+): Promise<void> {
   const startMs = Date.now();
   const tableName = process.env.TABLE_NAME!;
   const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
@@ -273,4 +274,23 @@ export const handler = async (
       logger.error('Failed to update transcript status:', { errorMessage: updateError.message });
     }
   }
+}
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
+      await processEvent(ebEvent);
+    } catch (err: any) {
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures: failures };
 };

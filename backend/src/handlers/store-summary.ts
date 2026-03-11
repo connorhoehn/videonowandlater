@@ -1,11 +1,12 @@
 /**
- * EventBridge triggered Lambda handler for generating and storing AI summaries
+ * SQS-wrapped Lambda handler for generating and storing AI summaries
  * Triggered when a transcript is stored on a session record (Phase 19 completion)
  * Fetches transcript text from S3 using the provided URI, invokes Bedrock Claude API
- * to generate a summary, then stores on session record
+ * to generate a summary, then stores on session record.
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support.
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { Logger } from '@aws-lambda-powertools/logger';
@@ -21,9 +22,9 @@ interface TranscriptStoreDetail {
   transcriptS3Uri: string;
 }
 
-export const handler = async (
+async function processEvent(
   event: EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>
-): Promise<void> => {
+): Promise<void> {
   const { sessionId, transcriptS3Uri } = event.detail;
   const tableName = process.env.TABLE_NAME!;
   const bedrockRegion = process.env.BEDROCK_REGION || process.env.AWS_REGION!;
@@ -162,4 +163,23 @@ export const handler = async (
 
     // Don't throw — EventBridge can retry if configured; transcript is safe
   }
+}
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>;
+      await processEvent(ebEvent);
+    } catch (err: any) {
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures: failures };
 };

@@ -1,10 +1,11 @@
 /**
- * EventBridge handler for IVS Recording End events
+ * SQS-wrapped handler for IVS Recording End events
  * Handles both IVS Low-Latency (broadcast) and IVS RealTime Stage (hangout) recording-end events.
  * Transitions session from ENDING to ENDED and releases pool resources.
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support.
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { GetCommand, UpdateCommand as UpdateCommandDirect } from '@aws-sdk/lib-dynamodb';
@@ -44,9 +45,9 @@ interface StageParticipantRecordingEndDetail {
   recording_duration_ms: number;
 }
 
-export const handler = async (
+async function processEvent(
   event: EventBridgeEvent<string, Record<string, any>>
-): Promise<void> => {
+): Promise<void> {
   // Required environment variables
   const tableName = process.env.TABLE_NAME!;
   const cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN!;
@@ -467,4 +468,23 @@ export const handler = async (
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
     // Don't throw - EventBridge will retry on error
   }
+}
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
+      await processEvent(ebEvent);
+    } catch (err: any) {
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures: failures };
 };

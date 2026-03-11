@@ -239,8 +239,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 29-01-PLAN.md — To be planned
-- [ ] 29-02-PLAN.md — To be planned
+- [ ] 29-01-PLAN.md — useHlsPlayer hook + QualitySelector component (hls.js install, ABR quality switching, Safari fallback)
+- [ ] 29-02-PLAN.md — VideoPage.tsx + App.tsx routing + UploadViewer redirect + UploadActivityCard nav update
 
 ---
 

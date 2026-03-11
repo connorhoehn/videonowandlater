@@ -496,6 +496,11 @@ export async function updateTranscriptStatus(
     ':inc': 1,
   };
 
+  // Always record when transcriptStatus last changed (used by scan-stuck-sessions 2h threshold)
+  updateParts.push('#transcriptStatusUpdatedAt = :now');
+  expressionAttributeNames['#transcriptStatusUpdatedAt'] = 'transcriptStatusUpdatedAt';
+  expressionAttributeValues[':now'] = new Date().toISOString();
+
   if (s3Path !== undefined) {
     updateParts.push('#transcriptS3Path = :s3Path');
     expressionAttributeNames['#transcriptS3Path'] = 'transcriptS3Path';

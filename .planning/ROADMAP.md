@@ -74,6 +74,95 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 </details>
 
+## v1.6 — Pipeline Durability, Cost & Debug
+
+**Milestone Goal:** Replace brittle fire-and-forget EventBridge→Lambda with SQS-backed durable queues for all critical pipeline steps, harden handlers to throw on failure (enabling real retries), cut AI summary costs by switching to Nova Lite, and ship a CLI debug tool for pipeline introspection.
+
+**Phases:**
+
+| Phase | Name | Goal |
+|-------|------|------|
+| 31 | SQS Pipeline Buffers | Add SQS queues between EventBridge and the 5 critical pipeline Lambdas for at-least-once delivery with automatic retries on failure |
+| 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
+| 33 | Pipeline Alarms & Dashboard | CloudWatch alarms on DLQ depth and Lambda error rate, SNS email alerts, and a CloudWatch dashboard for pipeline health at a glance |
+| 34 | Nova Lite for AI Summaries | Switch store-summary.ts from Nova Pro/Claude to amazon.nova-lite-v1:0, make model configurable via env var, add token cost logging |
+| 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
+
+- [ ] Phase 31: SQS Pipeline Buffers (2/2 plans)
+  - [ ] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
+  - [ ] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
+- [ ] Phase 32: Handler Hardening & Idempotency (0/? plans)
+- [ ] Phase 33: Pipeline Alarms & Dashboard (0/? plans)
+- [ ] Phase 34: Nova Lite for AI Summaries (0/? plans)
+- [ ] Phase 35: Pipeline Debug CLI (0/? plans)
+
+### Phase 31: SQS Pipeline Buffers
+
+**Goal:** Replace the brittle EventBridge→Lambda direct invocation pattern with EventBridge→SQS→Lambda for all 5 critical pipeline handlers (recording-ended, transcode-completed, transcribe-completed, store-summary, start-transcribe), achieving at-least-once delivery with automatic SQS-driven retries and per-queue DLQs.
+
+**Requirements:** DUR-01, DUR-02, DUR-03, DUR-04, DUR-05
+
+**Plans:** 2 plans
+
+**Success Criteria:**
+1. All 5 pipeline Lambdas are triggered via SQS event source mappings (not direct EventBridge invocation)
+2. Each pipeline SQS queue has a DLQ configured with 14-day retention and maxReceiveCount=3
+3. SQS visibility timeout on each queue is set to 6× the Lambda timeout
+4. EventBridge rules target SQS queues (not Lambdas) with sqs:SendMessage grants
+5. Existing Lambda direct invocation permissions removed for replaced handlers
+6. All existing backend tests pass
+
+### Phase 32: Handler Hardening & Idempotency
+
+**Goal:** Remove broad error suppression in the 5 pipeline Lambda handlers so they throw on critical failures (enabling SQS retry semantics), add idempotency guards to prevent duplicate job submissions on retry, and fix the PIPE-06 trap where sessions stuck with transcriptStatus='processing' for >2h are permanently excluded from recovery.
+
+**Requirements:** HARD-01, HARD-02, HARD-03, HARD-04, HARD-05
+
+**Success Criteria:**
+1. recording-ended.ts throws on MediaConvert submission failure
+2. transcode-completed.ts throws on Transcribe submission failure; idempotency key prevents duplicate Transcribe jobs
+3. on-mediaconvert-complete.ts throws on EventBridge PutEvents failure
+4. scan-stuck-sessions.ts recovers sessions where transcriptStatus='processing' and updatedAt >2h ago
+5. transcribe-completed.ts logs structured error with raw job name when parsing fails (no silent return)
+6. All backend tests pass (updated to cover new throw behavior)
+
+### Phase 33: Pipeline Alarms & Dashboard
+
+**Goal:** Add CloudWatch alarms for pipeline DLQ depth and Lambda error rates, wire them to an SNS topic for email notification, and create a CloudWatch dashboard that shows the health of all 5 pipeline handlers in a single view.
+
+**Requirements:** OBS-01, OBS-02, OBS-03, OBS-04
+
+**Success Criteria:**
+1. CloudWatch alarm fires when any pipeline SQS DLQ has ApproximateNumberOfMessagesVisible > 0
+2. CloudWatch alarm fires when any pipeline Lambda has Errors > 0 in a 5-minute window
+3. SNS topic receives all alarm notifications; alertEmail CDK context variable subscribes email endpoint
+4. CloudWatch dashboard VNL-Pipeline shows invocation count, error count, DLQ depth per handler
+
+### Phase 34: Nova Lite for AI Summaries
+
+**Goal:** Switch store-summary.ts from amazon.nova-pro-v1:0 / Anthropic Claude to amazon.nova-lite-v1:0 as the default Bedrock model for AI summaries, make the model ID configurable via a Lambda environment variable, and add token count logging for cost tracking.
+
+**Requirements:** COST-01, COST-02, COST-03
+
+**Success Criteria:**
+1. store-summary.ts uses amazon.nova-lite-v1:0 as the default model
+2. BEDROCK_MODEL_ID env var overrides the model at runtime (CDK passes the value)
+3. store-summary.ts logs inputTokens, outputTokens, and modelId with every summarization
+4. Bedrock IAM policy updated to grant access to nova-lite model ARN
+5. All backend tests pass
+
+### Phase 35: Pipeline Debug CLI
+
+**Goal:** Ship two developer CLI tools: debug-pipeline.js reads DynamoDB and prints a full human-readable pipeline status report for a session; replay-pipeline.js publishes the correct EventBridge event to resume the pipeline from any stage for a given sessionId.
+
+**Requirements:** DEVEX-01, DEVEX-02, DEVEX-03
+
+**Success Criteria:**
+1. tools/debug-pipeline.js --sessionId <id> prints all pipeline fields from DynamoDB (transcriptStatus, aiSummaryStatus, mediaconvertJobId, recoveryAttemptCount, etc.)
+2. tools/replay-pipeline.js --sessionId <id> --from <stage> publishes the correct EventBridge event for stages: recording-ended, mediaconvert, transcribe, summary
+3. Both tools use AWS SDK v3 credential chain; AWS_REGION env var or us-east-1 default
+4. Both tools handle missing sessions and invalid stage names with clear error messages
+
 ## Progress
 
-All milestones shipped. Start next milestone with `/gsd:new-milestone`.
+v1.5 shipped. v1.6 in progress — Phase 31 planned (2 plans).

@@ -698,6 +698,7 @@ export async function createUploadSession(
     status: SessionStatus.CREATING,
     claimedResources: { chatRoom: '' },
     createdAt: now,
+    startedAt: now,
     version: 1,
     // Upload tracking fields
     uploadStatus: 'pending',

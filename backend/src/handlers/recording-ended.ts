@@ -316,9 +316,11 @@ async function processEvent(
       }
     }
 
-    // Submit MediaConvert job to convert HLS → MP4 for transcription (best-effort, non-blocking)
-    if (finalStatus === 'available') {
-      try {
+    // Critical: release pool resources even if MediaConvert throws
+    try {
+      // Submit MediaConvert job to convert HLS → MP4 for transcription
+      // Throws on failure so SQS can retry via batchItemFailures
+      if (finalStatus === 'available') {
         const mediaConvertClient = new MediaConvertClient({ region: awsRegion });
         const epochMs = Date.now();
         const jobName = `vnl-${sessionId}-${epochMs}`;
@@ -434,31 +436,23 @@ async function processEvent(
           jobName,
           sessionId,
         });
-      } catch (mediaConvertError: any) {
-        logger.error('Failed to submit MediaConvert job (non-blocking):', {
-          sessionId,
-          error: mediaConvertError.message,
-          code: mediaConvertError.Code || mediaConvertError.$metadata?.httpStatusCode,
-          type: mediaConvertError.name,
-        });
-        // Do NOT throw — transcription is best-effort, don't block session cleanup
       }
-    }
+    } finally {
+      // Pool resource release always executes, even if MediaConvert throws
+      if (session.claimedResources?.channel) {
+        await releasePoolResource(tableName, session.claimedResources.channel);
+        logger.info('Released channel resource:', { channel: session.claimedResources.channel });
+      }
 
-    // Release pool resources (Channel or Stage)
-    if (session.claimedResources?.channel) {
-      await releasePoolResource(tableName, session.claimedResources.channel);
-      logger.info('Released channel resource:', { channel: session.claimedResources.channel });
-    }
+      if (session.claimedResources?.stage) {
+        await releasePoolResource(tableName, session.claimedResources.stage);
+        logger.info('Released stage resource:', { stage: session.claimedResources.stage });
+      }
 
-    if (session.claimedResources?.stage) {
-      await releasePoolResource(tableName, session.claimedResources.stage);
-      logger.info('Released stage resource:', { stage: session.claimedResources.stage });
-    }
-
-    if (session.claimedResources?.chatRoom) {
-      await releasePoolResource(tableName, session.claimedResources.chatRoom);
-      logger.info('Released chat room resource:', { chatRoom: session.claimedResources.chatRoom });
+      if (session.claimedResources?.chatRoom) {
+        await releasePoolResource(tableName, session.claimedResources.chatRoom);
+        logger.info('Released chat room resource:', { chatRoom: session.claimedResources.chatRoom });
+      }
     }
 
     logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
@@ -466,7 +460,7 @@ async function processEvent(
   } catch (error: any) {
     logger.error('Failed to clean up session:', { errorMessage: error.message });
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
-    // Don't throw - EventBridge will retry on error
+    throw error; // Let SQS outer handler catch this and report batchItemFailure
   }
 }
 

@@ -14,6 +14,13 @@ jest.mock('../../lib/dynamodb-client', () => ({
   })),
 }));
 
+jest.mock('@aws-sdk/client-mediaconvert', () => ({
+  MediaConvertClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn().mockResolvedValue({ Job: { Id: 'mock-job-id-123' } }),
+  })),
+  CreateJobCommand: jest.fn().mockImplementation((input: any) => ({ input })),
+}));
+
 jest.mock('../../repositories/session-repository', () => ({
   updateSessionStatus: jest.fn().mockResolvedValue(undefined),
   updateRecordingMetadata: jest.fn().mockResolvedValue(undefined),
@@ -573,6 +580,95 @@ describe('recording-ended handler', () => {
     expect(result.batchItemFailures).toHaveLength(0);
 
     // Pool release should still happen
+    expect(mockReleasePoolResource).toHaveBeenCalled();
+  });
+
+  // =========================================================================
+  // MediaConvert failure → SQS batchItemFailures tests
+  // =========================================================================
+
+  it('returns batchItemFailure when MediaConvert submission fails', async () => {
+    const { MediaConvertClient } = require('@aws-sdk/client-mediaconvert');
+
+    // Override to make MediaConvertClient.send throw
+    (MediaConvertClient as jest.Mock).mockImplementationOnce(() => ({
+      send: jest.fn().mockRejectedValueOnce(new Error('MediaConvert service unavailable')),
+    }));
+
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'mc-fail-session',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { stage: 'arn:aws:ivs:us-east-1:123456789012:stage/hangout-fail', chatRoom: 'arn:aws:ivschat:room1' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'mc-fail-event',
+      'detail-type': 'IVS Participant Recording State Change',
+      source: 'aws.ivs',
+      account: '123456789012',
+      time: '2024-01-01T00:05:00Z',
+      region: 'us-east-1',
+      resources: ['arn:aws:ivs:us-east-1:123456789012:stage/hangout-fail'],
+      detail: {
+        session_id: 'st-test-stream',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/',
+        recording_duration_ms: 300000,
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+  });
+
+  it('releases pool resources even when MediaConvert submission fails', async () => {
+    const { MediaConvertClient } = require('@aws-sdk/client-mediaconvert');
+    const { releasePoolResource } = require('../../repositories/resource-pool-repository');
+    const mockReleasePoolResource = releasePoolResource as jest.MockedFunction<any>;
+
+    (MediaConvertClient as jest.Mock).mockImplementationOnce(() => ({
+      send: jest.fn().mockRejectedValueOnce(new Error('MediaConvert service unavailable')),
+    }));
+
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'mc-fail-release-session',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { stage: 'arn:aws:ivs:us-east-1:123456789012:stage/hangout-fail2', chatRoom: 'arn:aws:ivschat:room2' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+    await handler(makeSqsEvent({
+      version: '0',
+      id: 'mc-fail-release-event',
+      'detail-type': 'IVS Participant Recording State Change',
+      source: 'aws.ivs',
+      account: '123456789012',
+      time: '2024-01-01T00:05:00Z',
+      region: 'us-east-1',
+      resources: ['arn:aws:ivs:us-east-1:123456789012:stage/hangout-fail2'],
+      detail: {
+        session_id: 'st-test-stream',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/',
+        recording_duration_ms: 300000,
+      },
+    }));
+
+    // Pool resources must be released even when MediaConvert throws
     expect(mockReleasePoolResource).toHaveBeenCalled();
   });
 });

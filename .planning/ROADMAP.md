@@ -82,16 +82,21 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 | Phase | Name | Goal |
 |-------|------|------|
-| 31 | 2/2 | Complete    | 2026-03-11 | 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
+| 31 | SQS Pipeline Buffers | Complete (2026-03-11) |
+| 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
 | 33 | Pipeline Alarms & Dashboard | CloudWatch alarms on DLQ depth and Lambda error rate, SNS email alerts, and a CloudWatch dashboard for pipeline health at a glance |
 | 34 | Nova Lite for AI Summaries | Switch store-summary.ts from Nova Pro/Claude to amazon.nova-lite-v1:0, make model configurable via env var, add token cost logging |
 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
 
 - [x] Phase 31: SQS Pipeline Buffers (2/2 plans) (completed 2026-03-11)
-  - [ ] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
-  - [ ] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
-- [ ] Phase 32: Handler Hardening & Idempotency (0/? plans)
-- [ ] Phase 33: Pipeline Alarms & Dashboard (1/1 plans)
+  - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
+  - [x] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
+- [ ] Phase 32: Handler Hardening & Idempotency (4 plans)
+  - [ ] 32-01-PLAN.md — recording-ended: remove MediaConvert error suppression, move pool release to finally
+  - [ ] 32-02-PLAN.md — transcode-completed: stable idempotency key + ConflictException handling; transcribe-completed: logger.error with rawJobName on parse failure
+  - [ ] 32-03-PLAN.md — on-mediaconvert-complete: remove PutEvents inner catch, outer catch rethrows
+  - [ ] 32-04-PLAN.md — scan-stuck-sessions: stale-processing threshold; session-repository: transcriptStatusUpdatedAt timestamp
+- [ ] Phase 33: Pipeline Alarms & Dashboard (1 plan)
   - [ ] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
 - [ ] Phase 34: Nova Lite for AI Summaries (1 plan)
   - [ ] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
@@ -119,6 +124,8 @@ See milestones/v1.5-ROADMAP.md for full details.
 **Goal:** Remove broad error suppression in the 5 pipeline Lambda handlers so they throw on critical failures (enabling SQS retry semantics), add idempotency guards to prevent duplicate job submissions on retry, and fix the PIPE-06 trap where sessions stuck with transcriptStatus='processing' for >2h are permanently excluded from recovery.
 
 **Requirements:** HARD-01, HARD-02, HARD-03, HARD-04, HARD-05
+
+**Plans:** 4 plans
 
 **Success Criteria:**
 1. recording-ended.ts throws on MediaConvert submission failure
@@ -171,4 +178,4 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 ## Progress
 
-v1.5 shipped. v1.6 in progress — Phase 31 complete (2 plans), Phase 33 planned (1 plan).
+v1.5 shipped. v1.6 in progress — Phase 31 complete (2 plans), Phase 32 planned (4 plans).

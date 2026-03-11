@@ -8,49 +8,17 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Latest Milestone: v1.3 Secure Sharing (SHIPPED 2026-03-06)
+## Latest Milestone: v1.5 Pipeline Reliability, Moderation & Upload Experience (SHIPPED 2026-03-11)
 
-**Accomplished:** Enable private broadcasts with secure viewer links and granular access control via JWT tokens.
-
-**Delivered:**
-- ✅ Private broadcast flag: Session.isPrivate field with backward compatibility
-- ✅ Private channel pool management: isolated resource pool for private sessions
-- ✅ ES384 JWT token generation: time-limited tokens with channel ARN and access control
-- ✅ Activity feed privacy: private sessions hidden from non-owners
-- ✅ API Gateway integration: POST /sessions/{sessionId}/playback-token endpoint wired
-
-## Previous Milestone: v1.2 Activity Feed & Intelligence (SHIPPED 2026-03-06)
-
-**Accomplished:** Surface richer session context on the homepage (hangout activity cards, reaction summary counts, horizontal recording slider, and activity feed), and add an automated transcription and AI summary pipeline to every recording.
+**Accomplished:** Hardened the recording/transcription/AI pipeline with structured observability and automatic recovery, added broadcaster bounce/kick moderation and per-message reporting, and built a rich dedicated player page for uploaded videos.
 
 **Delivered:**
-- ✅ Homepage redesign: horizontal recording slider (3-4 visible, scrollable) + activity feed below
-- ✅ Hangout activity cards: participants, message count, duration with relative timestamps
-- ✅ Reaction summary counts (per emoji type) displayed on recording cards and replay info panel
-- ✅ Transcription pipeline: automatic S3 recording → Amazon Transcribe → transcript stored on session
-- ✅ AI summary pipeline: transcript → Bedrock/Claude Sonnet → one-paragraph summary on every recording
-- ✅ Video uploads: users can upload pre-recorded videos (MOV/MP4) with automatic adaptive bitrate encoding
-
-## Latest Milestone: v1.4 Creator Studio & Stream Quality (SHIPPED 2026-03-10)
-
-**Accomplished:** Professional broadcast tooling — real-time stream quality dashboard and creator spotlight feature.
-
-**Delivered:**
-- ✅ Stream quality dashboard: bitrate, FPS, health score overlay during live broadcast (Phase 23)
-- ✅ Creator spotlight: broadcaster can feature another live creator with badge + modal (Phase 24)
-- ✅ Viewer spotlight display: featured creator link + badge visible to all viewers (Phase 24)
-- ✅ CDK wiring: GET /sessions/live + PUT /sessions/{sessionId}/spotlight endpoints (Phase 24)
-
-## Current Milestone: v1.5 Pipeline Reliability, Moderation & Upload Experience
-
-**Goal:** Harden the recording/transcription/AI pipeline, give broadcasters and users moderation tools, and build a dedicated rich player page for uploaded videos.
-
-**Target features:**
-- EventBridge pipeline audit with structured debug logging across all Lambda handlers
-- Cron-based recovery for stuck sessions (recordings that never reach transcription/summary)
-- Speaker-attributed transcripts using Transcribe diarization mapped to session usernames
-- Broadcaster bounce/kick controls + per-message report action for all chat users
-- Dedicated upload video player page (/video/:sessionId) with HLS adaptive bitrate, resolution selector, async comments, reactions, and transcript/AI summary panel
+- ✅ Structured CloudWatch logging across all 5 pipeline Lambdas with `sessionId` correlation (Phase 25)
+- ✅ Cron-based stuck session recovery: auto-detects and re-fires sessions stuck >45 min (Phase 26)
+- ✅ Speaker-attributed transcripts: Transcribe diarization with bubble-mode UI in replay and video player (Phase 27)
+- ✅ Chat moderation: broadcaster bounce/kick + per-message report + token blocklist + moderation log (Phase 28)
+- ✅ Upload video player: `/video/:sessionId` with HLS.js adaptive bitrate, quality selector, Safari fallback (Phase 29)
+- ✅ Upload video social: async timestamped comments, emoji reactions, collapsible AI summary + transcript panel (Phase 30)
 
 ## Requirements
 
@@ -79,28 +47,20 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-**v1.5 Milestone (Pipeline Reliability, Moderation & Upload Experience):**
+*No active requirements — planning next milestone.*
+
+### Just Validated (v1.5)
 
 - ✓ EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary) — Phase 25
 - ✓ Cron job identifies sessions stuck in pipeline for >45 min and re-fires appropriate recovery event — Phase 26
 - ✓ Transcripts include speaker diarization with labels mapped to session usernames — Phase 27
-- [ ] Broadcaster can bounce (kick) a user from their active stream
-- [ ] Any user can report a chat message via inline quick action (shown only on other users' messages)
-- [ ] Reports and bounces are recorded in a moderation log (DynamoDB)
-- [ ] Dedicated /video/:sessionId page for uploaded video playback with HLS adaptive bitrate
-- [ ] Video player supports manual resolution selection (quality levels from HLS manifest)
-- [ ] Upload video page supports async comments (timestamped, persistent, not live chat)
-- [ ] Upload video page shows reactions, transcript, and AI summary
-
-### Just Validated (v1.2)
-
-- ✓ Homepage redesigned with horizontal recording slider and activity feed — Phase 18
-- ✓ Hangout activity cards with participant list and message counts — Phase 16-18
-- ✓ Reaction summary counts stored and displayed on recordings — Phase 17-18
-- ✓ Transcription pipeline: automatic Transcribe integration for all recordings — Phase 19
-- ✓ AI summary pipeline: Bedrock/Claude generates one-paragraph summaries — Phase 20
-- ✓ Video upload support: multipart uploads with automatic MediaConvert processing — Phase 21
-- ✓ Private broadcasts with ES384 JWT token access control — Phase 22
+- ✓ Broadcaster can bounce (kick) a user from their active stream — Phase 28
+- ✓ Any user can report a chat message via inline quick action (shown only on other users' messages) — Phase 28
+- ✓ Reports and bounces are recorded in a moderation log (DynamoDB) — Phase 28
+- ✓ Dedicated /video/:sessionId page for uploaded video playback with HLS adaptive bitrate — Phase 29
+- ✓ Video player supports manual resolution selection (quality levels from HLS manifest) — Phase 29
+- ✓ Upload video page supports async comments (timestamped, persistent, not live chat) — Phase 30
+- ✓ Upload video page shows reactions, transcript, and AI summary — Phase 30
 
 ### Out of Scope
 
@@ -155,6 +115,13 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Speaker labels as "Speaker 1"/"Speaker 2" (no username mapping) | Composite audio prevents username attribution; Transcribe diarization works on mixed audio only | ✓ Phase 27 |
 | Diarized segments stored in S3 only (not DynamoDB inline) | 400KB DynamoDB item limit risk on long recordings; S3 pointer pattern avoids size constraint | ✓ Phase 27 |
 | Speaker bubble mode in TranscriptDisplay | Side-by-side bubble layout distinguishes speakers visually; plain mode preserved as fallback | ✓ Phase 27 |
+| DisconnectUser + token blocklist for bounce | DisconnectUser API alone is insufficient — bounced users reconnect immediately; token blocklist in create-chat-token.ts makes the ban durable | ✓ Phase 28 |
+| Moderation log PK:SESSION# SK:MOD#{ts}#{uuid} | Single-table pattern; DynamoDB query by session for full audit log per session | ✓ Phase 28 |
+| hls.js over IVS Player for quality switching | IVS Player SDK exposes no quality level API; hls.js 1.6 provides `nextLevel` setter and `hls.levels` array | ✓ Phase 29 |
+| hls.nextLevel (not currentLevel) for quality switch | currentLevel flushes buffer causing visible stall; nextLevel transitions at next fragment boundary | ✓ Phase 29 |
+| Comment SK COMMENT#{15-digit-padded-ms}#{uuid} | Zero-padded ms provides natural ascending sort via DynamoDB lexicographic ordering; uuid prevents collisions | ✓ Phase 30 |
+| syncTime === 0 disables comment composer | Prevents comments anchored at position 0 before playback starts; returned from useHlsPlayer for Phase 30 use | ✓ Phase 30 |
+| startedAt: now added to createUploadSession | create-reaction.ts requires startedAt for sessionRelativeTime computation — was missing on UPLOAD sessions causing 400 errors | ✓ Phase 30 |
 
 ## Current State
 
@@ -162,9 +129,12 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - v1.0 Gap Closure (4 phases, 11 plans) — shipped 2026-03-02
 - v1.1 Replay, Reactions & Hangouts (15 phases, 27 plans) — shipped 2026-03-05
 - v1.2 Activity Feed & Intelligence (7 phases, 19 plans) — shipped 2026-03-06
+- v1.3 Secure Sharing — shipped 2026-03-06 (as part of v1.2)
+- v1.4 Creator Studio & Stream Quality (3 phases, 9 plans) — shipped 2026-03-10
+- v1.5 Pipeline Reliability, Moderation & Upload Experience (9 phases, 26 plans) — shipped 2026-03-11
 
-**Codebase:** ~6,500 LOC TypeScript (frontend + backend + CDK), 343/343 backend tests passing
-**Next:** Planning v1.3 Secure Sharing milestone
+**Codebase:** ~32,100 LOC TypeScript (frontend + backend + CDK), 445/445 backend tests passing
+**Next:** Planning v1.6 milestone
 
 ---
-*Last updated: 2026-03-10 after Phase 27 — speaker-attributed transcripts complete (diarization in start-transcribe + transcribe-completed + speaker bubble UI in ReplayViewer)*
+*Last updated: 2026-03-11 after v1.5 — full milestone archived (pipeline observability, stuck session cron, diarized transcripts, chat moderation, upload video player with social layer)*

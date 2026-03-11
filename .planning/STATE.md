@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
 stopped_at: "Completed 32-03-PLAN.md — on-mediaconvert-complete hardening: remove PutEvents inner catch, outer catch throws, 16 tests passing"
-last_updated: "2026-03-11T23:09:21.620Z"
+last_updated: "2026-03-11T23:09:51.058Z"
 progress:
   total_phases: 5
   completed_phases: 4

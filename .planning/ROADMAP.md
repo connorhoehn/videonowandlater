@@ -83,7 +83,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 | Phase | Name | Goal |
 |-------|------|------|
 | 31 | SQS Pipeline Buffers | Complete (2026-03-11) |
-| 32 | 3/4 | In Progress|  | 33 | 1/1 | Complete   | 2026-03-11 | 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
+| 32 | 3/4 | In Progress|  | 33 | 1/1 | Complete    | 2026-03-11 | 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
 
 - [x] Phase 31: SQS Pipeline Buffers (2/2 plans) (completed 2026-03-11)
   - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes

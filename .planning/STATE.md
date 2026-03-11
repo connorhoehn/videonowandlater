@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
-status: planning
+status: completed
 stopped_at: "Completed 34-01-PLAN.md — nova-lite default model, token logging, CDK IAM update: 455 tests passing"
-last_updated: "2026-03-11T19:40:22.853Z"
+last_updated: "2026-03-11T19:42:30.044Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
-**Status:** Ready to plan
+**Status:** Milestone complete
 **Progress:** [█████████░] 93%
 **Last session:** 2026-03-11T19:40:22.850Z
 

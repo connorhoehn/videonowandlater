@@ -64,29 +64,23 @@ export const handler = async (
       // Publish event to trigger Phase 19 transcription pipeline
       const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
 
-      try {
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: 'vnl.upload',
-                DetailType: 'Upload Recording Available',
-                Detail: JSON.stringify({
-                  sessionId,
-                  recordingHlsUrl,
-                }),
-                EventBusName: eventBusName,
-              },
-            ],
-          })
-        );
+      await eventBridgeClient.send(
+        new PutEventsCommand({
+          Entries: [
+            {
+              Source: 'vnl.upload',
+              DetailType: 'Upload Recording Available',
+              Detail: JSON.stringify({
+                sessionId,
+                recordingHlsUrl,
+              }),
+              EventBusName: eventBusName,
+            },
+          ],
+        })
+      );
 
-        console.log(`Transcription pipeline triggered for session: ${sessionId}`);
-      } catch (error) {
-        console.error(`Failed to publish transcription event for ${sessionId}:`, error);
-        // Don't rethrow; session is already updated with HLS URL
-        // Store-transcript handler can still work if it queries session.recordingStatus='available'
-      }
+      console.log(`Transcription pipeline triggered for session: ${sessionId}`);
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed
       console.error(`MediaConvert job failed: ${jobName} (${jobId})`);
@@ -99,6 +93,6 @@ export const handler = async (
     }
   } catch (error) {
     console.error('on-mediaconvert-complete error:', error);
-    // Don't rethrow; EventBridge message is consumed even if handler fails
+    throw error; // Propagate to EventBridge for retry
   }
 };

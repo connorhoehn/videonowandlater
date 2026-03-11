@@ -28,7 +28,7 @@ async function processEvent(
   const { sessionId, transcriptS3Uri } = event.detail;
   const tableName = process.env.TABLE_NAME!;
   const bedrockRegion = process.env.BEDROCK_REGION || process.env.AWS_REGION!;
-  const modelId = process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0';
+  const modelId = process.env.BEDROCK_MODEL_ID || 'amazon.nova-lite-v1:0';
 
   const startMs = Date.now();
   logger.appendPersistentKeys({ sessionId });
@@ -94,7 +94,7 @@ async function processEvent(
         ],
       };
     } else {
-      // Nova Pro format (new default)
+      // Nova Lite format (new default)
       payload = {
         messages: [
           {
@@ -131,9 +131,18 @@ async function processEvent(
       // Claude response format
       summary = responseBody.content[0].text;
     } else {
-      // Nova Pro response format
+      // Nova Lite response format
       summary = responseBody.output.message.content[0].text;
     }
+
+    // Log token usage for cost tracking (COST-03)
+    // Note: usage field is Nova-specific; Claude uses different field names (input_tokens with underscores)
+    const usage = (responseBody as any).usage as { inputTokens?: number; outputTokens?: number } | undefined;
+    logger.info('Bedrock invocation metrics', {
+      modelId,
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
+    });
 
     // Store summary on session record (non-blocking — don't fail entire handler on error)
     try {

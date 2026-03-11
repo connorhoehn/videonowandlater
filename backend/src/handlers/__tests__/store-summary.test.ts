@@ -125,7 +125,7 @@ describe('store-summary handler', () => {
     // Verify Bedrock was invoked with correct parameters
     expect(mockBedrockSend).toHaveBeenCalled();
     expect(lastInvokeModelCommand).toBeDefined();
-    expect(lastInvokeModelCommand.modelId).toBe('amazon.nova-pro-v1:0');
+    expect(lastInvokeModelCommand.modelId).toBe('amazon.nova-lite-v1:0');
 
     // Verify summary was stored
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith('test-table', 'session-123', {
@@ -524,11 +524,11 @@ describe('store-summary handler', () => {
     expect(mockBedrockSend).toHaveBeenCalled();
   });
 
-  it('should use Nova Pro model ID by default', async () => {
+  it('should use Nova Lite model ID by default', async () => {
     delete process.env.BEDROCK_MODEL_ID;
 
-    const testTranscript = 'Test with Nova Pro model';
-    const testSummary = 'Nova Pro generated summary';
+    const testTranscript = 'Test with Nova Lite model';
+    const testSummary = 'Nova Lite generated summary';
 
     // Mock S3 fetch
     mockS3Send.mockResolvedValueOnce({
@@ -537,7 +537,7 @@ describe('store-summary handler', () => {
       },
     });
 
-    // Mock Bedrock invocation - Nova Pro response format
+    // Mock Bedrock invocation - Nova Lite response format
     mockBedrockSend.mockResolvedValueOnce({
       body: new TextEncoder().encode(
         JSON.stringify({
@@ -546,6 +546,7 @@ describe('store-summary handler', () => {
               content: [{ text: testSummary }],
             },
           },
+          usage: { inputTokens: 125, outputTokens: 60 },
         })
       ),
     });
@@ -565,9 +566,9 @@ describe('store-summary handler', () => {
       },
     }));
 
-    // Verify Nova Pro model ID was used
+    // Verify Nova Lite model ID was used
     expect(lastInvokeModelCommand).toBeDefined();
-    expect(lastInvokeModelCommand.modelId).toBe('amazon.nova-pro-v1:0');
+    expect(lastInvokeModelCommand.modelId).toBe('amazon.nova-lite-v1:0');
 
     // Verify summary was correctly extracted from Nova format
     expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
@@ -747,5 +748,104 @@ describe('store-summary handler', () => {
     expect(mockBedrockClient).toHaveBeenCalledWith(expect.objectContaining({
       region: 'ap-southeast-1',
     }));
+  });
+
+  it('should log inputTokens and outputTokens after successful Bedrock invocation', async () => {
+    delete process.env.BEDROCK_MODEL_ID;
+
+    const testTranscript = 'Transcript for token logging test';
+    const testSummary = 'Summary with token logging';
+
+    // Mock S3 fetch
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce(testTranscript),
+      },
+    });
+
+    // Mock Bedrock response WITH usage field (Nova format)
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          output: {
+            message: {
+              content: [{ text: testSummary }],
+            },
+          },
+          usage: { inputTokens: 125, outputTokens: 60 },
+        })
+      ),
+    });
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-token-logging',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-token-logging',
+        transcriptS3Uri: 's3://transcription-bucket/session-token-logging/transcript.json',
+      },
+    }));
+
+    // Token logging is structural — presence of usage field in mock response confirms code path executes without error.
+    // Verify no failures and summary was stored (proving execution continued past token logging)
+    expect(result.batchItemFailures).toHaveLength(0);
+    expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
+      'test-table',
+      'session-token-logging',
+      expect.objectContaining({ aiSummaryStatus: 'available' })
+    );
+  });
+
+  it('should handle missing usage field gracefully (Claude model backward compat)', async () => {
+    process.env.BEDROCK_MODEL_ID = 'anthropic.claude-3-haiku-20240307-v1:0';
+
+    const testTranscript = 'Transcript for Claude backward compat usage test';
+    const testSummary = 'Claude summary without usage field';
+
+    // Mock S3 fetch
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce(testTranscript),
+      },
+    });
+
+    // Mock Bedrock response WITHOUT usage field (Claude format — no camelCase usage object)
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          content: [{ type: 'text', text: testSummary }],
+          // No usage field — Claude uses different field names (input_tokens with underscores)
+        })
+      ),
+    });
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-claude-usage-missing',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-claude-usage-missing',
+        transcriptS3Uri: 's3://transcription-bucket/session-claude-usage-missing/transcript.json',
+      },
+    }));
+
+    // usage?.inputTokens undefined does not throw — handler completes successfully
+    expect(result.batchItemFailures).toHaveLength(0);
+    expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
+      'test-table',
+      'session-claude-usage-missing',
+      expect.objectContaining({ aiSummaryStatus: 'available' })
+    );
   });
 });

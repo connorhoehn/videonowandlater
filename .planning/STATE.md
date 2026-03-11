@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
-status: completed
+status: planning
 stopped_at: "Completed 31-02-PLAN.md — SQS handler signature refactor: 5 handlers wrapped, transcode-completed.test.ts created, 453 tests passing"
-last_updated: "2026-03-11T19:32:44.292Z"
+last_updated: "2026-03-11T19:35:54.887Z"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
+  total_plans: 7
   completed_plans: 2
   percent: 97
 ---
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
-**Status:** v1.5 milestone complete
+**Status:** Ready to plan
 **Progress:** [██████████] 97%
 **Last session:** 2026-03-11T19:32:44.290Z
 

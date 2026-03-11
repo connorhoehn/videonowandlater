@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
-stopped_at: "Completed 33-01-PLAN.md — Pipeline alarms dashboard: 10 CloudWatch alarms + VNL-Pipeline dashboard in session-stack.ts"
-last_updated: "2026-03-11T19:44:21.537Z"
+stopped_at: "Completed 32-01-PLAN.md — recording-ended hardening: MediaConvert throws, finally block for pool release, 457 tests passing"
+last_updated: "2026-03-11T19:44:27.023Z"
 progress:
   total_phases: 5
   completed_phases: 4
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
 **Progress:** [██████████] 96%
-**Last session:** 2026-03-11T19:44:10.150Z
+**Last session:** 2026-03-11T19:44:27.021Z
 
 ## Performance Metrics
 
@@ -175,7 +175,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 33-01-PLAN.md — Pipeline alarms dashboard: 10 CloudWatch alarms + VNL-Pipeline dashboard in session-stack.ts
+**Stopped at:** Completed 32-01-PLAN.md — recording-ended hardening: MediaConvert throws, finally block for pool release, 457 tests passing
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

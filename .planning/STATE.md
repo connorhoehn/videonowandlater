@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
 stopped_at: Completed 32-02-PLAN.md — idempotent Transcribe submission, ConflictException handling, 462 tests passing
-last_updated: "2026-03-11T23:11:59.075Z"
+last_updated: "2026-03-11T23:16:02.164Z"
 progress:
   total_phases: 5
   completed_phases: 5

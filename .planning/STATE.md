@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
-stopped_at: "Completed 32-03-PLAN.md — on-mediaconvert-complete hardening: remove PutEvents inner catch, outer catch throws, 16 tests passing"
-last_updated: "2026-03-11T23:09:51.058Z"
+stopped_at: Completed 32-02-PLAN.md — idempotent Transcribe submission, ConflictException handling, 462 tests passing
+last_updated: "2026-03-11T23:11:59.075Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 9
-  completed_plans: 8
-  percent: 99
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
-**Progress:** [██████████] 99%
-**Last session:** 2026-03-11T23:09:21.617Z
+**Progress:** [██████████] 100%
+**Last session:** 2026-03-11T23:11:59.073Z
 
 ## Performance Metrics
 
@@ -136,6 +136,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 32-handler-hardening-idempotency P01 | 3 | 2 tasks | 2 files |
 | Phase 32-handler-hardening-idempotency P03 | 15 | 2 tasks | 2 files |
 | Phase 32 P04 | 15 | 2 tasks | 3 files |
+| Phase 32-handler-hardening-idempotency P02 | 25 | 2 tasks | 4 files |
 
 ### Roadmap Evolution
 
@@ -177,7 +178,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 32-03-PLAN.md — on-mediaconvert-complete hardening: remove PutEvents inner catch, outer catch throws, 16 tests passing
+**Stopped at:** Completed 32-02-PLAN.md — idempotent Transcribe submission, ConflictException handling, 462 tests passing
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

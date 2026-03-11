@@ -83,12 +83,12 @@ See milestones/v1.5-ROADMAP.md for full details.
 | Phase | Name | Goal |
 |-------|------|------|
 | 31 | SQS Pipeline Buffers | Complete (2026-03-11) |
-| 32 | 3/4 | In Progress|  | 33 | 1/1 | Complete    | 2026-03-11 | 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
+| 32 | 4/4 | Complete   | 2026-03-11 | 33 | 1/1 | Complete    | 2026-03-11 | 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
 
 - [x] Phase 31: SQS Pipeline Buffers (2/2 plans) (completed 2026-03-11)
   - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
   - [x] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
-- [ ] Phase 32: Handler Hardening & Idempotency (4 plans)
+- [x] Phase 32: Handler Hardening & Idempotency (4 plans) (completed 2026-03-11)
   - [ ] 32-01-PLAN.md — recording-ended: remove MediaConvert error suppression, move pool release to finally
   - [ ] 32-02-PLAN.md — transcode-completed: stable idempotency key + ConflictException handling; transcribe-completed: logger.error with rawJobName on parse failure
   - [ ] 32-03-PLAN.md — on-mediaconvert-complete: remove PutEvents inner catch, outer catch rethrows
@@ -122,7 +122,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** HARD-01, HARD-02, HARD-03, HARD-04, HARD-05
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 **Success Criteria:**
 1. recording-ended.ts throws on MediaConvert submission failure

@@ -10,6 +10,11 @@ import { useHlsPlayer } from './useHlsPlayer';
 import { QualitySelector } from './QualitySelector';
 import { SessionAuditLog } from '../activity/SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
+import { ReplayReactionPicker } from '../replay/ReplayReactionPicker';
+import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
+import { useReactionSender } from '../reactions/useReactionSender';
+import { CommentThread } from './CommentThread';
+import { VideoInfoPanel } from './VideoInfoPanel';
 
 interface UploadSession {
   sessionId: string;
@@ -27,6 +32,8 @@ interface UploadSession {
   sourceFileName?: string;
   sourceFileSize?: number;
   uploadStatus?: string;
+  diarizedTranscriptS3Path?: string;
+  reactionSummary?: Record<string, number>;
 }
 
 function formatFileSize(bytes?: number): string {
@@ -54,7 +61,8 @@ export function VideoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState('');
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [allReactions, setAllReactions] = useState<Array<{ emojiType: string }>>([]);
 
   // Fetch auth token once on mount
   useEffect(() => {
@@ -63,7 +71,7 @@ export function VideoPage() {
     });
   }, []);
 
-  // Fetch session metadata
+  // Fetch session metadata and reactions
   useEffect(() => {
     if (!sessionId || !authToken) return;
 
@@ -95,6 +103,19 @@ export function VideoPage() {
         }
 
         setSession(data);
+
+        // Fetch reactions after session is set
+        try {
+          const reactionsRes = await fetch(`${apiBaseUrl}/sessions/${sessionId}/reactions`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+          if (reactionsRes.ok) {
+            const reactionsData = await reactionsRes.json();
+            setAllReactions(reactionsData.reactions || []);
+          }
+        } catch (err) {
+          console.error('Failed to fetch reactions:', err);
+        }
       } catch (err: any) {
         console.error('Fetch error', err);
         setError(`Error loading video: ${err.message}`);
@@ -107,7 +128,17 @@ export function VideoPage() {
   }, [sessionId, authToken, navigate]);
 
   // HLS player hook
-  const { videoRef, qualities, currentQuality, setQuality, isSafari } = useHlsPlayer(session?.recordingHlsUrl);
+  const { videoRef, qualities, currentQuality, setQuality, isSafari, syncTime } = useHlsPlayer(session?.recordingHlsUrl);
+
+  // Reaction sender
+  const { sendReaction } = useReactionSender(sessionId || '', authToken);
+
+  // Compute reaction counts: merge pre-existing summary with freshly fetched reactions
+  const reactionCounts = allReactions.reduce((acc, r) => {
+    acc[r.emojiType] = (acc[r.emojiType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const displayCounts = { ...session?.reactionSummary, ...reactionCounts };
 
   // Loading state
   if (loading) {
@@ -247,6 +278,44 @@ export function VideoPage() {
             <h3 className="text-sm font-semibold text-gray-600 uppercase mb-3">Processing Status</h3>
             <SessionAuditLog session={session} compact={false} />
           </div>
+        </div>
+
+        {/* Reactions */}
+        <div className="mt-4 bg-white rounded-lg shadow p-4 flex flex-wrap items-center gap-4">
+          <ReplayReactionPicker onReaction={(emoji) => sendReaction(emoji, 'replay')} />
+          <ReactionSummaryPills reactionSummary={displayCounts} />
+        </div>
+
+        {/* Comment Thread */}
+        <div className="mt-4">
+          <CommentThread
+            sessionId={sessionId!}
+            authToken={authToken}
+            syncTime={syncTime}
+          />
+        </div>
+
+        {/* Info Panel toggle */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowInfoPanel(p => !p)}
+            className="w-full text-left px-6 py-3 bg-white border rounded-lg shadow text-sm font-medium text-gray-700 flex justify-between items-center"
+          >
+            <span>Summary &amp; Transcript</span>
+            <span>{showInfoPanel ? '▲' : '▼'}</span>
+          </button>
+          {showInfoPanel && (
+            <div className="mt-2 bg-white rounded-lg shadow">
+              <VideoInfoPanel
+                sessionId={sessionId!}
+                authToken={authToken}
+                syncTime={syncTime}
+                aiSummary={session.aiSummary}
+                aiSummaryStatus={session.aiSummaryStatus}
+                diarizedTranscriptS3Path={session.diarizedTranscriptS3Path}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

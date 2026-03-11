@@ -967,5 +967,76 @@ export class SessionStack extends Stack {
       value: pipelineAlarmTopic.topicArn,
       description: 'SNS Topic ARN for pipeline alarms — subscribe additional endpoints here',
     });
+
+    const pipelineDashboard = new cloudwatch.Dashboard(this, 'PipelineDashboard', {
+      dashboardName: 'VNL-Pipeline',
+    });
+
+    const pipelineHandlers: Array<{
+      id: string;
+      fn: nodejs.NodejsFunction;
+      dlq: sqs.Queue;
+      label: string;
+    }> = [
+      { id: 'RecordingEnded', fn: recordingEndedFn, dlq: recordingEndedDlq, label: 'recording-ended' },
+      { id: 'TranscodeCompleted', fn: transcodeCompletedFn, dlq: transcodeCompletedDlq, label: 'transcode-completed' },
+      { id: 'TranscribeCompleted', fn: transcribeCompletedFn, dlq: transcribeCompletedDlq, label: 'transcribe-completed' },
+      { id: 'StoreSummary', fn: storeSummaryFn, dlq: storeSummaryDlq, label: 'store-summary' },
+      { id: 'StartTranscribe', fn: startTranscribeFn, dlq: startTranscribeDlq, label: 'start-transcribe' },
+    ];
+
+    for (const { id, fn, dlq, label } of pipelineHandlers) {
+      // OBS-01: DLQ depth alarm — 1-minute period, fires as soon as any message lands
+      const dlqAlarm = new cloudwatch.Alarm(this, `${id}DlqAlarm`, {
+        alarmName: `vnl-pipeline-${label}-dlq`,
+        metric: dlq.metricApproximateNumberOfMessagesVisible({
+          statistic: 'Sum',
+          period: Duration.minutes(1),
+        }),
+        threshold: 0,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        alarmDescription: `${label} DLQ has messages — pipeline stage is failing`,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+      dlqAlarm.addAlarmAction(new actions.SnsAction(pipelineAlarmTopic));
+
+      // OBS-02: Lambda error alarm — 5-minute period, fires on any error in the window
+      const errorAlarm = new cloudwatch.Alarm(this, `${id}ErrorAlarm`, {
+        alarmName: `vnl-pipeline-${label}-errors`,
+        metric: fn.metricErrors({
+          statistic: 'Sum',
+          period: Duration.minutes(5),
+        }),
+        threshold: 0,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        alarmDescription: `${label} Lambda has errors in a 5-minute window`,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+      errorAlarm.addAlarmAction(new actions.SnsAction(pipelineAlarmTopic));
+
+      // OBS-04: One dashboard row per handler — Invocations, Errors, DLQ Depth (3 × 8 = 24 units)
+      pipelineDashboard.addWidgets(
+        new cloudwatch.GraphWidget({
+          title: `${label} — Invocations`,
+          left: [fn.metricInvocations({ statistic: 'Sum', period: Duration.minutes(5) })],
+          width: 8,
+          height: 6,
+        }),
+        new cloudwatch.GraphWidget({
+          title: `${label} — Errors`,
+          left: [fn.metricErrors({ statistic: 'Sum', period: Duration.minutes(5) })],
+          width: 8,
+          height: 6,
+        }),
+        new cloudwatch.GraphWidget({
+          title: `${label} — DLQ Depth`,
+          left: [dlq.metricApproximateNumberOfMessagesVisible({ statistic: 'Sum', period: Duration.minutes(1) })],
+          width: 8,
+          height: 6,
+        }),
+      );
+    }
   }
 }

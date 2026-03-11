@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: — Pipeline Durability, Cost & Debug
 status: planning
-stopped_at: "Completed 35-01-PLAN.md — Pipeline Debug CLI: debug-pipeline.js + replay-pipeline.js shipped in tools/"
-last_updated: "2026-03-11T19:39:58.141Z"
+stopped_at: "Completed 34-01-PLAN.md — nova-lite default model, token logging, CDK IAM update: 455 tests passing"
+last_updated: "2026-03-11T19:40:22.853Z"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 9
   completed_plans: 4
-  percent: 92
+  percent: 93
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
 **Status:** Ready to plan
-**Progress:** [█████████░] 92%
-**Last session:** 2026-03-11T19:39:58.139Z
+**Progress:** [█████████░] 93%
+**Last session:** 2026-03-11T19:40:22.850Z
 
 ## Performance Metrics
 
@@ -131,6 +131,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 | Phase 31-sqs-pipeline-buffers P01 | 246 | 2 tasks | 1 files |
 | Phase 31-sqs-pipeline-buffers P02 | 583 | 2 tasks | 10 files |
 | Phase 35-pipeline-debug-cli P01 | 2 | 2 tasks | 3 files |
+| Phase 34-nova-lite-for-ai-summaries P01 | 166 | 2 tasks | 3 files |
 
 ### Roadmap Evolution
 
@@ -172,7 +173,7 @@ None.
 - Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
 
 **Last session:** 2026-03-10
-**Stopped at:** Completed 35-01-PLAN.md — Pipeline Debug CLI: debug-pipeline.js + replay-pipeline.js shipped in tools/
+**Stopped at:** Completed 34-01-PLAN.md — nova-lite default model, token logging, CDK IAM update: 455 tests passing
 **Resume file:** None
 
 **Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.

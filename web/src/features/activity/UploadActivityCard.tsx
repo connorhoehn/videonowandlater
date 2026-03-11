@@ -95,7 +95,7 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
 
   const handleClick = () => {
     if (isViewable) {
-      navigate(`/upload/${session.sessionId}`);
+      navigate(`/video/${session.sessionId}`);
     }
   };
 

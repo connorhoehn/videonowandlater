@@ -1,5 +1,20 @@
 # Milestones
 
+## v1.6 Pipeline Durability, Cost & Debug (Shipped: 2026-03-11)
+
+**Phases completed:** 5 phases, 9 plans
+
+**Key accomplishments:**
+- Five SQS queue pairs + per-handler DLQs for all 5 pipeline handlers — at-least-once delivery replacing fire-and-forget EventBridge→Lambda (Phase 31)
+- All 5 handlers refactored to SQSEvent signature with `batchItemFailures` response (Phase 31)
+- `recording-ended` + `transcode-completed` throw on failure; idempotency key prevents duplicate Transcribe jobs on SQS retry (Phase 32)
+- `on-mediaconvert-complete` error suppression removed; `scan-stuck-sessions` recovers stale `transcriptStatus='processing'` sessions with 2h threshold (Phase 32)
+- 10 CloudWatch alarms (5 DLQ depth + 5 Lambda error rate) + VNL-Pipeline dashboard (Phase 33)
+- Nova Lite default model + `BEDROCK_MODEL_ID` override + per-invocation token logging for AI summary cost tracking (Phase 34)
+- `debug-pipeline.js` + `replay-pipeline.js` CLI tools for pipeline introspection and stage replay (Phase 35)
+
+---
+
 ## v1.5 Pipeline Reliability, Moderation & Upload Experience (Shipped: 2026-03-11)
 
 **Phases completed:** 9 phases, 26 plans, 9 tasks

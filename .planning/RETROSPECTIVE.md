@@ -55,6 +55,55 @@
 
 ---
 
+## Milestone: v1.6 — Pipeline Durability, Cost & Debug
+
+**Shipped:** 2026-03-11
+**Phases:** 5 | **Plans:** 9 | **Commits:** ~30
+
+### What Was Built
+
+- SQS queue pairs + per-handler DLQs for all 5 pipeline Lambdas; EventBridge→SQS→Lambda with `batchItemFailures` partial-failure reporting
+- Handler hardening: `recording-ended`, `transcode-completed`, `on-mediaconvert-complete` throw on critical failures; idempotency key (sessionId + MediaConvert jobId) prevents duplicate Transcribe jobs
+- `scan-stuck-sessions` upgraded with `transcriptStatusUpdatedAt` staleness tracking (2h threshold) to recover genuinely stale `processing` sessions without false positives
+- 10 CloudWatch alarms (5 DLQ depth + 5 Lambda error rate) wired to SNS topic + VNL-Pipeline dashboard with 5 handler rows × 3 GraphWidgets
+- Nova Lite as default Bedrock model with `BEDROCK_MODEL_ID` env override and per-invocation token count logging
+- `debug-pipeline.js` + `replay-pipeline.js` standalone Node.js CLI tools using AWS SDK v3 credential chain
+
+### What Worked
+
+- **Audit-first completion** — Running `/gsd:audit-milestone` before `/gsd:complete-milestone` surfaced real documentation gaps (missing SUMMARY.md, unchecked checkboxes) that would have left the milestone in an ambiguous state. Worth the step.
+- **Documentation gaps were all paperwork, not code** — Audit confirmed all code was wired and 462/462 tests passed. The gaps were SUMMARY.md files and ROADMAP checkboxes. This confirms the milestone audit has the right signal-to-noise ratio.
+- **Phase 31 (SQS) as its own phase before hardening** — Separating infrastructure (SQS queues + wiring) from handler behavior changes (throw semantics) meant Phase 32 could verify handlers in isolation. Clean dependency ordering.
+- **ConflictException as success signal** — Treating Transcribe `ConflictException` (job already exists) as an idempotent success rather than an error is the right model for SQS retry scenarios. Makes idempotency the default.
+
+### What Was Inefficient
+
+- **ROADMAP sub-plan checkboxes not auto-checked** — After phases 32-35 executed, the sub-plan-level checkboxes (32-01-PLAN.md, 33-01-PLAN.md, etc.) were all `[ ]` despite parent phase being `[x]`. This is a GSD tooling gap — plan execution should auto-check sub-plan boxes.
+- **v1.5-phases move committed separately** — The cleanup `/gsd:cleanup` moved v1.5 phase dirs to the archive on disk but the git commit was never made. Required a separate commit during v1.6 closeout. The cleanup command should commit atomically.
+- **MILESTONES.md accomplishments not auto-populated** — `milestone complete` CLI returned `accomplishments: []` because one-liners weren't consistently in frontmatter. Had to write them manually. A SUMMARY.md scraper would save this.
+
+### Patterns Established
+
+- **SQS batch size 1 + `reportBatchItemFailures: true`** — For pipeline Lambdas where partial failure semantics matter, this is the correct CDK pattern (not `bisectBatchOnFunctionError` which doesn't exist in CDK v2).
+- **Idempotency key = sessionId + upstream job ID** — Stable idempotency keys for job submission should combine the session identifier with the job ID from the upstream stage. This survives Lambda restarts and SQS redelivery.
+- **Timestamp on every status update** — `transcriptStatusUpdatedAt` written on every `updateTranscriptStatus` call gives recovery logic a staleness signal. Any status that can get "stuck" should have an `updatedAt` companion field.
+- **CLI tools as standalone Node.js scripts** — For developer debugging tools, standalone `.js` scripts with no build step are strictly better than TypeScript CLIs. They work immediately without compilation and the AWS SDK v3 credential chain handles auth.
+
+### Key Lessons
+
+1. The SQS migration was straightforward once CDK docs for `SqsEventSource` were read carefully — `bisectBatchOnFunctionError` doesn't exist. Always check the actual CDK API surface against documentation assumptions.
+2. Handler hardening (throwing instead of catching) is the correct primitive for SQS retry semantics. Silent catches were actively harmful — they consumed messages without retrying, causing pipeline stalls with no visibility.
+3. `transcriptStatusUpdatedAt` could have been added in Phase 26 (stuck session cron). The gap between "processing" detection and staleness detection was a latent design hole that Phase 32 closed retroactively.
+4. Splitting DUR (infrastructure) and HARD (behavior) into separate phases made both easier to verify and reduced risk of a combined CDK + TypeScript change breaking tests.
+
+### Cost Observations
+
+- Model mix: sonnet for all executors; opus not used in v1.6
+- Sessions: 2 sessions (planning/execution + audit/completion)
+- Notable: 5 phases in a single day — SQS infrastructure phases are faster than frontend phases (no visual feedback loop)
+
+---
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Days | Tests at Ship | Notes |
@@ -64,5 +113,6 @@
 | v1.2 | 7 | 19 | 1 | 360 | Pipeline introduced |
 | v1.4 | 3 | 9 | 1 | 360 | Creator features |
 | v1.5 | 9 | 26 | 2 | 445 | Pipeline hardening + social layer |
+| v1.6 | 5 | 9 | 1 | 462 | SQS durability + handler hardening |
 
-**Trend:** Plan count per phase averaging ~2.9 (well within 2-3 target). Test count growing steadily: +85 tests in v1.5 (from 360 → 445).
+**Trend:** Plan count per phase averaging ~2.3 in v1.6 (tight, focused plans). Test count growing steadily: +17 tests in v1.6 (from 445 → 462). Infrastructure-heavy milestones (SQS, CDK alarms) ship faster than frontend milestones.

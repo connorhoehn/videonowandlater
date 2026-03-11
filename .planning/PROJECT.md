@@ -8,17 +8,18 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Latest Milestone: v1.5 Pipeline Reliability, Moderation & Upload Experience (SHIPPED 2026-03-11)
+## Latest Milestone: v1.6 Pipeline Durability, Cost & Debug (SHIPPED 2026-03-11)
 
-**Accomplished:** Hardened the recording/transcription/AI pipeline with structured observability and automatic recovery, added broadcaster bounce/kick moderation and per-message reporting, and built a rich dedicated player page for uploaded videos.
+**Accomplished:** Replaced brittle fire-and-forget EventBridge→Lambda with SQS-backed durable queues for all 5 critical pipeline handlers, hardened handlers to throw on failure (enabling real SQS retries), cut AI summary costs by switching to Nova Lite, and shipped CLI debug tools for pipeline introspection.
 
 **Delivered:**
-- ✅ Structured CloudWatch logging across all 5 pipeline Lambdas with `sessionId` correlation (Phase 25)
-- ✅ Cron-based stuck session recovery: auto-detects and re-fires sessions stuck >45 min (Phase 26)
-- ✅ Speaker-attributed transcripts: Transcribe diarization with bubble-mode UI in replay and video player (Phase 27)
-- ✅ Chat moderation: broadcaster bounce/kick + per-message report + token blocklist + moderation log (Phase 28)
-- ✅ Upload video player: `/video/:sessionId` with HLS.js adaptive bitrate, quality selector, Safari fallback (Phase 29)
-- ✅ Upload video social: async timestamped comments, emoji reactions, collapsible AI summary + transcript panel (Phase 30)
+- ✅ SQS queue pairs + DLQs for all 5 pipeline handlers — at-least-once delivery with 3-retry DLQ capture (Phase 31)
+- ✅ All 5 handlers refactored to SQSEvent signature with `batchItemFailures` partial-failure reporting (Phase 31)
+- ✅ Handler hardening: `recording-ended`, `transcode-completed`, `on-mediaconvert-complete` throw on failure; idempotency key prevents duplicate Transcribe jobs (Phase 32)
+- ✅ `scan-stuck-sessions` recovers stale `transcriptStatus='processing'` sessions with 2h staleness threshold (Phase 32)
+- ✅ 10 CloudWatch alarms (5 DLQ depth + 5 Lambda error) + VNL-Pipeline dashboard (Phase 33)
+- ✅ Nova Lite default Bedrock model + `BEDROCK_MODEL_ID` env override + per-invocation token logging (Phase 34)
+- ✅ `debug-pipeline.js` + `replay-pipeline.js` CLI tools for pipeline state inspection and stage replay (Phase 35)
 
 ## Requirements
 
@@ -49,7 +50,17 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 *No active requirements — planning next milestone.*
 
-### Just Validated (v1.5)
+### Just Validated (v1.6)
+
+- ✓ SQS queue pairs + DLQs for all 5 pipeline handlers; EventBridge→SQS→Lambda with at-least-once delivery — v1.6 Phase 31
+- ✓ All 5 handlers use SQSEvent signature with `batchItemFailures` for partial-failure reporting — v1.6 Phase 31
+- ✓ `recording-ended` throws on MediaConvert failure; `transcode-completed` throws with idempotency key — v1.6 Phase 32
+- ✓ `on-mediaconvert-complete` throws on PutEvents failure; `scan-stuck-sessions` recovers 2h-stale processing sessions — v1.6 Phase 32
+- ✓ 10 CloudWatch alarms (DLQ depth + Lambda error per handler) + SNS topic + VNL-Pipeline dashboard — v1.6 Phase 33
+- ✓ Nova Lite default Bedrock model with `BEDROCK_MODEL_ID` env override and token logging — v1.6 Phase 34
+- ✓ `debug-pipeline.js` + `replay-pipeline.js` CLI tools for pipeline introspection and stage replay — v1.6 Phase 35
+
+### Previously Validated (v1.5)
 
 - ✓ EventBridge pipeline emits structured debug logs at every stage (recording → MediaConvert → Transcribe → AI summary) — Phase 25
 - ✓ Cron job identifies sessions stuck in pipeline for >45 min and re-fires appropriate recovery event — Phase 26
@@ -122,6 +133,12 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 | Comment SK COMMENT#{15-digit-padded-ms}#{uuid} | Zero-padded ms provides natural ascending sort via DynamoDB lexicographic ordering; uuid prevents collisions | ✓ Phase 30 |
 | syncTime === 0 disables comment composer | Prevents comments anchored at position 0 before playback starts; returned from useHlsPlayer for Phase 30 use | ✓ Phase 30 |
 | startedAt: now added to createUploadSession | create-reaction.ts requires startedAt for sessionRelativeTime computation — was missing on UPLOAD sessions causing 400 errors | ✓ Phase 30 |
+| batchSize: 1 + reportBatchItemFailures (not bisectBatchOnFunctionError) | bisectBatchOnFunctionError doesn't exist in CDK v2.170 SqsEventSourceProps — batch size 1 + partial failure reporting is the correct pattern | ✓ Phase 31 |
+| SQS queue declarations before first rule target usage | TypeScript declaration order requirement — queue pairs must precede targets.SqsQueue usage in session-stack.ts | ✓ Phase 31 |
+| recordingEndedQueue serves 3 EventBridge rules | targets.SqsQueue auto-adds per-rule resource policy — no manual addToResourcePolicy needed for multi-rule shared queues | ✓ Phase 31 |
+| Idempotency key = sessionId + MediaConvert jobId | Stable key prevents duplicate Transcribe submissions on SQS retry; ConflictException from Transcribe is caught and treated as success | ✓ Phase 32 |
+| transcriptStatusUpdatedAt written on every updateTranscriptStatus call | Enables scan-stuck-sessions to detect truly stale processing state vs. active jobs; 2h threshold prevents false recovery | ✓ Phase 32 |
+| Nova Lite over Nova Pro as default Bedrock model | Significant cost reduction for AI summaries; BEDROCK_MODEL_ID env var allows rollback or model upgrade without code deploy | ✓ Phase 34 |
 
 ## Current State
 
@@ -132,9 +149,10 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 - v1.3 Secure Sharing — shipped 2026-03-06 (as part of v1.2)
 - v1.4 Creator Studio & Stream Quality (3 phases, 9 plans) — shipped 2026-03-10
 - v1.5 Pipeline Reliability, Moderation & Upload Experience (9 phases, 26 plans) — shipped 2026-03-11
+- v1.6 Pipeline Durability, Cost & Debug (5 phases, 9 plans) — shipped 2026-03-11
 
-**Codebase:** ~32,100 LOC TypeScript (frontend + backend + CDK), 445/445 backend tests passing
-**Next:** Planning v1.6 milestone
+**Codebase:** ~32,100 LOC TypeScript (frontend + backend + CDK), 462/462 backend tests passing
+**Next:** Planning v1.7 milestone
 
 ---
-*Last updated: 2026-03-11 after v1.5 — full milestone archived (pipeline observability, stuck session cron, diarized transcripts, chat moderation, upload video player with social layer)*
+*Last updated: 2026-03-11 after v1.6 — pipeline made durable with SQS buffers + DLQs, handlers hardened to throw, CloudWatch alarms + dashboard, Nova Lite for cost, debug CLI tools*

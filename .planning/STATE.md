@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6
-milestone_name: — Pipeline Durability, Cost & Debug
+milestone: v1.7
+milestone_name: Planning next milestone
 status: planning
-stopped_at: Completed 32-02-PLAN.md — idempotent Transcribe submission, ConflictException handling, 462 tests passing
-last_updated: "2026-03-11T23:16:02.164Z"
+stopped_at: v1.6 archived — ready for /gsd:new-milestone
+last_updated: "2026-03-11T23:55:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-10)
+See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-**Current focus:** v1.5 Milestone — Pipeline Reliability, Moderation & Upload Experience
+**Current focus:** Planning v1.7 milestone — run `/gsd:new-milestone` to begin
 
 ## Current Position
 
 **Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
 **Active Plan:** 26-02 complete (phase complete)
-**Status:** Ready to plan
+**Status:** v1.6 milestone complete
 **Progress:** [██████████] 100%
 **Last session:** 2026-03-11T23:11:59.073Z
 

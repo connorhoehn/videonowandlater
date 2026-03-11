@@ -82,8 +82,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 | Phase | Name | Goal |
 |-------|------|------|
-| 31 | SQS Pipeline Buffers | Add SQS queues between EventBridge and the 5 critical pipeline Lambdas for at-least-once delivery with automatic retries on failure |
-| 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
+| 31 | 1/2 | In Progress|  | 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
 | 33 | Pipeline Alarms & Dashboard | CloudWatch alarms on DLQ depth and Lambda error rate, SNS email alerts, and a CloudWatch dashboard for pipeline health at a glance |
 | 34 | Nova Lite for AI Summaries | Switch store-summary.ts from Nova Pro/Claude to amazon.nova-lite-v1:0, make model configurable via env var, add token cost logging |
 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
@@ -102,7 +101,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** DUR-01, DUR-02, DUR-03, DUR-04, DUR-05
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 **Success Criteria:**
 1. All 5 pipeline Lambdas are triggered via SQS event source mappings (not direct EventBridge invocation)

@@ -150,4 +150,71 @@
 - Unmapped: 0 ✓
 
 ---
+
+## v1.6 Requirements: Pipeline Durability, Cost & Debug
+
+**Defined:** 2026-03-11
+
+### Phase 31 — SQS Pipeline Buffers (Durability)
+
+- [x] **DUR-01**: Add an SQS standard queue as the EventBridge target (instead of Lambda direct) for each of the 5 critical pipeline handlers: `recording-ended`, `transcode-completed`, `transcribe-completed`, `store-summary`, `start-transcribe`
+- [x] **DUR-02**: Configure Lambda SQS event source mappings (batch size 1) so each Lambda polls its queue; remove direct EventBridge→Lambda permissions for these handlers
+- [x] **DUR-03**: Each pipeline SQS queue has a DLQ with 14-day retention and maxReceiveCount of 3 so permanently failing events are captured for inspection
+- [x] **DUR-04**: SQS visibility timeout on each queue is set to 6× the Lambda function timeout to prevent premature re-delivery during processing
+- [x] **DUR-05**: EventBridge rules grant `sqs:SendMessage` to each pipeline queue so events are accepted; existing DLQs for direct invocation are replaced or repurposed
+
+### Phase 32 — Handler Hardening & Idempotency (Correctness)
+
+- [ ] **HARD-01**: `recording-ended.ts` throws (does not silently catch) on MediaConvert job submission failure so SQS retries the event instead of the pipeline silently stalling
+- [ ] **HARD-02**: `transcode-completed.ts` throws on Transcribe job submission failure; idempotency key (sessionId + mediaconvert jobId) prevents duplicate Transcribe jobs on retry
+- [ ] **HARD-03**: `on-mediaconvert-complete.ts` throws on EventBridge PutEvents failure so the upload flow event is guaranteed to be published
+- [ ] **HARD-04**: `scan-stuck-sessions.ts` recovers sessions where `transcriptStatus = 'processing'` and `updatedAt > 2h ago` (fixes PIPE-06 trap where stale 'processing' sessions were permanently excluded)
+- [ ] **HARD-05**: `transcribe-completed.ts` job name parsing falls back gracefully: if regex fails, logs a structured error with the raw job name and skips without silently corrupting session state
+
+### Phase 33 — Pipeline Alarms & Dashboard (Observability)
+
+- [ ] **OBS-01**: CloudWatch alarm fires when any pipeline SQS DLQ has `ApproximateNumberOfMessagesVisible > 0`; alarm state is ALARM within 1 evaluation period
+- [ ] **OBS-02**: CloudWatch alarm fires when any pipeline Lambda has `Errors > 0` in a 5-minute period (error rate alarm per handler)
+- [ ] **OBS-03**: An SNS topic receives all alarm state-change notifications; CDK accepts an optional `alertEmail` context variable to subscribe an email endpoint
+- [ ] **OBS-04**: A CloudWatch dashboard (`VNL-Pipeline`) shows invocation count, error count, and DLQ depth for each of the 5 pipeline Lambdas in a single view
+
+### Phase 34 — Nova Lite for AI Summaries (Cost)
+
+- [ ] **COST-01**: `store-summary.ts` uses `amazon.nova-lite-v1:0` as the default Bedrock model for AI summary generation (replacing Nova Pro / Claude)
+- [ ] **COST-02**: The Bedrock model ID is read from a `BEDROCK_MODEL_ID` Lambda environment variable so it can be changed via CDK without a code deploy
+- [ ] **COST-03**: `store-summary.ts` logs `inputTokens`, `outputTokens`, and the model ID used with every summarization for cost tracking in CloudWatch Logs
+
+### Phase 35 — Pipeline Debug CLI (DevEx)
+
+- [ ] **DEVEX-01**: `tools/debug-pipeline.js --sessionId <id>` reads the DynamoDB session record and prints a human-readable pipeline status report (all pipeline fields: transcriptStatus, aiSummaryStatus, mediaconvertJobId, etc.)
+- [ ] **DEVEX-02**: `tools/replay-pipeline.js --sessionId <id> --from <stage>` publishes the correct EventBridge event to the default bus to resume pipeline from a given stage (`recording-ended`, `mediaconvert`, `transcribe`, `summary`)
+- [ ] **DEVEX-03**: Both CLI tools use the AWS SDK credential chain (environment variables, `~/.aws/credentials`, or EC2/Lambda role) and read `AWS_REGION` from environment or fall back to `us-east-1`
+
+## Traceability (v1.6)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DUR-01 | Phase 31 | Planned |
+| DUR-02 | Phase 31 | Planned |
+| DUR-03 | Phase 31 | Planned |
+| DUR-04 | Phase 31 | Planned |
+| DUR-05 | Phase 31 | Planned |
+| HARD-01 | Phase 32 | Planned |
+| HARD-02 | Phase 32 | Planned |
+| HARD-03 | Phase 32 | Planned |
+| HARD-04 | Phase 32 | Planned |
+| HARD-05 | Phase 32 | Planned |
+| OBS-01 | Phase 33 | Planned |
+| OBS-02 | Phase 33 | Planned |
+| OBS-03 | Phase 33 | Planned |
+| OBS-04 | Phase 33 | Planned |
+| COST-01 | Phase 34 | Planned |
+| COST-02 | Phase 34 | Planned |
+| COST-03 | Phase 34 | Planned |
+| DEVEX-01 | Phase 35 | Planned |
+| DEVEX-02 | Phase 35 | Planned |
+| DEVEX-03 | Phase 35 | Planned |
+
+---
 *Requirements defined: 2026-03-10 for milestone v1.5*
+*v1.6 requirements added: 2026-03-11*

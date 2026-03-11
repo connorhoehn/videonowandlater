@@ -407,15 +407,84 @@ export class SessionStack extends Stack {
       retentionPeriod: Duration.days(14),
     });
 
+    // ============================================================
+    // Per-handler SQS Queue Pairs (Phase 31)
+    // Each pipeline handler gets its own queue + DLQ for at-least-once delivery
+    // Visibility timeout = 6× Lambda timeout per AWS recommendation
+    // ============================================================
+
+    // recording-ended queue (serves 3 rules: recordingEndRule, stageRecordingEndRule, recordingRecoveryRule)
+    const recordingEndedDlq = new sqs.Queue(this, 'RecordingEndedDlq', {
+      queueName: 'vnl-recording-ended-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const recordingEndedQueue = new sqs.Queue(this, 'RecordingEndedQueue', {
+      queueName: 'vnl-recording-ended',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: recordingEndedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // transcode-completed queue
+    const transcodeCompletedDlq = new sqs.Queue(this, 'TranscodeCompletedDlq', {
+      queueName: 'vnl-transcode-completed-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const transcodeCompletedQueue = new sqs.Queue(this, 'TranscodeCompletedQueue', {
+      queueName: 'vnl-transcode-completed',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: transcodeCompletedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // transcribe-completed queue
+    const transcribeCompletedDlq = new sqs.Queue(this, 'TranscribeCompletedDlq', {
+      queueName: 'vnl-transcribe-completed-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const transcribeCompletedQueue = new sqs.Queue(this, 'TranscribeCompletedQueue', {
+      queueName: 'vnl-transcribe-completed',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: transcribeCompletedDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // store-summary queue (60s Lambda timeout → 360s visibility)
+    const storeSummaryDlq = new sqs.Queue(this, 'StoreSummaryDlq', {
+      queueName: 'vnl-store-summary-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const storeSummaryQueue = new sqs.Queue(this, 'StoreSummaryQueue', {
+      queueName: 'vnl-store-summary',
+      visibilityTimeout: Duration.seconds(6 * 60), // 6× Lambda timeout (60s)
+      deadLetterQueue: { queue: storeSummaryDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // start-transcribe queue
+    const startTranscribeDlq = new sqs.Queue(this, 'StartTranscribeDlq', {
+      queueName: 'vnl-start-transcribe-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const startTranscribeQueue = new sqs.Queue(this, 'StartTranscribeQueue', {
+      queueName: 'vnl-start-transcribe',
+      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
+      deadLetterQueue: { queue: startTranscribeDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
     // Wire Lambda targets to EventBridge rules (DLQ catches delivery failures)
     this.recordingStartRule.addTarget(new targets.LambdaFunction(recordingStartedFn, {
       deadLetterQueue: recordingEventsDlq,
       retryAttempts: 2,
     }));
-    this.recordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
-      deadLetterQueue: recordingEventsDlq,
-      retryAttempts: 2,
-    }));
+    // recordingEndRule → SQS queue (migrated from direct Lambda invocation)
+    this.recordingEndRule.addTarget(new targets.SqsQueue(recordingEndedQueue));
 
     // EventBridge rule for IVS RealTime Stage participant recording end events (hangouts)
     const stageRecordingEndRule = new events.Rule(this, 'StageRecordingEndRule', {
@@ -428,21 +497,8 @@ export class SessionStack extends Stack {
       },
       description: 'Capture IVS RealTime participant recording end events for hangout sessions',
     });
-    stageRecordingEndRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
-      deadLetterQueue: recordingEventsDlq,
-      retryAttempts: 2,
-    }));
-
-    // Explicit EventBridge → Lambda invoke permissions (belt-and-suspenders over CDK auto-grant)
-    // Guards against CloudFormation state drift from the RecordingEndRule → RecordingEndRuleV2 rename.
-    recordingEndedFn.addPermission('AllowEBRecordingEndInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: this.recordingEndRule.ruleArn,
-    });
-    recordingEndedFn.addPermission('AllowEBStageRecordingEndInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: stageRecordingEndRule.ruleArn,
-    });
+    // stageRecordingEndRule → SQS queue (migrated from direct Lambda invocation)
+    stageRecordingEndRule.addTarget(new targets.SqsQueue(recordingEndedQueue));
 
     // Route synthetic recovery events (from scan-stuck-sessions) to recording-ended handler
     const recordingRecoveryRule = new events.Rule(this, 'RecordingRecoveryRule', {
@@ -452,14 +508,8 @@ export class SessionStack extends Stack {
       },
       description: 'Route recovery events from scan-stuck-sessions to recording-ended handler',
     });
-    recordingRecoveryRule.addTarget(new targets.LambdaFunction(recordingEndedFn, {
-      deadLetterQueue: recordingEventsDlq,
-      retryAttempts: 2,
-    }));
-    recordingEndedFn.addPermission('AllowEBRecoveryInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: recordingRecoveryRule.ruleArn,
-    });
+    // recordingRecoveryRule → SQS queue (migrated from direct Lambda invocation)
+    recordingRecoveryRule.addTarget(new targets.SqsQueue(recordingEndedQueue));
 
     recordingStartedFn.addPermission('AllowEBRecordingStartInvoke', {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
@@ -467,6 +517,24 @@ export class SessionStack extends Stack {
     });
 
     // DLQ resource policy will be updated after transcription pipeline setup
+
+    // DLQ resource policy: only recordingStartRule still uses recordingEventsDlq
+    // (the 4 migrated rules now use per-handler SQS queues with their own DLQs)
+    recordingEventsDlq.addToResourcePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      principals: [new iam.ServicePrincipal('events.amazonaws.com')],
+      actions: ['sqs:SendMessage'],
+      resources: [recordingEventsDlq.queueArn],
+      conditions: {
+        ArnLike: {
+          'aws:SourceArn': [
+            this.recordingStartRule.ruleArn,
+            // Removed: recordingEndRule, stageRecordingEndRule, transcodeCompletedRule, transcribeCompletedRule
+            // These handlers now use per-handler SQS queues
+          ],
+        },
+      },
+    }));
 
     // Update recording-ended function with CloudFront domain
     recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
@@ -571,17 +639,8 @@ export class SessionStack extends Stack {
     // Grant S3 read access to transcription bucket (for MP4 files from MediaConvert)
     transcriptionBucket.grantRead(transcodeCompletedFn);
 
-    // Add EventBridge target
-    transcodeCompletedRule.addTarget(new targets.LambdaFunction(transcodeCompletedFn, {
-      deadLetterQueue: recordingEventsDlq,
-      retryAttempts: 2,
-    }));
-
-    // Add Lambda permission for EventBridge invocation
-    transcodeCompletedFn.addPermission('AllowEBTranscodeCompletedInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: transcodeCompletedRule.ruleArn,
-    });
+    // Add EventBridge target — migrated to SQS queue
+    transcodeCompletedRule.addTarget(new targets.SqsQueue(transcodeCompletedQueue));
 
     // EventBridge rule for Transcribe job completion
     const transcribeCompletedRule = new events.Rule(this, 'TranscribeCompletedRule', {
@@ -618,37 +677,11 @@ export class SessionStack extends Stack {
     // Grant S3 read+write access to transcription bucket (reads transcript.json, writes speaker-segments.json)
     transcriptionBucket.grantReadWrite(transcribeCompletedFn);
 
-    // Add EventBridge target
-    transcribeCompletedRule.addTarget(new targets.LambdaFunction(transcribeCompletedFn, {
-      deadLetterQueue: recordingEventsDlq,
-      retryAttempts: 2,
-    }));
+    // Add EventBridge target — migrated to SQS queue
+    transcribeCompletedRule.addTarget(new targets.SqsQueue(transcribeCompletedQueue));
 
-    // Add Lambda permission for EventBridge invocation
-    transcribeCompletedFn.addPermission('AllowEBTranscribeCompletedInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: transcribeCompletedRule.ruleArn,
-    });
-
-    // Update DLQ resource policy to include transcription pipeline rules
-    // Explicit SQS SendMessage grant so EventBridge can write delivery failures to the DLQ
-    recordingEventsDlq.addToResourcePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      principals: [new iam.ServicePrincipal('events.amazonaws.com')],
-      actions: ['sqs:SendMessage'],
-      resources: [recordingEventsDlq.queueArn],
-      conditions: {
-        ArnLike: {
-          'aws:SourceArn': [
-            this.recordingStartRule.ruleArn,
-            this.recordingEndRule.ruleArn,
-            stageRecordingEndRule.ruleArn,
-            transcodeCompletedRule.ruleArn,
-            transcribeCompletedRule.ruleArn,
-          ],
-        },
-      },
-    }));
+    // recordingEventsDlq resource policy is set earlier (after recordingRecoveryRule)
+    // covering only recordingStartRule — the 4 migrated rules now use per-handler SQS queues
 
     // ============================================================
     // AI Summary Pipeline (Phase 20)
@@ -689,20 +722,15 @@ export class SessionStack extends Stack {
     );
 
     // EventBridge rule triggered on transcript storage completion (Phase 19)
+    // Target migrated from LambdaFunction to SqsQueue (Phase 31)
     const transcriptStoreRule = new events.Rule(this, 'TranscriptStoreRule', {
       eventPattern: {
         source: ['custom.vnl'],
         detailType: ['Transcript Stored'],
       },
-      targets: [new targets.LambdaFunction(storeSummaryFn)],
       description: 'Trigger AI summary generation when transcript is stored',
     });
-
-    // Grant EventBridge permission to invoke Lambda
-    storeSummaryFn.addPermission('AllowEBTranscriptStoreInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: transcriptStoreRule.ruleArn,
-    });
+    transcriptStoreRule.addTarget(new targets.SqsQueue(storeSummaryQueue));
 
     // ============================================================
     // Upload MediaConvert Pipeline (Phase 21)
@@ -831,85 +859,15 @@ export class SessionStack extends Stack {
     }));
 
     // EventBridge rule for Upload Recording Available events
+    // Target migrated from LambdaFunction to SqsQueue (Phase 31)
     const uploadRecordingAvailableRule = new events.Rule(this, 'UploadRecordingAvailableRule', {
       eventPattern: {
         source: ['vnl.upload'],
         detailType: ['Upload Recording Available'],
       },
-      targets: [new targets.LambdaFunction(startTranscribeFn)],
       description: 'Start Transcribe job when recording is available',
     });
-
-    // ============================================================
-    // Per-handler SQS Queue Pairs (Phase 31)
-    // Each pipeline handler gets its own queue + DLQ for at-least-once delivery
-    // Visibility timeout = 6× Lambda timeout per AWS recommendation
-    // ============================================================
-
-    // recording-ended queue (serves 3 rules: recordingEndRule, stageRecordingEndRule, recordingRecoveryRule)
-    const recordingEndedDlq = new sqs.Queue(this, 'RecordingEndedDlq', {
-      queueName: 'vnl-recording-ended-dlq',
-      retentionPeriod: Duration.days(14),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-    const recordingEndedQueue = new sqs.Queue(this, 'RecordingEndedQueue', {
-      queueName: 'vnl-recording-ended',
-      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
-      deadLetterQueue: { queue: recordingEndedDlq, maxReceiveCount: 3 },
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-
-    // transcode-completed queue
-    const transcodeCompletedDlq = new sqs.Queue(this, 'TranscodeCompletedDlq', {
-      queueName: 'vnl-transcode-completed-dlq',
-      retentionPeriod: Duration.days(14),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-    const transcodeCompletedQueue = new sqs.Queue(this, 'TranscodeCompletedQueue', {
-      queueName: 'vnl-transcode-completed',
-      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
-      deadLetterQueue: { queue: transcodeCompletedDlq, maxReceiveCount: 3 },
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-
-    // transcribe-completed queue
-    const transcribeCompletedDlq = new sqs.Queue(this, 'TranscribeCompletedDlq', {
-      queueName: 'vnl-transcribe-completed-dlq',
-      retentionPeriod: Duration.days(14),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-    const transcribeCompletedQueue = new sqs.Queue(this, 'TranscribeCompletedQueue', {
-      queueName: 'vnl-transcribe-completed',
-      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
-      deadLetterQueue: { queue: transcribeCompletedDlq, maxReceiveCount: 3 },
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-
-    // store-summary queue (60s Lambda timeout → 360s visibility)
-    const storeSummaryDlq = new sqs.Queue(this, 'StoreSummaryDlq', {
-      queueName: 'vnl-store-summary-dlq',
-      retentionPeriod: Duration.days(14),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-    const storeSummaryQueue = new sqs.Queue(this, 'StoreSummaryQueue', {
-      queueName: 'vnl-store-summary',
-      visibilityTimeout: Duration.seconds(6 * 60), // 6× Lambda timeout (60s)
-      deadLetterQueue: { queue: storeSummaryDlq, maxReceiveCount: 3 },
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-
-    // start-transcribe queue
-    const startTranscribeDlq = new sqs.Queue(this, 'StartTranscribeDlq', {
-      queueName: 'vnl-start-transcribe-dlq',
-      retentionPeriod: Duration.days(14),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-    const startTranscribeQueue = new sqs.Queue(this, 'StartTranscribeQueue', {
-      queueName: 'vnl-start-transcribe',
-      visibilityTimeout: Duration.seconds(6 * 30), // 6× Lambda timeout (30s)
-      deadLetterQueue: { queue: startTranscribeDlq, maxReceiveCount: 3 },
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
+    uploadRecordingAvailableRule.addTarget(new targets.SqsQueue(startTranscribeQueue));
 
     // SQS event source mappings — each Lambda polls its dedicated queue (batchSize: 1)
     recordingEndedFn.addEventSource(new SqsEventSource(recordingEndedQueue, {

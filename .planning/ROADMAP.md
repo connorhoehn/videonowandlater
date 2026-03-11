@@ -66,7 +66,7 @@ See milestones/v1.2-ROADMAP.md for full details.
 - [x] **Phase 27: Speaker-Attributed Transcripts** - Transcribe diarization with speaker-turn display in Replay and Upload Video pages (completed 2026-03-10)
 - [x] **Phase 28: Chat Moderation** - Broadcaster bounce/kick + per-message report action for all chat users (completed 2026-03-10)
 - [x] **Phase 29: Upload Video Player Core** - Dedicated /video/:sessionId route with HLS.js quality selector and navigation wiring (completed 2026-03-11)
-- [ ] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page
+- [x] **Phase 30: Upload Video Player Social** - Async comments, emoji reactions, and transcript/AI summary panel on the video page (completed 2026-03-11)
 
 ## Phase Details
 
@@ -258,7 +258,7 @@ Plans:
   4. Emoji reactions can be submitted on the video page using the same emoji set as broadcast/replay; reaction summary counts are displayed and reflect submitted reactions
   5. A collapsible info panel below the player shows the AI summary and speaker-attributed transcript (or plain transcript fallback) for sessions without diarization data
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 30-01-PLAN.md — Backend comment handlers (create-comment, get-comments) + session-repository startedAt fix
@@ -285,4 +285,4 @@ Plans:
 | 27 - Speaker-Attributed Transcripts | 2/2 | Complete    | 2026-03-10 |
 | 28 - Chat Moderation | 3/3 | Complete    | 2026-03-10 |
 | 29 - Upload Video Player Core | 2/2 | Complete    | 2026-03-11 |
-| 30 - Upload Video Player Social | 2/3 | In Progress|  |
+| 30 - Upload Video Player Social | 3/3 | Complete   | 2026-03-11 |

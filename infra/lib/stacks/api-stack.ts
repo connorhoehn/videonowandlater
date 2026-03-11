@@ -442,6 +442,35 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Phase 30: Upload Video Player Social — comment endpoints
+    const commentsResource = sessionIdResource.addResource('comments');
+
+    const createCommentHandler = new NodejsFunction(this, 'CreateCommentHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-comment.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(createCommentHandler);
+    commentsResource.addMethod('POST', new apigateway.LambdaIntegration(createCommentHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const getCommentsHandler = new NodejsFunction(this, 'GetCommentsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-comments.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getCommentsHandler);
+    commentsResource.addMethod('GET', new apigateway.LambdaIntegration(getCommentsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // POST /sessions/{sessionId}/join (join hangout - generate participant token)
     const joinHangoutResource = sessionIdResource.addResource('join');
 

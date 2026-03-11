@@ -91,7 +91,8 @@ See milestones/v1.5-ROADMAP.md for full details.
   - [ ] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes
   - [ ] 31-02-PLAN.md — Handler refactor: SQSEvent wrapper for all 5 handlers, update unit tests
 - [ ] Phase 32: Handler Hardening & Idempotency (0/? plans)
-- [ ] Phase 33: Pipeline Alarms & Dashboard (0/? plans)
+- [ ] Phase 33: Pipeline Alarms & Dashboard (1/1 plans)
+  - [ ] 33-01-PLAN.md — SNS topic, 10 CloudWatch alarms (5 DLQ + 5 Lambda error), VNL-Pipeline dashboard
 - [ ] Phase 34: Nova Lite for AI Summaries (1 plan)
   - [ ] 34-01-PLAN.md — Change default model to nova-lite, add token logging, update CDK env var and IAM policy
 - [ ] Phase 35: Pipeline Debug CLI (1 plan)
@@ -133,6 +134,8 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 **Requirements:** OBS-01, OBS-02, OBS-03, OBS-04
 
+**Plans:** 1 plan
+
 **Success Criteria:**
 1. CloudWatch alarm fires when any pipeline SQS DLQ has ApproximateNumberOfMessagesVisible > 0
 2. CloudWatch alarm fires when any pipeline Lambda has Errors > 0 in a 5-minute window
@@ -168,4 +171,4 @@ See milestones/v1.5-ROADMAP.md for full details.
 
 ## Progress
 
-v1.5 shipped. v1.6 in progress — Phase 31 complete (2 plans), Phase 35 planned (1 plan).
+v1.5 shipped. v1.6 in progress — Phase 31 complete (2 plans), Phase 33 planned (1 plan).

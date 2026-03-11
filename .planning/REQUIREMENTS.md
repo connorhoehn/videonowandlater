@@ -180,9 +180,9 @@
 
 ### Phase 34 — Nova Lite for AI Summaries (Cost)
 
-- [ ] **COST-01**: `store-summary.ts` uses `amazon.nova-lite-v1:0` as the default Bedrock model for AI summary generation (replacing Nova Pro / Claude)
-- [ ] **COST-02**: The Bedrock model ID is read from a `BEDROCK_MODEL_ID` Lambda environment variable so it can be changed via CDK without a code deploy
-- [ ] **COST-03**: `store-summary.ts` logs `inputTokens`, `outputTokens`, and the model ID used with every summarization for cost tracking in CloudWatch Logs
+- [x] **COST-01**: `store-summary.ts` uses `amazon.nova-lite-v1:0` as the default Bedrock model for AI summary generation (replacing Nova Pro / Claude)
+- [x] **COST-02**: The Bedrock model ID is read from a `BEDROCK_MODEL_ID` Lambda environment variable so it can be changed via CDK without a code deploy
+- [x] **COST-03**: `store-summary.ts` logs `inputTokens`, `outputTokens`, and the model ID used with every summarization for cost tracking in CloudWatch Logs
 
 ### Phase 35 — Pipeline Debug CLI (DevEx)
 

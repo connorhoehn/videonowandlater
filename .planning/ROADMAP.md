@@ -85,7 +85,7 @@ See milestones/v1.5-ROADMAP.md for full details.
 | 31 | SQS Pipeline Buffers | Complete (2026-03-11) |
 | 32 | Handler Hardening & Idempotency | Remove broad error suppression in pipeline handlers, add idempotency keys for job submission, fix PIPE-06 processing trap for stuck sessions |
 | 33 | Pipeline Alarms & Dashboard | CloudWatch alarms on DLQ depth and Lambda error rate, SNS email alerts, and a CloudWatch dashboard for pipeline health at a glance |
-| 34 | 1/1 | Complete   | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
+| 34 | 1/1 | Complete    | 2026-03-11 | 35 | Pipeline Debug CLI | Developer tools: debug-pipeline.js (show full session pipeline state) and replay-pipeline.js (re-trigger pipeline from any stage) |
 
 - [x] Phase 31: SQS Pipeline Buffers (2/2 plans) (completed 2026-03-11)
   - [x] 31-01-PLAN.md — CDK infrastructure: 5 SQS queue pairs, event source mappings, rule target changes

@@ -283,5 +283,5 @@ Plans:
 | 26 - Stuck Session Recovery Cron | 2/2 | Complete    | 2026-03-10 |
 | 27 - Speaker-Attributed Transcripts | 2/2 | Complete    | 2026-03-10 |
 | 28 - Chat Moderation | 3/3 | Complete    | 2026-03-10 |
-| 29 - Upload Video Player Core | 2/2 | Complete   | 2026-03-11 |
+| 29 - Upload Video Player Core | 2/2 | Complete    | 2026-03-11 |
 | 30 - Upload Video Player Social | 0/? | Not started | - |

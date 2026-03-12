@@ -6,7 +6,17 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
+import { Logger } from '@aws-lambda-powertools/logger';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import type { Subsegment } from 'aws-xray-sdk-core';
 import { getSessionById, updateSessionRecording } from '../repositories/session-repository';
+
+const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
+const logger = new Logger({
+  serviceName: 'vnl-pipeline',
+  persistentKeys: { pipelineStage: 'on-mediaconvert-complete' },
+});
+const eventBridgeClient = tracer.captureAWSv3Client(new EventBridgeClient({}));
 
 interface MediaConvertJobDetail {
   jobName: string;
@@ -20,7 +30,13 @@ interface MediaConvertJobDetail {
 export const handler = async (
   event: EventBridgeEvent<'MediaConvert Job State Change', MediaConvertJobDetail>
 ): Promise<void> => {
+  const segment = tracer.getSegment();
+  const subsegment = segment?.addNewSubsegment('## handler') as Subsegment | undefined;
+  if (subsegment) tracer.setSegment(subsegment);
+
   try {
+    tracer.putAnnotation('pipelineStage', 'on-mediaconvert-complete');
+
     const tableName = process.env.TABLE_NAME!;
     const bucket = process.env.RECORDINGS_BUCKET!;
     const eventBusName = process.env.EVENT_BUS_NAME!;
@@ -28,7 +44,7 @@ export const handler = async (
     const detail = event.detail;
     const { jobName, jobId, status } = detail;
 
-    console.log(`MediaConvert job state change: ${jobName} (${jobId}) → ${status}`);
+    logger.info('MediaConvert job state change', { jobName, jobId, status });
 
     // Parse sessionId from jobName (format: vnl-{sessionId}-{epochMs})
     const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
@@ -37,6 +53,8 @@ export const handler = async (
       return;
     }
     const sessionId = jobNameMatch[1];
+
+    tracer.putAnnotation('sessionId', sessionId);
 
     // Get session
     const session = await getSessionById(tableName, sessionId);
@@ -49,7 +67,7 @@ export const handler = async (
       // MediaConvert job succeeded
       const recordingHlsUrl = `s3://${bucket}/hls/${sessionId}/master.m3u8`;
 
-      console.log(`Updating session with HLS URL: ${recordingHlsUrl}`);
+      logger.info('Updating session with HLS URL', { sessionId, recordingHlsUrl });
 
       // Update session with all recording metadata atomically
       await updateSessionRecording(tableName, sessionId, {
@@ -59,11 +77,9 @@ export const handler = async (
         status: 'ended',
       });
 
-      console.log(`Session updated with HLS URL and marked as ended: ${sessionId}`);
+      logger.info('Session updated with HLS URL and marked as ended', { sessionId });
 
       // Publish event to trigger Phase 19 transcription pipeline
-      const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
-
       await eventBridgeClient.send(
         new PutEventsCommand({
           Entries: [
@@ -79,10 +95,10 @@ export const handler = async (
           ],
         })
       );
-      console.log(`Transcription pipeline triggered for session: ${sessionId}`);
+      logger.info('Transcription pipeline triggered', { sessionId });
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed
-      console.error(`MediaConvert job failed: ${jobName} (${jobId})`);
+      logger.error('MediaConvert job failed', { jobName, jobId });
 
       // Mark session as failed
       await updateSessionRecording(tableName, sessionId, {
@@ -91,7 +107,11 @@ export const handler = async (
       });
     }
   } catch (error) {
+    tracer.addErrorAsMetadata(error as Error);
     console.error('on-mediaconvert-complete error:', error);
     throw error; // Propagate to EventBridge for retry
+  } finally {
+    subsegment?.close();
+    if (segment) tracer.setSegment(segment);
   }
 };

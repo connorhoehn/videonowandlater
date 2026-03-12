@@ -10,6 +10,30 @@ import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../../repo
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
+// ---------------------------------------------------------------------------
+// TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// ---------------------------------------------------------------------------
+const mockCaptureAWSv3Client = jest.fn((client) => client);
+const mockPutAnnotation = jest.fn();
+const mockAddErrorAsMetadata = jest.fn();
+const mockGetSegment = jest.fn(() => ({
+  addNewSubsegment: jest.fn(() => ({
+    close: jest.fn(),
+    addError: jest.fn(),
+  })),
+}));
+const mockSetSegment = jest.fn();
+
+jest.mock('@aws-lambda-powertools/tracer', () => ({
+  Tracer: jest.fn().mockImplementation(() => ({
+    captureAWSv3Client: mockCaptureAWSv3Client,
+    putAnnotation: mockPutAnnotation,
+    addErrorAsMetadata: mockAddErrorAsMetadata,
+    getSegment: mockGetSegment,
+    setSegment: mockSetSegment,
+  })),
+}));
+
 jest.mock('@aws-sdk/client-s3');
 jest.mock('@aws-sdk/client-eventbridge');
 jest.mock('../../repositories/session-repository');
@@ -53,6 +77,8 @@ describe('transcribe-completed handler', () => {
       AWS_REGION: 'us-east-1',
     };
     jest.clearAllMocks();
+    mockCaptureAWSv3Client.mockClear();
+    mockPutAnnotation.mockClear();
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);
     mockUpdateDiarizedTranscriptPath.mockResolvedValue(undefined);
 
@@ -118,6 +144,14 @@ describe('transcribe-completed handler', () => {
       's3://transcription-bucket/session123/transcript.json',
       'This is the transcribed text from the session.'
     );
+
+    // TRACE-02: S3Client and EventBridgeClient must be wrapped at module scope
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(S3Client));
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(EventBridgeClient));
+
+    // TRACE-03: annotations written during handler invocation
+    expect(mockPutAnnotation).toHaveBeenCalledWith('sessionId', expect.any(String));
+    expect(mockPutAnnotation).toHaveBeenCalledWith('pipelineStage', 'transcribe-completed');
   });
 
   it('emits Transcript Stored event after storing transcript', async () => {

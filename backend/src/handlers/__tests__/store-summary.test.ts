@@ -9,6 +9,30 @@ import { updateSessionAiSummary } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
+// ---------------------------------------------------------------------------
+// TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// ---------------------------------------------------------------------------
+const mockCaptureAWSv3Client = jest.fn((client) => client);
+const mockPutAnnotation = jest.fn();
+const mockAddErrorAsMetadata = jest.fn();
+const mockGetSegment = jest.fn(() => ({
+  addNewSubsegment: jest.fn(() => ({
+    close: jest.fn(),
+    addError: jest.fn(),
+  })),
+}));
+const mockSetSegment = jest.fn();
+
+jest.mock('@aws-lambda-powertools/tracer', () => ({
+  Tracer: jest.fn().mockImplementation(() => ({
+    captureAWSv3Client: mockCaptureAWSv3Client,
+    putAnnotation: mockPutAnnotation,
+    addErrorAsMetadata: mockAddErrorAsMetadata,
+    getSegment: mockGetSegment,
+    setSegment: mockSetSegment,
+  })),
+}));
+
 jest.mock('@aws-sdk/client-s3');
 jest.mock('@aws-sdk/client-bedrock-runtime');
 jest.mock('../../repositories/session-repository');
@@ -60,6 +84,8 @@ describe('store-summary handler', () => {
       AWS_REGION: 'us-east-1',
     };
     jest.clearAllMocks();
+    mockCaptureAWSv3Client.mockClear();
+    mockPutAnnotation.mockClear();
     mockUpdateSessionAiSummary.mockResolvedValue(undefined);
     lastInvokeModelCommand = null;
 
@@ -132,6 +158,14 @@ describe('store-summary handler', () => {
       aiSummary: testSummary,
       aiSummaryStatus: 'available',
     });
+
+    // TRACE-02: S3Client and BedrockRuntimeClient must be wrapped at module scope
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(S3Client));
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(BedrockRuntimeClient));
+
+    // TRACE-03: annotations written during handler invocation
+    expect(mockPutAnnotation).toHaveBeenCalledWith('sessionId', expect.any(String));
+    expect(mockPutAnnotation).toHaveBeenCalledWith('pipelineStage', 'store-summary');
   });
 
   it('should extract summary text from Bedrock response correctly', async () => {

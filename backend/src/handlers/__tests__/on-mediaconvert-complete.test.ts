@@ -7,6 +7,31 @@ import type { EventBridgeEvent } from 'aws-lambda';
 import { handler } from '../on-mediaconvert-complete';
 import * as sessionRepository from '../../repositories/session-repository';
 import * as eventbridgeModule from '@aws-sdk/client-eventbridge';
+import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
+
+// ---------------------------------------------------------------------------
+// TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// ---------------------------------------------------------------------------
+const mockCaptureAWSv3Client = jest.fn((client) => client);
+const mockPutAnnotation = jest.fn();
+const mockAddErrorAsMetadata = jest.fn();
+const mockGetSegment = jest.fn(() => ({
+  addNewSubsegment: jest.fn(() => ({
+    close: jest.fn(),
+    addError: jest.fn(),
+  })),
+}));
+const mockSetSegment = jest.fn();
+
+jest.mock('@aws-lambda-powertools/tracer', () => ({
+  Tracer: jest.fn().mockImplementation(() => ({
+    captureAWSv3Client: mockCaptureAWSv3Client,
+    putAnnotation: mockPutAnnotation,
+    addErrorAsMetadata: mockAddErrorAsMetadata,
+    getSegment: mockGetSegment,
+    setSegment: mockSetSegment,
+  })),
+}));
 
 jest.mock('../../repositories/session-repository');
 jest.mock('@aws-sdk/client-eventbridge');
@@ -28,6 +53,8 @@ describe('on-mediaconvert-complete handler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCaptureAWSv3Client.mockClear();
+    mockPutAnnotation.mockClear();
     mockUpdateSessionRecording.mockResolvedValue(undefined);
   });
 
@@ -524,6 +551,13 @@ describe('on-mediaconvert-complete handler', () => {
       const detail = JSON.parse(putEventsCommand.input.Entries[0].Detail);
       expect(detail.sessionId).toBe(sessionId);
       expect(detail.recordingHlsUrl).toBe(`s3://${BUCKET_NAME}/hls/${sessionId}/master.m3u8`);
+
+      // TRACE-02: EventBridgeClient must be wrapped at module scope
+      expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(EventBridgeClient));
+
+      // TRACE-03: annotations written during handler invocation
+      expect(mockPutAnnotation).toHaveBeenCalledWith('sessionId', expect.any(String));
+      expect(mockPutAnnotation).toHaveBeenCalledWith('pipelineStage', 'on-mediaconvert-complete');
     });
 
     it('should NOT publish EventBridge event on ERROR status', async () => {

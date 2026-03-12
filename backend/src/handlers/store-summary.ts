@@ -10,6 +10,8 @@ import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import type { Subsegment } from 'aws-xray-sdk-core';
 import { updateSessionAiSummary } from '../repositories/session-repository';
 
 const logger = new Logger({
@@ -17,25 +19,31 @@ const logger = new Logger({
   persistentKeys: { pipelineStage: 'store-summary' },
 });
 
+const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
+const s3Client = tracer.captureAWSv3Client(new S3Client({}));
+const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient({
+  region: process.env.BEDROCK_REGION || process.env.AWS_REGION,
+}));
+
 interface TranscriptStoreDetail {
   sessionId: string;
   transcriptS3Uri: string;
 }
 
 async function processEvent(
-  event: EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>
+  event: EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>,
+  tracer: Tracer
 ): Promise<void> {
   const { sessionId, transcriptS3Uri } = event.detail;
   const tableName = process.env.TABLE_NAME!;
-  const bedrockRegion = process.env.BEDROCK_REGION || process.env.AWS_REGION!;
   const modelId = process.env.BEDROCK_MODEL_ID || 'amazon.nova-lite-v1:0';
 
   const startMs = Date.now();
   logger.appendPersistentKeys({ sessionId });
   logger.info('Pipeline stage entered', { transcriptS3Uri });
 
-  const s3Client = new S3Client({ region: process.env.AWS_REGION });
-  const bedrockClient = new BedrockRuntimeClient({ region: bedrockRegion });
+  tracer.putAnnotation('sessionId', sessionId);
+  tracer.putAnnotation('pipelineStage', 'store-summary');
 
   try {
     // Parse S3 URI and fetch transcript
@@ -178,15 +186,23 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const failures: { itemIdentifier: string }[] = [];
 
   for (const record of event.Records) {
+    const segment = tracer.getSegment();
+    const subsegment = segment?.addNewSubsegment(`## ${record.messageId}`) as Subsegment | undefined;
+    if (subsegment) tracer.setSegment(subsegment);
+
     try {
       const ebEvent = JSON.parse(record.body) as EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>;
-      await processEvent(ebEvent);
+      await processEvent(ebEvent, tracer);
     } catch (err: any) {
+      tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {
         messageId: record.messageId,
         error: err.message,
       });
       failures.push({ itemIdentifier: record.messageId });
+    } finally {
+      subsegment?.close();
+      if (segment) tracer.setSegment(segment);
     }
   }
 

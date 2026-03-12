@@ -86,14 +86,18 @@ describe('transcode-completed handler', () => {
       AWS_REGION: 'us-east-1',
     };
     jest.clearAllMocks();
-    mockCaptureAWSv3Client.mockClear();
-    mockPutAnnotation.mockClear();
+    // Guard: factory only runs when handler imports @aws-lambda-powertools/tracer.
+    // Until Plan 02 adds Tracer to transcode-completed.ts, these may be undefined.
+    mockCaptureAWSv3Client?.mockClear();
+    mockPutAnnotation?.mockClear();
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);
 
-    // Mock TranscribeClient instance
-    (mockTranscribeClient as any).mockImplementation(() => ({
-      send: mockTranscribeSend,
-    }));
+    // Mock TranscribeClient instance.
+    // Use function (not arrow) and set this.send so new TranscribeClient() returns an
+    // actual instance (preserving instanceof check) rather than a plain object.
+    (mockTranscribeClient as any).mockImplementation(function(this: any) {
+      this.send = mockTranscribeSend;
+    });
 
     // Default: Transcribe job starts successfully
     mockTranscribeSend.mockResolvedValue({

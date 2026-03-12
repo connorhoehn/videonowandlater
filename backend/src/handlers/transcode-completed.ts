@@ -6,8 +6,12 @@
 
 import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import type { Subsegment } from 'aws-xray-sdk-core';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { updateTranscriptStatus } from '../repositories/session-repository';
+
+export const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -28,7 +32,9 @@ interface MediaConvertJobDetail {
 }
 
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>
+  event: EventBridgeEvent<string, Record<string, any>>,
+  tracer: Tracer,
+  transcribeClient: TranscribeClient
 ): Promise<void> {
   const startMs = Date.now();
   const tableName = process.env.TABLE_NAME!;
@@ -40,6 +46,7 @@ async function processEvent(
   const userMetadata = detail.userMetadata || {};
   const sessionId = userMetadata.sessionId;
 
+  tracer.putAnnotation('sessionId', sessionId ?? 'unknown');
   logger.appendPersistentKeys({ sessionId: sessionId ?? 'unknown' });
   logger.info('Pipeline stage entered', { jobId, status: detail.status });
 
@@ -79,7 +86,6 @@ async function processEvent(
   logger.info('Starting Transcribe job for session:', { sessionId, mp4Input: mp4OutputPath });
 
   try {
-    const transcribeClient = new TranscribeClient({ region: process.env.AWS_REGION });
     const transcribeJobName = `vnl-${sessionId}-${jobId}`;
 
     const startJobCommand = new StartTranscriptionJobCommand({
@@ -132,17 +138,32 @@ async function processEvent(
 
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const failures: { itemIdentifier: string }[] = [];
+  const parentSegment = tracer.getSegment();
+
+  // Wrap TranscribeClient with X-Ray tracing on each invocation.
+  // Per-invocation wrapping satisfies the test contract (beforeEach clears mock state).
+  const transcribeClient = tracer.captureAWSv3Client(new TranscribeClient({}));
 
   for (const record of event.Records) {
+    let subsegment: Subsegment | undefined;
     try {
       const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
-      await processEvent(ebEvent);
+      subsegment = parentSegment?.addNewSubsegment('## processRecord') as Subsegment | undefined;
+      if (subsegment) tracer.setSegment(subsegment);
+
+      tracer.putAnnotation('pipelineStage', 'transcode-completed');
+
+      await processEvent(ebEvent, tracer, transcribeClient);
     } catch (err: any) {
+      tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {
         messageId: record.messageId,
         error: err.message,
       });
       failures.push({ itemIdentifier: record.messageId });
+    } finally {
+      subsegment?.close();
+      if (parentSegment) tracer.setSegment(parentSegment);
     }
   }
 

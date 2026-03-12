@@ -8,12 +8,18 @@ import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import type { Subsegment } from 'aws-xray-sdk-core';
 import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../repositories/session-repository';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
   persistentKeys: { pipelineStage: 'transcribe-completed' },
 });
+
+const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
+const s3Client = tracer.captureAWSv3Client(new S3Client({}));
+const ebClient = tracer.captureAWSv3Client(new EventBridgeClient({}));
 
 interface TranscribeJobDetail {
   TranscriptionJobStatus: 'COMPLETED' | 'FAILED';
@@ -117,7 +123,8 @@ function buildSpeakerSegments(items: NonNullable<TranscribeOutput['results']['it
 }
 
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>
+  event: EventBridgeEvent<string, Record<string, any>>,
+  tracer: Tracer
 ): Promise<void> {
   const startMs = Date.now();
   const tableName = process.env.TABLE_NAME!;
@@ -142,6 +149,9 @@ async function processEvent(
 
   const sessionId = jobNameMatch[1];
 
+  tracer.putAnnotation('sessionId', sessionId);
+  tracer.putAnnotation('pipelineStage', 'transcribe-completed');
+
   logger.appendPersistentKeys({ sessionId });
   logger.info('Pipeline stage entered', { jobName, transcriptionJobStatus: detail.TranscriptionJobStatus });
 
@@ -162,7 +172,6 @@ async function processEvent(
   logger.info('Fetching transcript for session:', { sessionId });
 
   try {
-    const s3Client = new S3Client({ region: process.env.AWS_REGION });
     const transcriptJsonPath = `${sessionId}/transcript.json`;
 
     const getObjectCommand = new GetObjectCommand({
@@ -212,9 +221,8 @@ async function processEvent(
 
       // Emit "Transcript Stored" event for Phase 20 (AI Summary Pipeline) even with empty text
       try {
-        const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
         const s3Uri = `s3://${transcriptionBucket}/${transcriptJsonPath}`;
-        await eventBridgeClient.send(
+        await ebClient.send(
           new PutEventsCommand({
             Entries: [
               {
@@ -250,8 +258,7 @@ async function processEvent(
 
     // Emit "Transcript Stored" event for Phase 20 (AI Summary Pipeline)
     try {
-      const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
-      await eventBridgeClient.send(
+      await ebClient.send(
         new PutEventsCommand({
           Entries: [
             {
@@ -286,15 +293,23 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const failures: { itemIdentifier: string }[] = [];
 
   for (const record of event.Records) {
+    const segment = tracer.getSegment();
+    const subsegment = segment?.addNewSubsegment(`## ${record.messageId}`) as Subsegment | undefined;
+    if (subsegment) tracer.setSegment(subsegment);
+
     try {
       const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
-      await processEvent(ebEvent);
+      await processEvent(ebEvent, tracer);
     } catch (err: any) {
+      tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {
         messageId: record.messageId,
         error: err.message,
       });
       failures.push({ itemIdentifier: record.messageId });
+    } finally {
+      subsegment?.close();
+      if (segment) tracer.setSegment(segment);
     }
   }
 

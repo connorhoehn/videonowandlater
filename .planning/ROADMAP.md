@@ -123,11 +123,13 @@ Plans:
   2. A message with a valid schema but a transient Transcribe API error in start-transcribe is retried by SQS (not silently acknowledged), and eventually lands in the DLQ if all retries exhaust
   3. Developer can find any schema validation failure in CloudWatch Logs by searching for the field name or handler name without custom log parsing
   4. All 5 handlers receive typed event objects (no `as any` casts) downstream of the validation boundary
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 37-01: TBD
-- [ ] 37-02: TBD
+- [ ] 037-01-PLAN.md — TDD: Define Zod schemas + validation test cases (Wave 0 contracts)
+- [ ] 037-02-PLAN.md — Implement validation in recording-ended + transcode-completed (Wave 1)
+- [ ] 037-03-PLAN.md — Implement validation in transcribe-completed + store-summary + on-mediaconvert-complete (Wave 1)
+- [ ] 037-04-PLAN.md — Fix start-transcribe transient error bug + implement validation (Wave 2)
 
 ### Phase 38: Idempotency Gap Coverage
 **Goal**: The two remaining pipeline handlers without idempotency guards (transcribe-completed and store-summary) safely handle duplicate SQS deliveries without re-executing expensive operations
@@ -193,7 +195,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 36. X-Ray Distributed Tracing | v1.7 | 4/4 | Complete | 2026-03-12 |
-| 37. Event Schema Validation | v1.7 | 0/TBD | Not started | - |
+| 37. Event Schema Validation | v1.7 | 0/4 | Not started | - |
 | 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
 | 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |

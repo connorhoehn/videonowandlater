@@ -8,7 +8,21 @@ A live video platform powered by AWS IVS with one-to-many broadcasting, small-gr
 
 Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
 
-## Latest Milestone: v1.6 Pipeline Durability, Cost & Debug (SHIPPED 2026-03-11)
+## Current Milestone: v1.7 Event Hardening & UI Polish
+
+**Goal:** Harden the event-driven backend with schema validation, X-Ray tracing, idempotency gaps, and DLQ re-drive tooling — then clean up every incomplete UI area across transcript display, upload player, activity feed, and live session pages.
+
+**Target features:**
+- Event schema validation at all handler boundaries
+- AWS X-Ray distributed tracing across the full pipeline
+- DLQ re-drive tooling (visibility into stuck events + manual replay)
+- Idempotency gap coverage for remaining handlers
+- Transcript / AI summary display polish
+- Upload video player completeness
+- Activity feed / home improvements
+- Broadcast / hangout live UI cleanup
+
+## Previous Milestone: v1.6 Pipeline Durability, Cost & Debug (SHIPPED 2026-03-11)
 
 **Accomplished:** Replaced brittle fire-and-forget EventBridge→Lambda with SQS-backed durable queues for all 5 critical pipeline handlers, hardened handlers to throw on failure (enabling real SQS retries), cut AI summary costs by switching to Nova Lite, and shipped CLI debug tools for pipeline introspection.
 
@@ -48,7 +62,14 @@ Users can go live instantly — either broadcasting to viewers or hanging out in
 
 ### Active
 
-*No active requirements — planning next milestone.*
+- [ ] Event schema validation enforced at all 5 pipeline handler boundaries — v1.7
+- [ ] AWS X-Ray distributed tracing across the full recording→transcode→transcribe→summary pipeline — v1.7
+- [ ] DLQ re-drive tooling: visibility into stuck events and manual replay capability — v1.7
+- [ ] Idempotency gap coverage for remaining handlers not hardened in v1.6 — v1.7
+- [ ] Transcript and AI summary display fully polished across all viewer surfaces — v1.7
+- [ ] Upload video player complete: comments, reactions, quality selector, transcript panel — v1.7
+- [ ] Activity feed and home accurately reflect session processing state — v1.7
+- [ ] Broadcast and hangout live session UI complete with no missing controls or broken states — v1.7
 
 ### Just Validated (v1.6)
 

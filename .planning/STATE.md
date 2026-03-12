@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.7
-milestone_name: Planning next milestone
+milestone_name: Event Hardening & UI Polish
 status: planning
-stopped_at: v1.6 archived — ready for /gsd:new-milestone
-last_updated: "2026-03-11T23:55:00.000Z"
+stopped_at: Milestone v1.7 started — defining requirements
+last_updated: "2026-03-12T00:00:00.000Z"
 progress:
   total_phases: 0
   completed_phases: 0

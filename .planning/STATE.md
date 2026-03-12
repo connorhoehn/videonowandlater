@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: executing
-stopped_at: Completed 036-02-PLAN.md
-last_updated: "2026-03-12T18:57:10.882Z"
-last_activity: "2026-03-12 — Completed 036-01: TDD Red tracer contract tests for all 5 pipeline handlers"
+stopped_at: Completed 036-03-PLAN.md
+last_updated: "2026-03-12T18:59:30.294Z"
+last_activity: "2026-03-12 — Completed 036-02: X-Ray tracer + per-record subsegments in recording-ended and transcode-completed"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 2
+  completed_plans: 3
+  percent: 85
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 36 of 41 (X-Ray Distributed Tracing)
-Plan: 2 complete (036-02-PLAN.md done)
+Plan: 3 complete (036-03-PLAN.md done)
 Status: In progress
-Last activity: 2026-03-12 — Completed 036-02: X-Ray tracer + per-record subsegments in recording-ended and transcode-completed
+Last activity: 2026-03-12 — Completed 036-03: X-Ray tracer in transcribe-completed, store-summary, and on-mediaconvert-complete; all 5 handlers done
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -89,12 +89,17 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T18:57:10.879Z
-Stopped at: Completed 036-02-PLAN.md
+Last session: 2026-03-12T18:59:30.293Z
+Stopped at: Completed 036-03-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**
 - Per-invocation `captureAWSv3Client` (not module-scope) used to satisfy test contract — `beforeEach` clears mock call counts, so clients must be re-wrapped per handler invocation for `toHaveBeenCalledWith` assertions to pass
 - ESM Jest TDZ fix: use `var` with factory-assignment pattern in all tracer test mocks (const causes TDZ with `--experimental-vm-modules` + ESM import resolution)
 
-**Next action:** Run `/gsd:execute-plan 036-03` to implement X-Ray tracer in transcribe-completed, store-summary, and on-mediaconvert-complete handlers.
+**Key decisions from 036-03:**
+- Module-scope client tests require direct send assignment in beforeEach (not mockImplementation) — capture instance before clearAllMocks() then instance.send = mockFn
+- captureAWSv3Client calls happen at module load — do NOT clear that mock in beforeEach; keep calls for TRACE-02 assertions
+- setupEbSend() helper pattern for redirecting module-scope EventBridgeClient send in on-mediaconvert-complete tests
+
+**Next action:** Run `/gsd:execute-plan 036-04` to enable CDK ACTIVE tracing for all 5 pipeline Lambda functions.

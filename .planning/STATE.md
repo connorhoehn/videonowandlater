@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
-status: in-progress
-stopped_at: Completed 036-01-PLAN.md
-last_updated: "2026-03-12T18:36:00.000Z"
+status: executing
+stopped_at: Completed 036-02-PLAN.md
+last_updated: "2026-03-12T18:57:10.882Z"
+last_activity: "2026-03-12 — Completed 036-01: TDD Red tracer contract tests for all 5 pipeline handlers"
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 1
+  total_plans: 4
+  completed_plans: 2
   percent: 2
 ---
 
@@ -25,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 36 of 41 (X-Ray Distributed Tracing)
-Plan: 1 complete (036-01-PLAN.md done)
+Plan: 2 complete (036-02-PLAN.md done)
 Status: In progress
-Last activity: 2026-03-12 — Completed 036-01: TDD Red tracer contract tests for all 5 pipeline handlers
+Last activity: 2026-03-12 — Completed 036-02: X-Ray tracer + per-record subsegments in recording-ended and transcode-completed
 
-Progress: [░░░░░░░░░░] 2%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -88,8 +89,12 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Completed 036-01-PLAN.md — TDD Red tracer contract tests for all 5 pipeline handlers
+Last session: 2026-03-12T18:57:10.879Z
+Stopped at: Completed 036-02-PLAN.md
 Resume file: None
 
-**Next action:** Run `/gsd:execute-plan 036-02` to implement X-Ray tracer in recording-ended and transcode-completed handlers (GREEN phase).
+**Key decisions from 036-02:**
+- Per-invocation `captureAWSv3Client` (not module-scope) used to satisfy test contract — `beforeEach` clears mock call counts, so clients must be re-wrapped per handler invocation for `toHaveBeenCalledWith` assertions to pass
+- ESM Jest TDZ fix: use `var` with factory-assignment pattern in all tracer test mocks (const causes TDZ with `--experimental-vm-modules` + ESM import resolution)
+
+**Next action:** Run `/gsd:execute-plan 036-03` to implement X-Ray tracer in transcribe-completed, store-summary, and on-mediaconvert-complete handlers.

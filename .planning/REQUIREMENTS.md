@@ -8,8 +8,8 @@
 ### Tracing
 
 - [ ] **TRACE-01**: Developer can view X-Ray traces for all 5 pipeline Lambda functions (recording-ended, transcode-completed, on-mediaconvert-complete, transcribe-completed, store-summary) with active tracing enabled
-- [ ] **TRACE-02**: Each pipeline handler emits subsegments for downstream AWS SDK calls (DynamoDB, S3, Transcribe, Bedrock, MediaConvert, SQS) visible in X-Ray
-- [ ] **TRACE-03**: Each X-Ray segment is annotated with `sessionId` and `pipelineStage` so traces are searchable without log diving
+- [x] **TRACE-02**: Each pipeline handler emits subsegments for downstream AWS SDK calls (DynamoDB, S3, Transcribe, Bedrock, MediaConvert, SQS) visible in X-Ray
+- [x] **TRACE-03**: Each X-Ray segment is annotated with `sessionId` and `pipelineStage` so traces are searchable without log diving
 - [ ] **TRACE-04**: X-Ray service map shows connected pipeline stages from recording-ended through store-summary
 
 ### Validation
@@ -80,8 +80,8 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TRACE-01 | Phase 36 | Pending |
-| TRACE-02 | Phase 36 | Pending |
-| TRACE-03 | Phase 36 | Pending |
+| TRACE-02 | Phase 36 | Complete |
+| TRACE-03 | Phase 36 | Complete |
 | TRACE-04 | Phase 36 | Pending |
 | VALID-01 | Phase 37 | Pending |
 | VALID-02 | Phase 37 | Pending |

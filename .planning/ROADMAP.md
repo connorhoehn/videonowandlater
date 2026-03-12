@@ -106,11 +106,13 @@ See milestones/v1.6-ROADMAP.md for full details.
   2. Each pipeline trace shows individual subsegments for every downstream AWS SDK call (DynamoDB reads/writes, S3 gets/puts, Transcribe submissions, Bedrock invocations, MediaConvert job submissions)
   3. Developer can search X-Ray traces by sessionId or pipelineStage annotation without reading CloudWatch logs
   4. A completed pipeline run produces a connected chain of trace nodes from recording-ended through store-summary visible in a single service map view
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 36-01: TBD
-- [ ] 36-02: TBD
+- [ ] 036-01-PLAN.md — TDD: tracer assertions for all 5 handler test files (Wave 0 contracts)
+- [ ] 036-02-PLAN.md — Refactor recording-ended + transcode-completed with module-scope traced clients
+- [ ] 036-03-PLAN.md — Refactor transcribe-completed + store-summary + on-mediaconvert-complete with traced clients
+- [ ] 036-04-PLAN.md — CDK active tracing config + deploy + X-Ray service map verification
 
 ### Phase 37: Event Schema Validation
 **Goal**: All 5 pipeline handlers reject malformed events at the boundary before executing any side effects, and the start-transcribe transient error swallowing bug is fixed
@@ -190,7 +192,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 36. X-Ray Distributed Tracing | v1.7 | 0/TBD | Not started | - |
+| 36. X-Ray Distributed Tracing | v1.7 | 0/4 | Not started | - |
 | 37. Event Schema Validation | v1.7 | 0/TBD | Not started | - |
 | 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |

@@ -9,6 +9,7 @@
 - ✅ **v1.4 Creator Studio & Stream Quality** - Phases 22.1, 23-24 (shipped 2026-03-10)
 - ✅ **v1.5 Pipeline Reliability, Moderation & Upload Experience** - Phases 22.1, 23-30 (shipped 2026-03-11)
 - ✅ **v1.6 Pipeline Durability, Cost & Debug** - Phases 31-35 (shipped 2026-03-11)
+- 🚧 **v1.7 Event Hardening & UI Polish** - Phases 36-41 (in progress)
 
 ## Phases
 
@@ -90,6 +91,108 @@ See milestones/v1.6-ROADMAP.md for full details.
 
 </details>
 
+### 🚧 v1.7 Event Hardening & UI Polish (In Progress)
+
+**Milestone Goal:** Harden the event-driven backend with X-Ray distributed tracing, Zod schema validation at all handler boundaries, idempotency gap coverage for the two remaining unguarded handlers, and operator DLQ tooling — then complete every incomplete UI area across transcript display, activity feed, and live session pages.
+
+## Phase Details
+
+### Phase 36: X-Ray Distributed Tracing
+**Goal**: Developer can observe every pipeline execution end-to-end in the X-Ray service map with per-stage annotations and per-call subsegments
+**Depends on**: Phase 35 (SQS queue ARNs and handler structure established)
+**Requirements**: TRACE-01, TRACE-02, TRACE-03, TRACE-04
+**Success Criteria** (what must be TRUE):
+  1. Developer can open the X-Ray console and see all 5 pipeline Lambda functions as nodes in the service map after triggering a recording
+  2. Each pipeline trace shows individual subsegments for every downstream AWS SDK call (DynamoDB reads/writes, S3 gets/puts, Transcribe submissions, Bedrock invocations, MediaConvert job submissions)
+  3. Developer can search X-Ray traces by sessionId or pipelineStage annotation without reading CloudWatch logs
+  4. A completed pipeline run produces a connected chain of trace nodes from recording-ended through store-summary visible in a single service map view
+**Plans**: TBD
+
+Plans:
+- [ ] 36-01: TBD
+- [ ] 36-02: TBD
+
+### Phase 37: Event Schema Validation
+**Goal**: All 5 pipeline handlers reject malformed events at the boundary before executing any side effects, and the start-transcribe transient error swallowing bug is fixed
+**Depends on**: Phase 36 (tracing in place so validation failures are observable in X-Ray)
+**Requirements**: VALID-01, VALID-02, VALID-03, VALID-04
+**Success Criteria** (what must be TRUE):
+  1. A message with a missing required field (e.g., no sessionId) sent to any pipeline SQS queue is acknowledged without retry and logged with the specific field name, received value, and handler name
+  2. A message with a valid schema but a transient Transcribe API error in start-transcribe is retried by SQS (not silently acknowledged), and eventually lands in the DLQ if all retries exhaust
+  3. Developer can find any schema validation failure in CloudWatch Logs by searching for the field name or handler name without custom log parsing
+  4. All 5 handlers receive typed event objects (no `as any` casts) downstream of the validation boundary
+**Plans**: TBD
+
+Plans:
+- [ ] 37-01: TBD
+- [ ] 37-02: TBD
+
+### Phase 38: Idempotency Gap Coverage
+**Goal**: The two remaining pipeline handlers without idempotency guards (transcribe-completed and store-summary) safely handle duplicate SQS deliveries without re-executing expensive operations
+**Depends on**: Phase 37 (typed validated events provide reliable idempotency key extraction)
+**Requirements**: IDEM-01, IDEM-02, IDEM-03
+**Success Criteria** (what must be TRUE):
+  1. Re-driving a transcribe-completed message that already ran (transcript stored in S3) produces no second S3 write and no error — the message is acknowledged cleanly
+  2. Re-driving a store-summary message that already ran (AI summary stored) produces no second Bedrock invocation and no error — the message is acknowledged cleanly
+  3. Sending the same message twice concurrently (simulating SQS at-least-once delivery) to either handler results in exactly one execution completing and the duplicate being acknowledged without side effects
+**Plans**: TBD
+
+Plans:
+- [ ] 38-01: TBD
+
+### Phase 39: DLQ Re-drive Tooling
+**Goal**: Developer can inspect, re-drive, and purge messages from any of the 5 pipeline DLQs via CLI without touching the AWS console
+**Depends on**: Phase 36 (X-Ray tracing makes re-driven messages traceable end-to-end)
+**Requirements**: DLQ-01, DLQ-02, DLQ-03, DLQ-04
+**Success Criteria** (what must be TRUE):
+  1. Developer runs a single CLI command and sees a decoded list of all messages in a named DLQ with sessionId, event type, and error context — without consuming the messages from the queue
+  2. Developer can re-drive all messages from a named DLQ back to its source queue with one command, and verify the messages flow through the pipeline by watching X-Ray traces appear
+  3. Developer can permanently delete a specific DLQ message by receipt handle after investigation
+  4. Developer can run a health-check command that prints the approximate message count for all 5 DLQs in one output
+**Plans**: TBD
+
+Plans:
+- [ ] 39-01: TBD
+- [ ] 39-02: TBD
+
+### Phase 40: UI Polish — Replay & Feed
+**Goal**: The replay viewer transcript panel is fully interactive, the AI summary panel has distinct visual states, and the activity feed cards are complete with thumbnail, duration, and accurate pipeline status
+**Depends on**: Phase 36 (independent of backend hardening phases; depends only on existing pipeline state fields)
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05
+**Success Criteria** (what must be TRUE):
+  1. User clicks a transcript segment on the replay or video page and the video player immediately seeks to that timestamp
+  2. The AI summary panel on the replay and video pages displays three visually distinct states: a spinner or progress indicator while processing, formatted summary text when available, and an explicit error message when failed — not the same plain text style for all three states
+  3. Activity feed cards on the home page show a video thumbnail image when one is available for the session
+  4. Activity feed cards display the recording duration in human-readable format (e.g., "12 min 34 sec")
+  5. Activity feed cards show the current pipeline processing stage (transcribing, summarizing, complete, failed) as a status badge, and cards in non-terminal states refresh automatically without a full page reload
+**Plans**: TBD
+
+Plans:
+- [ ] 40-01: TBD
+- [ ] 40-02: TBD
+
+### Phase 41: UI Polish — Live Session & Upload
+**Goal**: Broadcast and hangout live pages are complete with confirmation dialogs, hangout has reaction parity with broadcast, and the upload video page is fully functional with accurate pipeline state and working comment/transcript panels
+**Depends on**: Phase 40 (UI patterns established; these are independent of backend phases)
+**Requirements**: UI-06, UI-07, UI-08, UI-09
+**Success Criteria** (what must be TRUE):
+  1. Clicking "Stop Broadcast" or "Leave Hangout" shows a confirmation dialog before ending the session — accidental taps do not terminate live sessions
+  2. Hangout participants can open a reaction picker and send floating reactions during a live session, matching the reaction experience on the broadcast page
+  3. The upload video page shows a pipeline progress indicator while the video is still transcribing or being summarized, and updates to the final state when processing completes
+  4. Users can submit a timestamped comment on the upload video page, see it appear in the thread, and click it to seek the video to the correct position; the transcript panel displays all segments and supports click-to-seek
+**Plans**: TBD
+
+Plans:
+- [ ] 41-01: TBD
+- [ ] 41-02: TBD
+
 ## Progress
 
-v1.6 shipped 2026-03-11. See MILESTONES.md for full history.
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 36. X-Ray Distributed Tracing | v1.7 | 0/TBD | Not started | - |
+| 37. Event Schema Validation | v1.7 | 0/TBD | Not started | - |
+| 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
+| 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
+| 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |
+| 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |

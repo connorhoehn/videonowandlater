@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: planning
-stopped_at: Milestone v1.7 started — defining requirements
+stopped_at: Roadmap created — ready to plan Phase 36
 last_updated: "2026-03-12T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,173 +17,79 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-11)
+See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-
-**Current focus:** Planning v1.7 milestone — run `/gsd:new-milestone` to begin
+**Current focus:** v1.7 Phase 36 — X-Ray Distributed Tracing
 
 ## Current Position
 
-**Active Phase:** Phase 27 — Speaker-Attributed Transcripts (COMPLETE)
-**Active Plan:** 26-02 complete (phase complete)
-**Status:** v1.6 milestone complete
-**Progress:** [██████████] 100%
-**Last session:** 2026-03-11T23:11:59.073Z
+Phase: 36 of 41 (X-Ray Distributed Tracing)
+Plan: None yet (ready to plan)
+Status: Ready to plan
+Last activity: 2026-03-12 — v1.7 roadmap created; Phases 36-41 defined
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Plans completed (v1.4): 9
-- Tasks completed (v1.4): 18
-- Phases completed (v1.4): 3/3
-
-**Quality:**
-- Test coverage: 360/360 backend tests passing
-- Breaking changes: 0 (all v1.4 additions backward compatible)
-- New dependencies added in v1.4: none shipped
+- Total plans completed: 0 (v1.7)
+- Average duration: N/A
+- Total execution time: 0 hours
 
 **Milestone History:**
 - v1.0 Gap Closure: 6 phases, 13 plans (shipped 2026-03-02)
 - v1.1 Replay, Reactions & Hangouts: 15 phases, 27 plans (shipped 2026-03-05)
 - v1.2 Activity Feed & Intelligence: 7 phases, 19 plans (shipped 2026-03-06)
 - v1.4 Creator Studio & Stream Quality: 3 phases, 9 plans (shipped 2026-03-10)
+- v1.5 Pipeline Reliability, Moderation & Upload: 9 phases, 26 plans (shipped 2026-03-11)
+- v1.6 Pipeline Durability, Cost & Debug: 5 phases, 9 plans (shipped 2026-03-11)
 
 ## Accumulated Context
 
-### Key Decisions
+### Key Decisions (v1.7 Planning)
 
-**v1.6 Architecture — SQS Pipeline Buffers (Phase 31):**
-- `bisectBatchOnFunctionError` does not exist in CDK v2.170 `SqsEventSourceProps` — use `batchSize: 1` + `reportBatchItemFailures: true` only
-- SQS queue declarations must precede first rule target usage in TypeScript — place queue pairs after `recordingEventsDlq` (not at file bottom)
-- `recordingEndedQueue` serves 3 rules (recordingEndRule, stageRecordingEndRule, recordingRecoveryRule) — `targets.SqsQueue` auto-adds per-rule resource policy statements, no manual `addToResourcePolicy` needed
-- `recordingEventsDlq` resource policy now covers only `recordingStartRule`; all 5 migrated handlers use per-handler SQS DLQs
+**X-Ray tracing pitfall (Phase 36):**
+- `tracing: lambda.Tracing.ACTIVE` must be set in CDK per Lambda — code-only wiring produces zero traces with no error
+- AWS SDK clients must be constructed at module scope for `captureAWSv3Client` to produce subsegments — 4 of 5 handlers currently construct clients inside `processEvent` and must be refactored
+- SQS→Lambda trace context is not propagated by AWS (platform constraint) — pipeline stages appear as disconnected nodes in service map; this is expected, not a configuration bug
+- Do not use `@tracer.captureLambdaHandler()` decorator on SQS handlers — use manual per-record subsegments
 
-**v1.5 Architecture — Structured Logging (Phase 25):**
-- Use `@aws-lambda-powertools/logger` (already installed at ^2.31.0) — NOT custom console.log wrappers
-- Initialize Logger at module scope with `persistentKeys: { pipelineStage: '<handler-name>' }` per handler
-- Use `logger.appendPersistentKeys({ sessionId })` inside the handler for per-invocation correlation
-- Add explicit CDK `logGroup` with `RetentionDays.ONE_MONTH` to: RecordingEnded, TranscodeCompleted, TranscribeCompleted, StoreSummary, StartTranscribe
-- Follow existing `ivsEventAuditFn` log group pattern in session-stack.ts
+**Schema validation pitfall (Phase 37):**
+- `start-transcribe` handler swallows transient errors (confirmed at line 87-90) — fix: re-throw transient Transcribe exceptions (`ThrottlingException`, `ServiceUnavailableException`); acknowledge permanent failures (missing sessionId/recordingHlsUrl)
+- `recording-ended` has a recovery event path with a different shape — use `z.discriminatedUnion` or `z.union` schema
+- Permanent schema failures must be acknowledged (not pushed to `batchItemFailures`) to avoid infinite SQS retry loops
 
-**v1.5 Architecture — Stuck Session Cron (Phase 26):**
-- Query GSI1 for `STATUS#ENDING` partition — do NOT full-table scan (prevents RCU cost explosion)
-- Filter threshold: `endedAt < 45 minutes ago` AND `transcriptStatus != 'processing'`
-- Cap retries at 3 via `recoveryAttemptCount` field on session record
-- Re-fire via EventBridge PutEvents (not direct Lambda.invoke) to preserve DLQ/retry semantics
-- EventBridge Scheduler rate(15 min) — consistent with existing ReplenishPoolSchedule pattern
+**Idempotency pitfall (Phase 38):**
+- Idempotency key must be a stable business identifier (`detail.sessionId`) NOT the SQS `messageId` — messageId changes on DLQ re-drive, bypassing idempotency entirely
+- New `vnl-idempotency` DynamoDB table required with `timeToLiveAttribute: 'expiration'` (exact name — Powertools writes to this attribute)
+- `registerLambdaContext` is mandatory — without it, INPROGRESS records block retries after Lambda timeouts
+- Keep the existing `ConflictException` catch in `transcode-completed` as a belt-and-suspenders backstop
 
-**v1.5 Architecture — Speaker Diarization (Phase 27):**
-- Add `Settings.ShowSpeakerLabels: true, MaxSpeakerLabels: 2` to StartTranscriptionJobCommand
-- Read `speaker_label` directly from each `results.items[N]` word item (not from `speaker_labels.segments`)
-- Store compact `speakerSegments` array in S3 only; write `diarizedTranscriptS3Path` pointer on session
-- NEVER store segment arrays inline in DynamoDB — 400KB item limit risk on long recordings
-- Display labels as "Speaker 1" / "Speaker 2" — username mapping not possible from composite audio
+**DLQ tooling (Phase 39):**
+- Use `ReceiveMessage` with `VisibilityTimeout=0` to peek at DLQ messages without consuming them
+- Use `StartMessageMoveTask` for bulk re-drive (not manual message copying)
+- Check `ListMessageMoveTasks` before starting to avoid `MessageMoveTaskAlreadyRunning` error
+- Scope DLQ Lambda IAM to SQS management actions only — do not reuse pipeline handler execution roles
 
-**v1.5 Architecture — Chat Moderation (Phase 28):**
-- `DisconnectUser` API call alone is insufficient — must also block token in `create-chat-token.ts`
-- Moderation log uses existing single table: `PK: SESSION#{id}`, `SK: MOD#{ts}#{uuid}`
-- Token blocklist check in `create-chat-token.ts`: query `MOD#` SK prefix, deny if BOUNCE record exists
-- Frontend: BounceButton visible only when `authUser.userId === session.userId` (broadcaster)
-- Frontend: ReportButton hidden by default on hover, appears on all non-own messages
-
-**v1.5 Architecture — Upload Video Player (Phases 29-30):**
-- Install `hls.js@^1.6.0` in web/ — IVS Player does not expose quality level switching API
-- Use `hls.currentLevel` setter for manual quality switching (flushes buffer, correct UX)
-- Safari fallback: `Hls.isSupported()` returns false — use `video.src = hlsUrl` and hide quality picker
-- Comment storage: `PK: SESSION#{id}`, `SK: COMMENT#{zeroPadded15DigitMs}#{uuid}`
-- Comment display: poll every 250ms, highlight comments within ±1500ms of current position
-- Extend `useReplayPlayer` hook to return `{ player, qualities }` — do not fork the hook
-
-**Carried Forward from v1.4:**
-- cognito:username (not sub) as userId consistently across all handlers
-- Single-table DynamoDB with optional fields for backward compatibility
-- Conditional writes for atomic operations (prevent race conditions)
-- Non-blocking error handling — failures logged but don't block critical operations
-- `removeUndefinedValues: true` in DynamoDB marshallOptions
-
-### Known Risks
-
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| Cron double-submits MediaConvert jobs | HIGH | Exclude `transcriptStatus = 'processing'` AND `mediaconvertJobId` set; use 45-min threshold |
-| Bounced user reconnects immediately | HIGH | Token blocklist in create-chat-token.ts is mandatory — DisconnectUser alone is insufficient |
-| DynamoDB 400KB item limit on diarized transcript | HIGH | Store segments in S3 only; enforce size guard before any DynamoDB write |
-| HLS.js quality switch stall on Safari | MEDIUM | Use `hls.currentLevel` on Chrome/Firefox; hide quality picker on Safari (Hls.isSupported() = false) |
-| CORS on HLS sub-manifests blocks quality levels | MEDIUM | Verify CloudFront cache behavior returns Access-Control-Allow-Origin on all *.m3u8 and *.ts paths |
-| Cron full table scan cost | HIGH | Must use GSI1 STATUS#ENDING query — full scan is forbidden |
-| Phase 25-pipeline-observability P02 | 2 | 1 tasks | 1 files |
-| Phase 25-pipeline-observability P01 | 7 | 2 tasks | 7 files |
-| Phase 26-stuck-session-recovery-cron P01 | 114 | 2 tasks | 2 files |
-| Phase 26-stuck-session-recovery-cron P02 | 229 | 2 tasks | 2 files |
-| Phase 27-speaker-attributed-transcripts P01 | 258 | 3 tasks | 9 files |
-| Phase 27 P02 | 12 | 2 tasks | 3 files |
-| Phase 27-speaker-attributed-transcripts P02 | 15 | 3 tasks | 3 files |
-| Phase 28-chat-moderation P01 | 259 | 3 tasks | 7 files |
-| Phase 28-chat-moderation P02 | 5 | 2 tasks | 5 files |
-| Phase 28-chat-moderation P02 | 525561 | 3 tasks | 5 files |
-| Phase 28-chat-moderation P03 | 10 | 2 tasks | 3 files |
-| Phase 29-upload-video-player-core P01 | 103 | 2 tasks | 4 files |
-| Phase 29-upload-video-player-core P02 | 1 | 2 tasks | 4 files |
-| Phase 30-upload-video-player-social P01 | 248 | 2 tasks | 5 files |
-| Phase 30-upload-video-player-social P02 | 5 | 1 tasks | 1 files |
-| Phase 30-upload-video-player-social P03 | 117 | 2 tasks | 4 files |
-| Phase 31-sqs-pipeline-buffers P01 | 246 | 2 tasks | 1 files |
-| Phase 31-sqs-pipeline-buffers P02 | 583 | 2 tasks | 10 files |
-| Phase 35-pipeline-debug-cli P01 | 2 | 2 tasks | 3 files |
-| Phase 34-nova-lite-for-ai-summaries P01 | 166 | 2 tasks | 3 files |
-| Phase 33 P01 | 351 | 2 tasks | 1 files |
-| Phase 32-handler-hardening-idempotency P01 | 3 | 2 tasks | 2 files |
-| Phase 32-handler-hardening-idempotency P03 | 15 | 2 tasks | 2 files |
-| Phase 32 P04 | 15 | 2 tasks | 3 files |
-| Phase 32-handler-hardening-idempotency P02 | 25 | 2 tasks | 4 files |
-
-### Roadmap Evolution
-
-- Phase 22.1 inserted after Phase 22: Pipeline Fixes & UI Enhancements (URGENT, completed)
-- v1.5 roadmap defined 2026-03-10: Phases 25-30
+**UI (Phases 40-41):**
+- Use `getConfig()?.apiUrl` (not `APP_CONFIG` window global) for all new fetch calls
+- Activity feed polling: exponential backoff 15s → 30s → 60s cap; stop polling on terminal states (available, failed)
+- Verify `HangoutPage.tsx` for existing partial `ReactionPicker` implementation before building from scratch
 
 ### Pending Todos
 
-- [x] Phase 25: Pipeline Observability — add Powertools Logger to all 5 pipeline handlers (DONE)
-- [x] Phase 26 Plan 01: scan-stuck-sessions.ts handler + 8 unit tests (DONE 2026-03-10)
-- [x] Phase 26 Plan 02: Stuck Session Recovery — CDK EventBridge Scheduler wiring (DONE 2026-03-10)
-- [ ] Phase 27: Speaker Diarization — modify start-transcribe.ts + transcribe-completed.ts + frontend display
-- [ ] Phase 28: Chat Moderation — new bounce-user.ts + report-message.ts + frontend buttons
-- [ ] Phase 29: Upload Video Player Core — new VideoPage.tsx + HLS.js + quality selector + routing
-- [ ] Phase 30: Upload Video Player Social — comments API + CommentThread + reactions + transcript panel
+None yet.
 
-### Blockers
+### Blockers/Concerns
 
 None.
 
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 1 | Fix MediaConvert EventBridge rule | 2026-03-06 | 177aed2 | [1-fix-mediaconvert-eventbridge-rule](./quick/1-fix-mediaconvert-eventbridge-rule/) |
-| 2 | Update webapp scripts to connect to user | 2026-03-06 | 5462ffd | [2-update-webapp-scripts-to-connect-to-user](./quick/2-update-webapp-scripts-to-connect-to-user/) |
-| 3 | Add start-transcribe handler to complete pipeline | 2026-03-06 | 4c65427 | [3-add-start-transcribe-handler-to-complete](./quick/3-add-start-transcribe-handler-to-complete/) |
-
 ## Session Continuity
 
-**If resuming work:**
-1. Check current phase in .planning/ROADMAP.md (Phase 26 is next)
-2. Run `/gsd:discuss-phase 26` to gather context for Stuck Session Recovery
-3. Phase 26 requirements: PIPE-05, PIPE-06
-4. Key files to create: backend/src/handlers/scan-stuck-sessions.ts + CDK Scheduler construct in session-stack.ts
+Last session: 2026-03-12
+Stopped at: Roadmap created — 6 phases defined (36-41), 17 requirements mapped
+Resume file: None
 
-**If blocked:**
-- Consult .planning/phases/25-pipeline-observability/*-SUMMARY.md for established patterns
-- Use GSI1 STATUS#ENDING query (NOT full table scan) for stuck session detection
-
-**Last session:** 2026-03-10
-**Stopped at:** Completed 32-02-PLAN.md — idempotent Transcribe submission, ConflictException handling, 462 tests passing
-**Resume file:** None
-
-**Next action:** Run `/gsd:discuss-phase 27` to begin Speaker-Attributed Transcripts planning.
-
----
-
-**Milestone started:** 2026-03-10
-**Expected completion:** TBD
+**Next action:** Run `/gsd:plan-phase 36` to begin X-Ray Distributed Tracing planning.

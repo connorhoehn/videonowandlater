@@ -109,7 +109,7 @@ See milestones/v1.6-ROADMAP.md for full details.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 036-01-PLAN.md — TDD: tracer assertions for all 5 handler test files (Wave 0 contracts)
+- [x] 036-01-PLAN.md — TDD: tracer assertions for all 5 handler test files (Wave 0 contracts)
 - [ ] 036-02-PLAN.md — Refactor recording-ended + transcode-completed with module-scope traced clients
 - [ ] 036-03-PLAN.md — Refactor transcribe-completed + store-summary + on-mediaconvert-complete with traced clients
 - [ ] 036-04-PLAN.md — CDK active tracing config + deploy + X-Ray service map verification

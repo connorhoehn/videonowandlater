@@ -373,6 +373,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/recording-ended.ts'),
       timeout: Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         // Force Lambda update
@@ -615,6 +616,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/transcode-completed.ts'),
       timeout: Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
@@ -662,6 +664,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/transcribe-completed.ts'),
       timeout: Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
@@ -696,6 +699,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/store-summary.ts'),
       timeout: Duration.seconds(60), // Critical: Bedrock latency 5-10s + buffer
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         BEDROCK_REGION: this.region,
@@ -791,6 +795,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/on-mediaconvert-complete.ts'),
       timeout: Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         RECORDINGS_BUCKET: this.recordingsBucket.bucketName,

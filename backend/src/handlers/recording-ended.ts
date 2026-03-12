@@ -7,9 +7,11 @@
 
 import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import type { Subsegment } from 'aws-xray-sdk-core';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { GetCommand, UpdateCommand as UpdateCommandDirect } from '@aws-sdk/lib-dynamodb';
-import { getDocumentClient } from '../lib/dynamodb-client';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand as UpdateCommandDirect, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import {
   updateSessionStatus,
   updateRecordingMetadata,
@@ -21,6 +23,8 @@ import {
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import type { Session } from '../domain/session';
+
+export const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -46,7 +50,10 @@ interface StageParticipantRecordingEndDetail {
 }
 
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>
+  event: EventBridgeEvent<string, Record<string, any>>,
+  tracer: Tracer,
+  docClient: DynamoDBDocumentClient,
+  mediaConvertClient: MediaConvertClient
 ): Promise<void> {
   // Required environment variables
   const tableName = process.env.TABLE_NAME!;
@@ -66,6 +73,7 @@ async function processEvent(
       logger.error('Recovery event missing sessionId in detail');
       return;
     }
+    tracer.putAnnotation('sessionId', recoverySessionId);
     logger.appendPersistentKeys({ sessionId: recoverySessionId });
     logger.info('Pipeline stage entered (recovery)', {
       recoveryAttemptCount: event.detail.recoveryAttemptCount,
@@ -75,7 +83,6 @@ async function processEvent(
     // The session already has recordingHlsUrl from the first recording-ended pass.
     // We fetch the session to get the full recordingHlsUrl and validate it.
     try {
-      const docClient = getDocumentClient();
       const getResult = await docClient.send(new GetCommand({
         TableName: tableName,
         Key: { PK: `SESSION#${recoverySessionId}`, SK: 'METADATA' },
@@ -106,7 +113,6 @@ async function processEvent(
         return;
       }
 
-      const mediaConvertClient = new MediaConvertClient({ region: awsRegion });
       const hlsInputPath = `s3://${s3Path}/media/hls/master.m3u8`;
       const mp4OutputPath = `s3://${transcriptionBucket}/${recoverySessionId}/`;
 
@@ -190,8 +196,6 @@ async function processEvent(
 
   if (resourceType === 'channel') {
     logger.info('Detected Channel ARN, finding session by channel');
-    const docClient = getDocumentClient();
-    const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
 
     // Find session by channel ARN — filter to ENDING only to avoid matching
     // previously-ended sessions that used the same pooled channel
@@ -229,6 +233,7 @@ async function processEvent(
 
   const sessionId = session.sessionId;
 
+  tracer.putAnnotation('sessionId', sessionId);
   logger.appendPersistentKeys({ sessionId });
   logger.info('Pipeline stage entered', { resourceArn, resourceType });
 
@@ -321,7 +326,6 @@ async function processEvent(
       // Submit MediaConvert job to convert HLS → MP4 for transcription
       // Throws on failure so SQS can retry via batchItemFailures
       if (finalStatus === 'available') {
-        const mediaConvertClient = new MediaConvertClient({ region: awsRegion });
         const epochMs = Date.now();
         const jobName = `vnl-${sessionId}-${epochMs}`;
 
@@ -413,8 +417,7 @@ async function processEvent(
         }
 
         // Store MediaConvert job ID in session for tracking
-        const docClient = getDocumentClient();
-        await docClient.send(new (await import('@aws-sdk/lib-dynamodb')).UpdateCommand({
+        await docClient.send(new UpdateCommandDirect({
           TableName: tableName,
           Key: {
             PK: `SESSION#${sessionId}`,
@@ -466,17 +469,39 @@ async function processEvent(
 
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const failures: { itemIdentifier: string }[] = [];
+  const parentSegment = tracer.getSegment();
+
+  // Wrap SDK clients with X-Ray tracing on each invocation.
+  // This ensures per-request tracing and is compatible with the test contract
+  // (beforeEach clears mock state, so clients must be re-wrapped per invocation).
+  const dynamoBaseClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
+  const docClient = DynamoDBDocumentClient.from(dynamoBaseClient, {
+    marshallOptions: { removeUndefinedValues: true },
+  });
+  const mediaConvertClient = tracer.captureAWSv3Client(new MediaConvertClient({
+    endpoint: process.env.MEDIACONVERT_ENDPOINT,
+  }));
 
   for (const record of event.Records) {
+    let subsegment: Subsegment | undefined;
     try {
       const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
-      await processEvent(ebEvent);
+      subsegment = parentSegment?.addNewSubsegment('## processRecord') as Subsegment | undefined;
+      if (subsegment) tracer.setSegment(subsegment);
+
+      tracer.putAnnotation('pipelineStage', 'recording-ended');
+
+      await processEvent(ebEvent, tracer, docClient, mediaConvertClient);
     } catch (err: any) {
+      tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {
         messageId: record.messageId,
         error: err.message,
       });
       failures.push({ itemIdentifier: record.messageId });
+    } finally {
+      subsegment?.close();
+      if (parentSegment) tracer.setSegment(parentSegment);
     }
   }
 

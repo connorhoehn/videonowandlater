@@ -11,33 +11,56 @@ import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
 
 // ---------------------------------------------------------------------------
 // TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// Use var (no initializer) + assign inside jest.mock factory for ESM compat.
+// jest.mock factories run before module-scope initializers in ESM mode.
 // ---------------------------------------------------------------------------
-const mockCaptureAWSv3Client = jest.fn((client) => client);
-const mockPutAnnotation = jest.fn();
-const mockAddErrorAsMetadata = jest.fn();
-const mockGetSegment = jest.fn(() => ({
-  addNewSubsegment: jest.fn(() => ({
-    close: jest.fn(),
-    addError: jest.fn(),
-  })),
-}));
-const mockSetSegment = jest.fn();
+var mockCaptureAWSv3Client: jest.Mock;
+var mockPutAnnotation: jest.Mock;
+var mockAddErrorAsMetadata: jest.Mock;
+var mockGetSegment: jest.Mock;
+var mockSetSegment: jest.Mock;
 
-jest.mock('@aws-lambda-powertools/tracer', () => ({
-  Tracer: jest.fn().mockImplementation(() => ({
-    captureAWSv3Client: mockCaptureAWSv3Client,
-    putAnnotation: mockPutAnnotation,
-    addErrorAsMetadata: mockAddErrorAsMetadata,
-    getSegment: mockGetSegment,
-    setSegment: mockSetSegment,
-  })),
-}));
+jest.mock('@aws-lambda-powertools/tracer', () => {
+  mockCaptureAWSv3Client = jest.fn((client: any) => client);
+  mockPutAnnotation = jest.fn();
+  mockAddErrorAsMetadata = jest.fn();
+  mockGetSegment = jest.fn(() => ({
+    addNewSubsegment: jest.fn(() => ({
+      close: jest.fn(),
+      addError: jest.fn(),
+    })),
+  }));
+  mockSetSegment = jest.fn();
+  return {
+    Tracer: jest.fn().mockImplementation(() => ({
+      captureAWSv3Client: mockCaptureAWSv3Client,
+      putAnnotation: mockPutAnnotation,
+      addErrorAsMetadata: mockAddErrorAsMetadata,
+      getSegment: mockGetSegment,
+      setSegment: mockSetSegment,
+    })),
+  };
+});
 
 jest.mock('../../repositories/session-repository');
 jest.mock('@aws-sdk/client-eventbridge');
 
 const mockGetSessionById = sessionRepository.getSessionById as jest.MockedFunction<typeof sessionRepository.getSessionById>;
 const mockUpdateSessionRecording = sessionRepository.updateSessionRecording as jest.MockedFunction<typeof sessionRepository.updateSessionRecording>;
+
+// Helper: get the module-scope EventBridgeClient instance's send mock.
+// The handler creates eventBridgeClient at module scope, so we wire tests via the instance directly.
+function getEbSend(): jest.Mock {
+  return (EventBridgeClient as jest.Mock).mock.instances[0]?.send as jest.Mock;
+}
+
+// Helper: replace module-scope instance's send with a fresh mock for each EventBridge test.
+function setupEbSend(impl?: (input: any) => any): jest.Mock {
+  const mockSend = jest.fn(impl ?? (() => Promise.resolve({})));
+  const instance = (EventBridgeClient as jest.Mock).mock.instances[0] as any;
+  if (instance) instance.send = mockSend;
+  return mockSend;
+}
 
 describe('on-mediaconvert-complete handler', () => {
   const TABLE_NAME = 'test-table';
@@ -52,9 +75,14 @@ describe('on-mediaconvert-complete handler', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockCaptureAWSv3Client.mockClear();
+    // Clear per-invocation mocks but NOT mockCaptureAWSv3Client, which is called once at module
+    // scope and must retain its calls for TRACE-02 assertions across tests.
     mockPutAnnotation.mockClear();
+    mockAddErrorAsMetadata.mockClear();
+    mockGetSegment.mockClear();
+    mockSetSegment.mockClear();
+    mockGetSessionById.mockReset();
+    mockUpdateSessionRecording.mockReset();
     mockUpdateSessionRecording.mockResolvedValue(undefined);
   });
 
@@ -505,12 +533,8 @@ describe('on-mediaconvert-complete handler', () => {
 
   describe('EventBridge event publication', () => {
     it('should publish EventBridge event to trigger transcription on COMPLETE status', async () => {
-      const mockSend = jest.fn().mockResolvedValue({});
-      const mockEventBridgeClient = {
-        send: mockSend,
-      };
-
-      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      // Wire the module-scope eventBridgeClient instance to a controlled send mock.
+      const mockSend = setupEbSend();
       (eventbridgeModule.PutEventsCommand as unknown as jest.Mock).mockImplementation((input) => ({ input }));
 
       const sessionId = 'eb-test-session';
@@ -561,12 +585,8 @@ describe('on-mediaconvert-complete handler', () => {
     });
 
     it('should NOT publish EventBridge event on ERROR status', async () => {
-      const mockSend = jest.fn().mockResolvedValue({});
-      const mockEventBridgeClient = {
-        send: mockSend,
-      };
-
-      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      // Wire the module-scope eventBridgeClient instance to a controlled send mock.
+      const mockSend = setupEbSend();
 
       const sessionId = 'eb-error-session';
       const mockSession = {
@@ -602,12 +622,8 @@ describe('on-mediaconvert-complete handler', () => {
     });
 
     it('should NOT publish EventBridge event on CANCELED status', async () => {
-      const mockSend = jest.fn().mockResolvedValue({});
-      const mockEventBridgeClient = {
-        send: mockSend,
-      };
-
-      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      // Wire the module-scope eventBridgeClient instance to a controlled send mock.
+      const mockSend = setupEbSend();
 
       const sessionId = 'eb-canceled-session';
       const mockSession = {
@@ -643,12 +659,8 @@ describe('on-mediaconvert-complete handler', () => {
     });
 
     it('should throw if EventBridge publish fails (critical failure, EventBridge retries)', async () => {
-      const mockSend = jest.fn().mockRejectedValue(new Error('EventBridge publish failed'));
-      const mockEventBridgeClient = {
-        send: mockSend,
-      };
-
-      (eventbridgeModule.EventBridgeClient as unknown as jest.Mock).mockImplementation(() => mockEventBridgeClient);
+      // Wire the module-scope eventBridgeClient instance to a failing send mock.
+      const mockSend = setupEbSend(() => Promise.reject(new Error('EventBridge publish failed')));
       (eventbridgeModule.PutEventsCommand as unknown as jest.Mock).mockImplementation((input) => ({ input }));
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 

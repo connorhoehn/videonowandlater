@@ -10,26 +10,52 @@ import { updateRecordingMetadata, findSessionByStageArn, computeAndStoreReaction
 
 // ---------------------------------------------------------------------------
 // TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// Use var (no initializer) + assign inside jest.mock factory for ESM compat.
+// jest.mock factories run before module-scope initializers in ESM mode.
 // ---------------------------------------------------------------------------
-const mockCaptureAWSv3Client = jest.fn((client) => client);
-const mockPutAnnotation = jest.fn();
-const mockAddErrorAsMetadata = jest.fn();
-const mockGetSegment = jest.fn(() => ({
-  addNewSubsegment: jest.fn(() => ({
-    close: jest.fn(),
-    addError: jest.fn(),
-  })),
-}));
-const mockSetSegment = jest.fn();
+var mockCaptureAWSv3Client: jest.Mock;
+var mockPutAnnotation: jest.Mock;
+var mockAddErrorAsMetadata: jest.Mock;
+var mockGetSegment: jest.Mock;
+var mockSetSegment: jest.Mock;
 
-jest.mock('@aws-lambda-powertools/tracer', () => ({
-  Tracer: jest.fn().mockImplementation(() => ({
-    captureAWSv3Client: mockCaptureAWSv3Client,
-    putAnnotation: mockPutAnnotation,
-    addErrorAsMetadata: mockAddErrorAsMetadata,
-    getSegment: mockGetSegment,
-    setSegment: mockSetSegment,
-  })),
+jest.mock('@aws-lambda-powertools/tracer', () => {
+  mockCaptureAWSv3Client = jest.fn((client: any) => client);
+  mockPutAnnotation = jest.fn();
+  mockAddErrorAsMetadata = jest.fn();
+  mockGetSegment = jest.fn(() => ({
+    addNewSubsegment: jest.fn(() => ({
+      close: jest.fn(),
+      addError: jest.fn(),
+    })),
+  }));
+  mockSetSegment = jest.fn();
+  return {
+    Tracer: jest.fn().mockImplementation(() => ({
+      captureAWSv3Client: mockCaptureAWSv3Client,
+      putAnnotation: mockPutAnnotation,
+      addErrorAsMetadata: mockAddErrorAsMetadata,
+      getSegment: mockGetSegment,
+      setSegment: mockSetSegment,
+    })),
+  };
+});
+
+// Mock DynamoDBClient so module-scope construction works in tests
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
+}));
+
+// Mock DynamoDBDocumentClient.from + commands so docClient.send returns predictable values
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: jest.fn().mockResolvedValue({ Items: [] }),
+    })),
+  },
+  GetCommand: jest.fn().mockImplementation((input: any) => ({ input })),
+  UpdateCommand: jest.fn().mockImplementation((input: any) => ({ input })),
+  ScanCommand: jest.fn().mockImplementation((input: any) => ({ input })),
 }));
 
 jest.mock('../../lib/dynamodb-client', () => ({

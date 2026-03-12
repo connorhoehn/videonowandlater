@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: executing
-stopped_at: Completed 036-03-PLAN.md
-last_updated: "2026-03-12T18:59:30.294Z"
-last_activity: "2026-03-12 — Completed 036-02: X-Ray tracer + per-record subsegments in recording-ended and transcode-completed"
+stopped_at: Completed 036-04-PLAN.md
+last_updated: "2026-03-12T19:08:44.945Z"
+last_activity: "2026-03-12 — Completed 036-04: CDK Tracing.ACTIVE deployed + X-Ray service map verified for all 5 pipeline Lambda functions; Phase 36 complete"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 85
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.7 Phase 36 — X-Ray Distributed Tracing
+**Current focus:** v1.7 Phase 37 — Event Schema Validation
 
 ## Current Position
 
-Phase: 36 of 41 (X-Ray Distributed Tracing)
-Plan: 3 complete (036-03-PLAN.md done)
-Status: In progress
-Last activity: 2026-03-12 — Completed 036-03: X-Ray tracer in transcribe-completed, store-summary, and on-mediaconvert-complete; all 5 handlers done
+Phase: 36 of 41 (X-Ray Distributed Tracing) — COMPLETE
+Plan: 4/4 complete (036-04-PLAN.md done)
+Status: Phase 36 complete — ready for Phase 37
+Last activity: 2026-03-12 — Completed 036-04: CDK Tracing.ACTIVE deployed + X-Ray service map verified for all 5 pipeline Lambda functions; Phase 36 complete
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -89,8 +89,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T18:59:30.293Z
-Stopped at: Completed 036-03-PLAN.md
+Last session: 2026-03-12T19:08:44.943Z
+Stopped at: Completed 036-04-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**
@@ -102,4 +102,9 @@ Resume file: None
 - captureAWSv3Client calls happen at module load — do NOT clear that mock in beforeEach; keep calls for TRACE-02 assertions
 - setupEbSend() helper pattern for redirecting module-scope EventBridgeClient send in on-mediaconvert-complete tests
 
-**Next action:** Run `/gsd:execute-plan 036-04` to enable CDK ACTIVE tracing for all 5 pipeline Lambda functions.
+**Key decisions from 036-04:**
+- `lambda.Tracing.ACTIVE` added only to the 5 pipeline handlers in CDK; non-pipeline functions excluded to keep X-Ray service map focused
+- Pipeline stages appear as disconnected nodes in X-Ray service map due to SQS trace context not propagated by AWS — platform constraint, not a configuration bug
+- CDK automatically injects xray:PutTraceSegments + xray:PutTelemetryRecords permissions when Tracing.ACTIVE is set — no manual IAM changes required
+
+**Next action:** Run `/gsd:plan-phase 37` to plan Event Schema Validation (Zod boundary validation at all 5 pipeline handler SQS entry points).

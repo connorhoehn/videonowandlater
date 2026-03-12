@@ -110,9 +110,9 @@ See milestones/v1.6-ROADMAP.md for full details.
 
 Plans:
 - [x] 036-01-PLAN.md — TDD: tracer assertions for all 5 handler test files (Wave 0 contracts)
-- [ ] 036-02-PLAN.md — Refactor recording-ended + transcode-completed with module-scope traced clients
-- [ ] 036-03-PLAN.md — Refactor transcribe-completed + store-summary + on-mediaconvert-complete with traced clients
-- [ ] 036-04-PLAN.md — CDK active tracing config + deploy + X-Ray service map verification
+- [x] 036-02-PLAN.md — Refactor recording-ended + transcode-completed with module-scope traced clients
+- [x] 036-03-PLAN.md — Refactor transcribe-completed + store-summary + on-mediaconvert-complete with traced clients
+- [x] 036-04-PLAN.md — CDK active tracing config + deploy + X-Ray service map verification
 
 ### Phase 37: Event Schema Validation
 **Goal**: All 5 pipeline handlers reject malformed events at the boundary before executing any side effects, and the start-transcribe transient error swallowing bug is fixed
@@ -192,7 +192,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 36. X-Ray Distributed Tracing | v1.7 | 0/4 | Not started | - |
+| 36. X-Ray Distributed Tracing | v1.7 | 4/4 | Complete | 2026-03-12 |
 | 37. Event Schema Validation | v1.7 | 0/TBD | Not started | - |
 | 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |

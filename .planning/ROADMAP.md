@@ -97,7 +97,7 @@ See milestones/v1.6-ROADMAP.md for full details.
 
 ## Phase Details
 
-### Phase 36: X-Ray Distributed Tracing
+### ✅ Phase 36: X-Ray Distributed Tracing — completed 2026-03-12
 **Goal**: Developer can observe every pipeline execution end-to-end in the X-Ray service map with per-stage annotations and per-call subsegments
 **Depends on**: Phase 35 (SQS queue ARNs and handler structure established)
 **Requirements**: TRACE-01, TRACE-02, TRACE-03, TRACE-04

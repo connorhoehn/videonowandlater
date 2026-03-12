@@ -8,6 +8,30 @@ import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../recording-ended';
 import { updateRecordingMetadata, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount } from '../../repositories/session-repository';
 
+// ---------------------------------------------------------------------------
+// TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// ---------------------------------------------------------------------------
+const mockCaptureAWSv3Client = jest.fn((client) => client);
+const mockPutAnnotation = jest.fn();
+const mockAddErrorAsMetadata = jest.fn();
+const mockGetSegment = jest.fn(() => ({
+  addNewSubsegment: jest.fn(() => ({
+    close: jest.fn(),
+    addError: jest.fn(),
+  })),
+}));
+const mockSetSegment = jest.fn();
+
+jest.mock('@aws-lambda-powertools/tracer', () => ({
+  Tracer: jest.fn().mockImplementation(() => ({
+    captureAWSv3Client: mockCaptureAWSv3Client,
+    putAnnotation: mockPutAnnotation,
+    addErrorAsMetadata: mockAddErrorAsMetadata,
+    getSegment: mockGetSegment,
+    setSegment: mockSetSegment,
+  })),
+}));
+
 jest.mock('../../lib/dynamodb-client', () => ({
   getDocumentClient: jest.fn(() => ({
     send: jest.fn().mockResolvedValue({ Items: [] }),
@@ -70,6 +94,8 @@ describe('recording-ended handler', () => {
       TABLE_NAME: 'test-table',
     };
     jest.clearAllMocks();
+    mockCaptureAWSv3Client.mockClear();
+    mockPutAnnotation.mockClear();
     // Default: no session found (channel lookups go through DynamoDB scan mock returning empty)
     mockFindSessionByStageArn.mockResolvedValue(null);
   });
@@ -255,6 +281,14 @@ describe('recording-ended handler', () => {
 
     expect(result.batchItemFailures).toHaveLength(0);
     expect(mockFindSessionByStageArn).toHaveBeenCalledWith('test-table', 'arn:aws:ivs:us-east-1:123456789012:stage/hangout123');
+
+    // TRACE-02: SDK clients must be wrapped at module scope
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.objectContaining({})); // DynamoDBClient
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.objectContaining({})); // MediaConvertClient
+
+    // TRACE-03: annotations written during handler invocation
+    expect(mockPutAnnotation).toHaveBeenCalledWith('sessionId', expect.any(String));
+    expect(mockPutAnnotation).toHaveBeenCalledWith('pipelineStage', 'recording-ended');
   });
 
   it('builds Stage HLS URL using media/hls/multivariant.m3u8 path', async () => {

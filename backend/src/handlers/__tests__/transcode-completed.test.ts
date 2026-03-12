@@ -9,6 +9,30 @@ import { handler } from '../transcode-completed';
 import { updateTranscriptStatus } from '../../repositories/session-repository';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
 
+// ---------------------------------------------------------------------------
+// TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
+// ---------------------------------------------------------------------------
+const mockCaptureAWSv3Client = jest.fn((client) => client);
+const mockPutAnnotation = jest.fn();
+const mockAddErrorAsMetadata = jest.fn();
+const mockGetSegment = jest.fn(() => ({
+  addNewSubsegment: jest.fn(() => ({
+    close: jest.fn(),
+    addError: jest.fn(),
+  })),
+}));
+const mockSetSegment = jest.fn();
+
+jest.mock('@aws-lambda-powertools/tracer', () => ({
+  Tracer: jest.fn().mockImplementation(() => ({
+    captureAWSv3Client: mockCaptureAWSv3Client,
+    putAnnotation: mockPutAnnotation,
+    addErrorAsMetadata: mockAddErrorAsMetadata,
+    getSegment: mockGetSegment,
+    setSegment: mockSetSegment,
+  })),
+}));
+
 jest.mock('@aws-sdk/client-transcribe');
 jest.mock('../../lib/dynamodb-client', () => ({
   getDocumentClient: jest.fn(() => ({
@@ -53,6 +77,8 @@ describe('transcode-completed handler', () => {
       AWS_REGION: 'us-east-1',
     };
     jest.clearAllMocks();
+    mockCaptureAWSv3Client.mockClear();
+    mockPutAnnotation.mockClear();
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);
 
     // Mock TranscribeClient instance
@@ -136,6 +162,13 @@ describe('transcode-completed handler', () => {
       'session-transcribe-test',
       'processing'
     );
+
+    // TRACE-02: TranscribeClient must be wrapped at module scope
+    expect(mockCaptureAWSv3Client).toHaveBeenCalledWith(expect.any(TranscribeClient));
+
+    // TRACE-03: annotations written during handler invocation
+    expect(mockPutAnnotation).toHaveBeenCalledWith('sessionId', expect.any(String));
+    expect(mockPutAnnotation).toHaveBeenCalledWith('pipelineStage', 'transcode-completed');
   });
 
   it('handles ERROR status gracefully and returns batchItemFailures: []', async () => {

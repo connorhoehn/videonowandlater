@@ -1,355 +1,369 @@
 # Feature Research
 
-**Domain:** Video streaming platform — pipeline reliability, moderation, and upload experience
-**Milestone:** v1.5 Pipeline Reliability, Moderation & Upload Experience
-**Researched:** 2026-03-10
-**Confidence:** MEDIUM-HIGH overall (HIGH on moderation UX and video player UX; MEDIUM on speaker diarization mapping)
+**Domain:** AWS IVS live/recorded video platform — backend event hardening + UI polish
+**Milestone:** v1.7 Event Hardening & UI Polish
+**Researched:** 2026-03-12
+**Confidence:** HIGH (based on direct codebase analysis + AWS service patterns)
 
 ---
 
-## Feature Area 1: EventBridge Pipeline Observability & Dead-Letter Recovery
+## Feature Landscape
 
-### Table Stakes (Users/Operators Expect These)
+This milestone covers four distinct engineering tracks: two backend tracks (X-Ray tracing,
+event schema validation + idempotency + DLQ re-drive) and one frontend track (UI polish across
+four pages). Each track is analyzed separately below.
+
+---
+
+## Track A: AWS X-Ray Distributed Tracing
+
+### Table Stakes
+
+Features that every distributed-system operator expects from a tracing integration.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Structured JSON log per pipeline stage | CloudWatch Logs Insights auto-discovers JSON fields; string logs are not queryable; operators cannot debug pipeline failures without it | LOW | Add `pipelineStage`, `sessionId`, `status`, `durationMs` as top-level fields on every handler log object |
-| `sessionId` propagated as correlation ID | Operators must filter ALL logs for one session in a single CloudWatch Logs Insights query | LOW | Use the existing `sessionId` as correlation ID; inject it as a log field on every invocation |
-| `stage_started` / `stage_completed` / `stage_failed` events | Knowing a stage failed is not enough; need start + end to compute duration and identify hang vs crash | LOW | Emit two log lines per handler: one at entry with `status: started`, one at exit with `status: completed` or `status: failed` |
-| Log retention policy set | Without explicit retention, CloudWatch accrues unbounded storage cost | LOW | 14–30 day retention is the standard; apply to all Lambda log groups in CDK |
-| DLQ on EventBridge rules targeting Lambda | Without a DLQ, failed event deliveries are silently dropped; operators assume success | MEDIUM | Configure SQS DLQ on each EventBridge rule; add CloudWatch alarm on DLQ `ApproximateNumberOfMessagesVisible > 0` |
-| Stuck session recovery cron | Sessions can stall mid-pipeline if Lambda times out or EventBridge delivery fails; without a cron, they stay stuck forever | MEDIUM | Scheduled Lambda (EventBridge Scheduler, every 15 min) queries DynamoDB for sessions with `transcriptStatus IN [pending, processing]` and `processingStartedAt < now - 30min`; re-fires recovery event |
+| Traces visible in X-Ray console | Core value of enabling X-Ray — developer must be able to see segments | LOW | Lambda active tracing toggle in CDK + `XRAY_TRACE_ID` env var is auto-set |
+| Segment per Lambda invocation | One segment = one handler execution is the standard unit | LOW | Auto-instrumented when active tracing is on in CDK |
+| Subsegments for downstream AWS calls | DynamoDB, S3, EventBridge, Transcribe, Bedrock calls must appear as child segments | MEDIUM | AWS X-Ray SDK `captureAWSv3Client()` wraps SDK clients; must be applied to each client |
+| Service map connecting pipeline stages | Visual graph showing recording-ended to transcode-completed to transcribe-completed to store-summary | MEDIUM | Emerges automatically once all 5 Lambdas emit segments to the same X-Ray group |
+| Error/fault annotation on segment | Failed invocations must show as fault (5xx) or error (4xx) in X-Ray | LOW | Automatic when Lambda throws; manual annotation needed for caught errors |
+| Trace propagation across SQS boundary | Trace ID must pass through SQS message so downstream handler continues the same trace | HIGH | SQS does not auto-propagate X-Ray context; Powertools Tracer handles this automatically when configured |
 
 ### Differentiators
 
+Features beyond the basics that add real observability value.
+
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Per-session processing timeline in existing audit UI | The SessionAuditLog component already renders stage timestamps; extending DynamoDB to store stage timestamps per session makes the UI useful as a real-time debug tool | LOW | Store `stageTimestamps: { [stage]: { startedAt, completedAt, failedAt } }` on the session record |
-| CloudWatch Logs Insights saved query | Single-click debug: `filter sessionId = "X" and pipelineStage exists | sort @timestamp asc` — surfaces entire pipeline trace in seconds | LOW | Document the query as a runbook; optionally create a CloudWatch Dashboard widget |
-| Idempotent cron recovery | If a recovery event is fired twice (cron fires, then EventBridge also retries), the handler must not double-process | MEDIUM | Use `processingStartedAt` field + conditional DynamoDB update as idempotency guard; Lambda Powertools Idempotency feature for TypeScript is available |
+| Custom annotations on every segment | `sessionId`, `pipelineStage` searchable in X-Ray without log diving | LOW | `tracer.putAnnotation('sessionId', sessionId)` via Powertools Tracer |
+| Latency breakdown per pipeline stage | Understand which stage (MediaConvert submit, Transcribe, Bedrock) is slow | LOW | Subsegment timing is automatic once clients are wrapped |
+| Powertools Tracer decorator pattern | Consistent trace structure across all handlers without manual segment management | MEDIUM | `@tracer.captureLambdaHandler()` decorator; integrates with existing Powertools Logger |
+| Cold start annotation | Distinguish cold start latency from execution latency in X-Ray segments | LOW | Powertools Tracer adds this automatically |
+| X-Ray group for pipeline Lambdas | Filter expression in X-Ray to show only pipeline traces, not all Lambdas | LOW | CDK: `new xray.CfnGroup()` with filter on annotation.pipelineStage |
 
 ### Anti-Features
 
-| Anti-Feature | Why Requested | Why Problematic | Alternative |
-|--------------|---------------|-----------------|-------------|
-| AWS X-Ray full distributed tracing | "Real observability" | Adds cold-start overhead; costs $5/million traces; overkill for a 4-stage linear pipeline that can be traced with `sessionId` | Structured JSON logs + CloudWatch Logs Insights cover 95% of debug needs at near-zero cost |
-| Lambda DLQ (not EventBridge rule DLQ) | Familiar Lambda pattern | Lambda DLQs fire on async Lambda invocation failures, not on EventBridge delivery failures — different failure mode; creates false sense of coverage | Configure DLQs on EventBridge rules (the delivery mechanism), not on Lambda functions |
-| AWS Step Functions orchestration | "More reliable pipeline" | Major rewrite of existing event-driven architecture; adds state machine cost and complexity | Structured logs + stuck-session cron recover rare failures; Step Functions is appropriate for workflows requiring branching/parallel steps, not this linear pipeline |
-| Real-time CloudWatch dashboard with widgets | "Visibility for the team" | CloudWatch dashboards are $3/dashboard/month plus $0.01/metric/month; premature at small scale | CloudWatch Logs Insights ad-hoc queries are free up to 5GB scanned/month; use those for debugging |
-
-### Concrete Operator UX: Pipeline Audit
-
-- Every Lambda handler emits structured JSON: `{ sessionId, pipelineStage, status, durationMs, lambdaRequestId, timestamp }`.
-- `pipelineStage` values: `recording-ended`, `start-mediaconvert`, `mediaconvert-complete`, `start-transcribe`, `transcribe-complete`, `ai-summary`.
-- `status` values: `started`, `completed`, `failed`, `skipped`.
-- Debug query: `fields @timestamp, pipelineStage, status, durationMs | filter sessionId = "abc123" | sort @timestamp asc`.
-- Stuck-session cron: runs every 15 minutes; `processingStartedAt` threshold is 30 minutes; re-fires `RecordingProcessingStuck` EventBridge event with the original `sessionId`.
-- DLQ alarm: CloudWatch alarm fires when DLQ depth > 0 for > 5 minutes; operator investigates CloudWatch logs using the `sessionId` from the DLQ message body.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Full request/response body capture in traces | Debug what data each handler received | Transcript text + S3 URIs can be large; X-Ray has 64KB segment size limit; PII risk | Annotate with IDs only (sessionId, jobId); log bodies to CloudWatch where retention is controlled |
+| X-Ray on every Lambda in the stack | Comprehensive observability | Per-trace cost at scale; non-pipeline Lambdas (get-session, list-activity) have trivial logic with no inter-service calls worth tracing | Apply X-Ray only to the 5 pipeline Lambdas where latency and failures matter |
+| Custom X-Ray daemon configuration | Perceived control | Lambda manages the daemon; custom config adds infra complexity with no benefit in single-region single-account deployment | Use Lambda's built-in X-Ray daemon via active tracing flag |
 
 ---
 
-## Feature Area 2: Speaker-Attributed Transcripts
+## Track B: Event Schema Validation
 
 ### Table Stakes
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Speaker-labeled transcript lines | Without attribution, a multi-speaker hangout transcript is an unreadable wall of text; users need "who said what" | MEDIUM | Amazon Transcribe batch `ShowSpeakerLabels: true` + `MaxSpeakerLabels: N` in `StartTranscriptionJob`; output includes `speaker_label` per segment |
-| Username mapping for speaker labels | Raw `spk_0` / `spk_1` labels are meaningless; users expect actual participant names | MEDIUM | Application-level heuristic: join Transcribe segment start times against session participant join/leave timestamps stored in DynamoDB; earliest speaker = first participant to join |
-| Graceful fallback when mapping fails | Diarization accuracy degrades with short utterances or overlapping speech; app must not crash or display empty labels | LOW | If `spk_N` cannot be matched to a known username, display `Speaker 1`, `Speaker 2`; never display raw `spk_0` |
+| Validate required fields present | Handler must reject events missing `sessionId`, `jobId`, etc. before doing work | LOW | Runtime check at top of `processEvent()` + throw with descriptive message |
+| Validate field types and formats | String where number expected causes downstream failures | LOW | `typeof` checks + regex for known formats (session UUID, S3 path) |
+| Reject and DLQ malformed events | Invalid events must not be retried indefinitely; they must go to DLQ for inspection | LOW | Throw validation error causes SQS `batchItemFailures`; after maxReceiveCount, message moves to DLQ |
+| Structured validation error logs | Error must include which field failed, what value was received, and which handler rejected it | LOW | Powertools Logger already present; add `validationError`, `fieldName`, `receivedValue` keys |
+| Validation before any side effects | Must check schema before DynamoDB writes or AWS API calls | LOW | Move validation to top of function, before any `await` calls |
 
 ### Differentiators
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Color-coded speaker blocks | Different speakers visually separated by color; standard UX in Descript, Otter.ai, Rev | LOW | Deterministic color from speaker index: `spk_0` → blue, `spk_1` → green; CSS class per speaker |
-| Click-to-seek from attributed line | Each transcript line is a timestamp link; clicking jumps the video player to that moment | MEDIUM | Transcribe output includes `start_time` (seconds float) per segment; pass to `player.seekTo(startTime)` |
-| Broadcast sessions: single-speaker shortcut | One-to-many broadcast has exactly one speaker (the broadcaster); skip diarization overhead | LOW | If `sessionType === 'broadcast'`, attribute all lines to `sessionOwner` without running diarization |
+| Zod schema definitions for each handler's event type | Single source of truth for what each handler expects; TypeScript inference for free | MEDIUM | `z.object({...}).parse(detail)` replaces ad-hoc `if (!field)` checks; requires `zod` dep |
+| Schema version annotation on DLQ messages | Stuck events in DLQ include schema version so you know which contract was in effect | LOW | Add `schemaVersion: '1'` field to log output on validation failure |
+| Validation coverage for recovery events | `scan-stuck-sessions` recovery event path also has a separate shape that must be validated | MEDIUM | `recording-ended.ts` already has a recovery path; validate its fields separately |
 
 ### Anti-Features
 
-| Anti-Feature | Why Requested | Why Problematic | Alternative |
-|--------------|---------------|-----------------|-------------|
-| Real-time speaker diarization during live stream | "Attribution during the live broadcast" | IVS RealTime does not expose per-speaker audio tracks; Transcribe streaming diarization has significant lag; accuracy is much lower than batch | Batch diarization post-recording only; label transcript as "available after processing" |
-| Manual speaker re-labeling UI | "What if the auto-mapping is wrong?" | Adds drag-and-drop relabeling UI, storage updates, and state management complexity | Defer to v2; display confidence indicator in v1.5; users can copy transcript text as workaround |
-
-### How Amazon Transcribe Diarization Works (Implementation Notes)
-
-- Enable via `Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: N }` on `StartTranscriptionJob`. Set `N` to the hangout participant count (stored on session).
-- Batch output: `results.speaker_labels.segments[]` — each has `{ start_time, end_time, speaker_label, items[] }`.
-- Items in `results.items[]` also carry `speaker_label` when diarization is enabled.
-- Accuracy degrades past 5 concurrent speakers per Amazon Transcribe documentation. Sessions with >5 participants should set `MaxSpeakerLabels: 5` and accept that some speakers may be merged.
-- Application mapping strategy: compare `segment.start_time` against DynamoDB `participantJoinedAt` timestamps. The participant with the closest join time to the first `spk_N` appearance is the most likely match. This is a heuristic — confidence: MEDIUM.
-- Broadcast sessions (one speaker): skip diarization; attribute all lines to `sessionOwnerId`.
-- Confidence for overall feature: MEDIUM — timing-based matching works well for structured hangouts; degrades for overlapping speech or late joiners.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| JSON Schema / ajv for validation | Industry standard JSON Schema tooling | Heavy dep, verbose schemas, no TypeScript inference benefit | Zod gives inference + runtime validation in one package |
+| Validate EventBridge schema registry integration | AWS-native schema validation at EventBridge level | EventBridge schema validation adds latency and complexity; does not help SQS-delivered events which are the actual delivery path | Validate in Lambda handler at the SQS boundary where the message is actually consumed |
+| Exhaustive validation of all AWS-generated fields | Validate every field from IVS/MediaConvert/Transcribe event shapes | AWS-generated events are structurally stable; over-validating creates brittleness when AWS adds new optional fields | Validate only the fields each handler actually uses |
 
 ---
 
-## Feature Area 3: Chat Moderation
+## Track C: DLQ Re-drive Tooling
+
+### Table Stakes (Developer Experience)
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| List messages in each DLQ | Can't fix what you can't see; operator must enumerate stuck events | MEDIUM | AWS SQS `ReceiveMessage` with `VisibilityTimeout=0` to peek without consuming; or `GetQueueAttributes` for depth |
+| Show message body in readable form | DLQ messages are base64-encoded EventBridge envelope inside SQS body; need to decode and pretty-print | LOW | JSON.parse twice: SQS body then EventBridge event detail |
+| Identify which session a stuck message belongs to | Need `sessionId` to correlate with DynamoDB state | LOW | Extract from message body; present in all pipeline event shapes |
+| Re-drive single message to original queue | Replay a stuck event through its handler without losing the original SQS envelope | MEDIUM | `SendMessage` to original queue with same body; then `DeleteMessage` from DLQ |
+| Delete a stuck message from DLQ | Operator must be able to discard a permanently-invalid event after investigation | LOW | `DeleteMessage` with receipt handle |
+| Report message count per DLQ | Quick health check — "are any DLQs backed up?" | LOW | `GetQueueAttributes` with `ApproximateNumberOfMessages` |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Bulk re-drive all messages from a DLQ | Recover from an outage that caused many failures without running re-drive N times | MEDIUM | Loop over `ReceiveMessage` in batches of 10 until queue is drained; AWS also added `StartMessageMoveTask` API in 2022 |
+| Dry-run mode for re-drive | Show what would be replayed without actually doing it | LOW | `--dry-run` flag; print messages but skip `SendMessage` + `DeleteMessage` |
+| Correlation with `debug-pipeline.js` | After identifying stuck event's sessionId, immediately pull session state | MEDIUM | Combine DLQ inspection + existing `debug-pipeline.js` logic into a unified report |
+| Queue URL auto-discovery from CDK outputs | Don't hard-code queue URLs; read from CloudFormation outputs | LOW | `aws cloudformation describe-stacks --query` to get queue URLs |
+
+### Anti-Features
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Automated re-drive on alarm trigger | Auto-recover without human intervention | Automated re-drive hides root cause; if the original bug is still present, re-drive will DLQ again in a loop | Alarm alerts human; human uses tooling to inspect and decide; fix root cause first |
+| Re-drive to a different handler | Test a message against a new version of the handler | Complex routing, high risk of duplicate processing | Deploy the fix, then use normal re-drive to original queue |
+| Store DLQ message history in DynamoDB | Audit trail of what was in the DLQ | Adds operational complexity; CloudWatch Logs already captures the failure; DLQ is ephemeral by design | Use CloudWatch Logs Insights to query handler failures by sessionId |
+
+---
+
+## Track D: Idempotency Gap Coverage
 
 ### Table Stakes
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Broadcaster bounce/kick (disconnect user from chat) | Every live streaming platform gives broadcasters authority over their own stream; missing this = platform feels unsafe | MEDIUM | IVS Chat `DisconnectUser` API disconnects the WebSocket; backend must also block reconnect for the session duration |
-| Reconnect block after bounce | Without a reconnect block, the bounced user can refresh and rejoin immediately; bounce is meaningless | LOW | Check bounce record in `POST /chat-token`; return `403 Forbidden` if user is bounced for this session |
-| Per-message report action (inline, other-users' messages only) | Standard UX on YouTube, Discord, Twitch; users expect a quick "flag this" gesture | LOW | Three-dot or flag icon on hover; only shown on messages not sent by the current user; never on own messages |
-| Moderation actions logged to DynamoDB | Audit trail required; operators must be able to answer "who was bounced when and by whom" | LOW | `MODLOG#${sessionId}#${timestamp}` record with `actionType`, `targetUserId`, `reportedMessageId`, `actorUserId` |
-| Bounce is chat-scoped (not stream disconnect) | Bouncing someone from chat should not end their ability to watch the video | LOW | IVS Chat disconnect is separate from IVS stream playback; bounced user continues watching, just cannot send messages |
+| `transcribe-completed` is idempotent | Handler can be retried without creating duplicate AI summary jobs or corrupting transcript | MEDIUM | Currently no explicit guard; must check if transcript already stored before overwriting |
+| `store-summary` is idempotent | Bedrock invocation on retry must not overwrite a good summary with a new one | MEDIUM | Check `aiSummaryStatus === 'available'` before invoking Bedrock; if already available, skip and return |
+| `recording-ended` recovery path is idempotent | Recovery event re-submits MediaConvert; must not double-submit if job already running | MEDIUM | Check `transcriptStatus !== 'processing'` and `mediaconvertJobId` not already set before submitting |
+| Idempotency guards return cleanly | When duplicate detected, log it and return (not throw); SQS should not retry a successful idempotent no-op | LOW | Distinguish "already done" (return success) from "transient error" (throw for retry) |
 
 ### Differentiators
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Bounce notice sent to the bounced user before disconnect | Industry-standard UX; without a notice, user sees chat stop working with no explanation — confusing and frustrating | LOW | Send a targeted IVS Chat `SendEvent` to the bounced user's connection immediately before calling `DisconnectUser`; frontend handles `BOUNCE_NOTICE` event type |
-| Report fires silently (not visible to other chat participants) | Users want to flag content without making it a public spectacle; public "reported" labels encourage pile-ons | LOW | Report POST goes to backend only; no visible change in chat UI for other participants |
-| Broadcaster sees report count on flagged messages | Helps broadcaster prioritize: "3 reports on this message" is more urgent than 1 | LOW | Return report count via existing session/chat API or a new `GET /sessions/{sessionId}/moderation/reports` endpoint |
+| Powertools Idempotency utility | DynamoDB-backed idempotency with TTL; avoids hand-rolling state checks | HIGH | `@aws-lambda-powertools/idempotency` + `DynamoDBPersistenceLayer`; requires separate idempotency table or TTL-keyed items in existing table |
+| Idempotency key documented per handler | Each handler has a clear definition of what constitutes a "duplicate" invocation | LOW | Comment in handler: "idempotency key = sessionId + jobId"; makes auditing easy |
 
 ### Anti-Features
 
-| Anti-Feature | Why Requested | Why Problematic | Alternative |
-|--------------|---------------|-----------------|-------------|
-| AI auto-moderation / keyword filter | "Automate moderation" | Scope-expanding; false positive rate for casual streams is high; PROJECT.md explicitly defers AI content moderation to v2 | Human-driven moderation only (bounce + report) for v1.5 |
-| Platform-wide ban | "Prevent repeat offenders" | Requires admin tooling, appeal process, policy documentation; out of scope | Session-scoped bounce in v1.5; platform ban deferred to admin dashboard milestone |
-| Message deletion visible to all users (tombstone) | "Show that a message was removed" | Complicates IVS Chat message state; deleted messages must be broadcast as tombstones to all clients | Log deletion server-side; the message remains visible in the reporter's UI; no public broadcast |
-| Slow mode / rate limiting | "Prevent spam" | Per-user rate tracking requires additional state; significant backend complexity | Bounce is the spam defense for v1.5; slow mode deferred to v2 |
-| Moderator roles (non-broadcaster users with mod powers) | "Delegate moderation" | Requires permission model and role management; contradicts simplicity goal | Broadcaster is the sole moderator for v1.5 |
-
-### Concrete UX Behavior: Bounce (Kick)
-
-1. Broadcaster sees a three-dot action menu on each chat message or a per-user action button.
-2. Selecting "Remove from chat" triggers `POST /sessions/{sessionId}/moderation/bounce` with `{ targetUserId }`.
-3. Backend: sends `BOUNCE_NOTICE` IVS Chat event to the target user's connection → calls `IVSChat.DisconnectUser` → writes `MODLOG` record → marks user as bounced in DynamoDB for this `sessionId`.
-4. Bounced user's client receives `BOUNCE_NOTICE` event: chat input is disabled; a banner appears: "You have been removed from this chat by the host." The video stream continues playing.
-5. If the bounced user refreshes and attempts to reconnect: `POST /chat-token` checks the bounce record for this `sessionId` and returns `403 Forbidden`. Frontend shows the banner again.
-6. Other chat participants see no visible change. No public "user was kicked" message.
-
-### Concrete UX Behavior: Report Message
-
-1. A flag or three-dot icon appears on hover on any message not sent by the current user. Own messages never show this icon.
-2. Clicking opens a brief confirmation: "Report this message?" with a "Report" button and a "Cancel" button. An optional free-text `reason` field may be included (optional for v1.5).
-3. `POST /sessions/{sessionId}/moderation/report` with `{ messageId, reason? }`.
-4. Backend writes `MODLOG` record with `actionType: 'report'`; returns `200 OK`.
-5. Frontend shows a transient "Message reported" toast (2–3 seconds). No other visible change in the chat.
-6. The reported message remains visible to the reporter to avoid confusion about what was said.
-7. Broadcaster moderation view (if implemented) shows a report count badge on flagged messages.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Powertools Idempotency on all 5 handlers | Comprehensive protection | High overhead (extra DynamoDB table, per-invocation reads/writes); most handlers already have natural idempotency via `ConflictException` from Transcribe or conditional DynamoDB writes | Apply to handlers that actually lack protection (`transcribe-completed`, `store-summary`); skip handlers that are already safe |
+| SQS FIFO with content-based deduplication | Idempotency at queue level | FIFO queues have throughput limits (300 msg/s vs Standard queues near-unlimited); BROADCAST/HANGOUT recordings can be high-burst | Keep Standard queues; idempotency in handler is the correct layer |
 
 ---
 
-## Feature Area 4: Upload Video Player Page (`/video/:sessionId`)
+## Track E: UI Polish — Transcript / AI Summary Display
 
 ### Table Stakes
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| HLS adaptive bitrate playback | MediaConvert output is a multi-rendition HLS manifest; browser must handle adaptive streaming | LOW | HLS.js handles ABR automatically after initialization; the IVS Player SDK also supports HLS |
-| Manual quality selector | Users expect to choose resolution (Auto / 1080p / 720p / 480p / 360p); missing = frustration when ABR chooses wrong rendition on a fast connection | LOW | Parse `hls.levels[]` after `MANIFEST_PARSED` event; render a quality menu; `hls.currentLevel = N` locks quality; `hls.currentLevel = -1` restores ABR |
-| Playback rate controls (0.5x – 2x) | Standard expectation for VOD content | LOW | HTML5 `videoElement.playbackRate` property; wrap in a UI control |
-| Play/pause, seek bar, volume, fullscreen | Absolute baseline for any video player | LOW | Use HLS.js with a thin custom controls layer rather than rolling native player logic |
-| Buffering/loading indicator | Users need visual feedback during seeks or slow connections | LOW | Listen to HLS.js `BUFFER_STALLED_ERROR` and `FRAG_BUFFERED` events; show/hide a spinner overlay |
-| Session title, owner, duration, upload date | Users expect context without playing the video | LOW | Pull from existing session DynamoDB record; render in page header |
+| Processing state shown while transcript not ready | User opening replay before pipeline completes must see a clear "processing" state, not a broken component | LOW | `TranscriptDisplay` shows "Transcript not available yet" on 404; upgrade to show pipeline stage from session metadata |
+| Transcript synced to playback position | Active segment highlighted as video plays — core value of the transcript panel | LOW | Already implemented; verify scroll-into-view works correctly on long transcripts |
+| Speaker bubble layout for diarized sessions | Two-speaker layout visually distinguishes participants | LOW | Already implemented in `TranscriptDisplay` bubble mode |
+| Summary status variants styled consistently | "Summary coming soon" vs "Summary unavailable" vs actual text must look intentional | LOW | `SummaryDisplay` uses plain text for all states; add distinct visual treatment per status |
+| Transcript panel and summary panel co-exist without layout conflict | Video + transcript + summary must fit on screen without scrolling wars | MEDIUM | Current layout on `VideoPage` collapses them behind a toggle; needs layout review |
 
 ### Differentiators
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Transcript + AI summary side panel | Exclusive to this platform; lets users skim the content before committing to watch | LOW | Transcript and AI summary already exist on the session record; render in a collapsible side panel |
-| Click-to-seek from transcript line | Turns static transcript text into interactive navigation | MEDIUM | Requires player time position coordination with transcript segment `start_time` fields |
-| Async timestamped comments | Comments anchored to a video position; distinct engagement model from live chat | MEDIUM | See Feature Area 5 |
-| Reactions displayed on upload | Consistent with existing replay experience | LOW | Reuse existing reactions rendering; reactions stored per-session already |
-| "Quality locked" indicator | Tells user that ABR is disabled and they are watching a specific rendition | LOW | Toggle label next to quality selector showing current rendition |
+| Click-to-seek from transcript segment | Click a transcript line to jump video to that timestamp | LOW | `video.currentTime = segment.startTime / 1000`; requires passing a seek callback from player to transcript |
+| Transcript search / filter | Find a word in the transcript and jump to it | MEDIUM | Client-side filter over `segments` array; highlight matching segments |
+| Retry button when transcript failed | Give user a clear action when pipeline failed | LOW | Show button that displays support info or links to re-drive tooling |
+| Copy transcript to clipboard | Share or save transcript text | LOW | `navigator.clipboard.writeText(segments.map(s => s.text).join('\n'))` |
 
 ### Anti-Features
 
-| Anti-Feature | Why Requested | Why Problematic | Alternative |
-|--------------|---------------|-----------------|-------------|
-| Custom video player from scratch | "Full control over the UI" | HLS requires segment fetching, buffer management, ABR logic, error recovery — months of work to reinvent HLS.js | Use HLS.js directly with a thin custom React controls layer on top |
-| Autoplay with sound | "Feels modern and immediate" | Browsers block autoplay with sound by default; results in silent or failed playback; confusing UX | Autoplay muted is browser-permissible; require a user gesture to unmute |
-| Video chapters from AI summary | "Smart segmentation" | AI summary is a single paragraph; chapter generation requires a different Bedrock prompt and output schema | Transcript click-to-seek covers chapter-navigation needs; chapters deferred to v2 |
-| Download button | "Users want offline access" | S3 pre-signed URL generation adds complexity; introduces copyright/abuse concerns | Out of scope for v1.5; log as v2 requirement |
-
-### HLS Quality Selector: Implementation Notes
-
-- `hls.levels` array is populated after the `MANIFEST_PARSED` event: `[{ height: 1080, bitrate: 5000000 }, { height: 720, bitrate: 2500000 }, ...]`.
-- Render options as: `Auto`, `1080p`, `720p`, `480p`, `360p` (map from `level.height`).
-- `hls.currentLevel = -1` re-enables ABR (Auto mode).
-- `hls.currentLevel = N` locks to rendition index `N` — disables ABR until changed.
-- When quality is locked, show a lock icon or "1080p (locked)" label so users understand ABR is off.
-- MediaConvert existing output renditions: 1080p, 720p, 480p, 360p — all four should appear in the menu.
-- Confidence: HIGH — well-documented HLS.js pattern with extensive community usage.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Real-time transcript streaming during live session | Show words as speaker says them in live mode | Live transcription requires Amazon Transcribe Streaming (different service, websocket protocol, additional cost); IVS provides no transcription hook | Transcription is post-session only; display "transcript available after session ends" in live UI |
+| Translate transcript to other languages | International users | Scope expansion; requires Amazon Translate integration | Defer to future milestone |
 
 ---
 
-## Feature Area 5: Async Comments on Video
+## Track F: UI Polish — Upload Video Player
 
 ### Table Stakes
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Comments persist after page reload | Users expect permanence; live chat is ephemeral; VOD comments are permanent | LOW | Store in DynamoDB: `COMMENT#${sessionId}#${commentId}` record with `videoPositionMs`, `text`, `authorId`, `createdAt` |
-| Comments anchored to a video timestamp | Core differentiator of video comments vs. generic post comments; YouTube established this expectation | MEDIUM | Store `videoPositionMs` on each comment; display as `[0:04]` prefix; clicking seeks player to that position |
-| Display anchored timestamp as clickable seek link | Users expect to click a timestamp and jump to that moment | LOW | `onClick={() => player.seekTo(comment.videoPositionMs / 1000)}` |
-| Comment count shown on page | Social signal; users want to know engagement before scrolling | LOW | Aggregate count on session record or via `COUNT` DynamoDB query |
-| Threaded replies (one level deep) | Flat threads become unreadable; users expect to respond to a comment | MEDIUM | `parentCommentId` field; render as two-level tree (comment + indented replies); no deeper nesting |
+| Processing state while video is not ready | User reaching `/video/:sessionId` before upload pipeline finishes must see pipeline progress, not a broken player | LOW | `VideoPage` already shows "Video still processing" with `SessionAuditLog`; verify all pipeline stages appear correctly |
+| Quality selector functional | Users expect to choose video quality on an upload player | LOW | `QualitySelector` exists; confirm it works with the transcoded HLS output from `transcription-bucket` |
+| Comments anchored to video timestamps | Timestamped comments are the core differentiator; must display and submit correctly | MEDIUM | `CommentThread` exists; verify `syncTime === 0` guard works correctly and timestamps render |
+| Reactions visible on video page | Reactions are part of the engagement model | LOW | `ReplayReactionPicker` + `ReactionSummaryPills` exist; verify count display after page load |
+| AI summary visible when available | The pipeline effort to generate summaries must surface to users | LOW | `SummaryDisplay` is integrated; ensure "pending" state does not look broken |
+| Back navigation to home | User must be able to leave the video page | LOW | Back button exists in header |
 
 ### Differentiators
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Seek bar comment markers | Visual density map showing where conversation happened; YouTube-style dot markers on progress bar | MEDIUM | Render `div` overlays at `(positionMs / durationMs * 100)%` on the seek bar track |
-| Dual sort modes: by position vs. by recency | "Position" mode: watch comments appear as you reach them; "Recency" mode: see newest discussion first | LOW | Client-side re-sort of fetched comments; two radio buttons or a toggle |
-| Comment reactions (like/heart) | Lightweight engagement without requiring text; standard on YouTube | LOW | Single emoji count per comment stored in DynamoDB; `POST /comments/{commentId}/react` |
+| Transcript panel for uploaded videos | Same transcript UX as replay — adds depth to upload page | MEDIUM | `VideoInfoPanel` wraps `TranscriptDisplay` behind a toggle; surface it more prominently |
+| Auto-scroll comments near current video position | Comments panel shows comments near current playback time | MEDIUM | Filter/sort comments by `sessionRelativeMs` proximity to `syncTime` |
+| Inline video title editing | Creator can rename their upload | MEDIUM | Requires `updateSession` API endpoint; defer if not in scope |
 
 ### Anti-Features
 
-| Anti-Feature | Why Requested | Why Problematic | Alternative |
-|--------------|---------------|-----------------|-------------|
-| Real-time comment sync via WebSocket | "See new comments without refresh" | Upload video page is async-first; live sync adds WebSocket infrastructure complexity without clear UX value; VOD viewers are not in synchronous sessions | Periodic polling (30s) or a manual "Load new comments" button is sufficient for VOD |
-| Inline video frame annotations / drawing overlays | "Mark a specific frame visually" | Canvas overlay + frame-accurate sync is very high complexity; no evidence users demand this at this stage | Timestamped text comments cover the annotation use case adequately |
-| Nested replies beyond two levels | "Rich threaded discussion" | Deep threads are hard to read on a video page; Reddit-style nesting is the wrong model | One reply level; encourage new top-level comments rather than deep threading |
-| Comment popularity sort as default | "Surface best comments first" | Premature; adds upvote infrastructure before there are enough comments to need sorting | Newest-first as default; position-sort as alternative; popularity sort deferred to v2 |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Video download button | Users want to save videos | S3 pre-signed URL approach creates security and access-control complexity | Defer to future milestone as a CDN-gated feature |
+| Chapters / markers on seek bar | YouTube-style chapter navigation | Requires chapter metadata storage + HLS marker spec; high complexity for low immediate value | Transcript click-to-seek achieves similar goal with less complexity |
 
-### Key UX Differences: Async Comments vs Live Chat
+---
 
-| Dimension | Live Chat (existing) | Async Comments (v1.5) |
-|-----------|---------------------|----------------------|
-| Persistence | Read-only archive after session ends | Primary artifact; permanent, editable/deletable |
-| Timestamp | Wall-clock time during the event | Video position (`0:04`, `1:23`, etc.) |
-| Default ordering | Chronological, newest at bottom (live scroll) | Newest-first or position-sort (user chooses) |
-| Threading | Flat | Two levels (comment + replies) |
-| Reading posture | During live event | Before/after watching; not during |
-| Moderation | Broadcaster bounce + user report | User report (no bounce — no live session) |
-| Real-time requirement | Required (live event) | Not required; periodic refresh sufficient |
-| Expected volume | High (hundreds of messages per session) | Lower (tens of comments typical for VOD) |
-| Seek bar integration | Not applicable | Comment position markers on seek bar |
+## Track G: UI Polish — Activity Feed / Home
+
+### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Pipeline processing state accurately reflected in cards | If a session is `transcriptStatus: 'processing'`, the card must say so, not show a broken thumbnail or missing badge | LOW | `SessionAuditLog` is integrated in cards in compact mode; verify it shows the correct last-event label |
+| Thumbnail shown when available | Activity cards with a thumbnail are more engaging than text-only cards | LOW | `thumbnailUrl` is stored on session; `BroadcastActivityCard`/`HangoutActivityCard` need to display it if present |
+| Live sessions appear at top of feed | Live sessions have time-sensitive urgency and must not be buried | LOW | `LiveBroadcastsSlider` already surfaces live sessions; confirm ordering is correct relative to activity feed |
+| UPLOAD sessions appear in feed | Upload sessions are in the type system; verify `UploadActivityCard` is complete | LOW | `UploadActivityCard` exists; audit for missing fields vs broadcast/hangout cards |
+| Empty state for no sessions | First-time user must see an actionable empty state | LOW | `ActivityFeed` returns "No activity yet"; verify this renders correctly |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Reaction summary pills on activity cards | Quickly shows engagement level without clicking through | LOW | `ReactionSummaryPills` exists; verify it receives correct `reactionSummary` data from list-activity response |
+| AI summary teaser on card | 2-line summary excerpt gives users a reason to click | LOW | `SummaryDisplay` with `truncate=true` is ready; confirm it is wired in all three card types |
+| Duration display on cards | Users want to know how long a session was before clicking | LOW | `recordingDuration` is stored; add formatted duration to card metadata row |
+| Pagination / infinite scroll | Feed grows over time | MEDIUM | `list-activity` likely returns all sessions; needs `lastEvaluatedKey` DynamoDB pagination |
+
+### Anti-Features
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Follower/following feed | "Show me sessions from people I follow" | Requires social graph (new DynamoDB schema, new endpoints); scope explosion | Home feed shows all sessions (global feed) for v1 |
+| Real-time feed updates via WebSocket | New sessions appear without refresh | WebSocket adds infrastructure complexity disproportionate to value | 30-second poll or manual refresh is sufficient |
+
+---
+
+## Track H: UI Polish — Broadcast / Hangout Live Session
+
+### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Broadcast controls work when live (mute, camera, screen share) | Basic live session controls are non-negotiable | LOW | All controls exist in `BroadcastPage`; audit for broken states (e.g., button shows wrong state after toggle) |
+| Hangout controls work (mute, camera, leave) | Same as broadcast — basic controls | LOW | `HangoutPage` has mute/camera toggles; verify a leave/end session button is present and functional |
+| Error state for failed stream start | "Go Live" can fail; user must see a clear error not a spinner forever | LOW | `error` state from `useBroadcast` is shown in a banner; verify error text is user-readable |
+| Viewer count accurate | Broadcaster needs to know how many people are watching | LOW | `useViewerCount` polls every 10s; verify count updates during live session |
+| Chat visible and functional during live | Chat is the primary interaction mechanism | LOW | `ChatPanel` is integrated; audit edge cases (empty state, connection error state) |
+| End session / leave confirmation | Accidental clicks on "Stop Broadcast" or "Leave" must be preventable | MEDIUM | No confirmation dialog currently exists; add a confirm step |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Stream quality overlay readable at a glance | Broadcaster can see bitrate/health without developer tools | LOW | `StreamQualityOverlay` + `StreamQualityDashboard` exist; verify health score thresholds and color coding |
+| Mobile-responsive broadcast layout | Broadcasters on mobile devices | MEDIUM | `isMobile` detection exists; audit that controls are usable on small screens |
+| Hangout reactions | Hangout participants can react just like broadcast viewers — parity gap | MEDIUM | `BroadcastPage` has `ReactionPicker`; `HangoutPage` currently lacks it |
+| Spotlight feature visible to broadcaster | Show who is currently featured during broadcast | LOW | `SpotlightBadge` exists in broadcast; confirm it renders correctly when a creator is spotlighted |
+
+### Anti-Features
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Picture-in-picture for broadcaster | Broadcaster continues using desktop while live | Browser PiP API is complex and inconsistently supported; IVS SDK does not natively support PiP | Defer; the current fixed-layout broadcast page is sufficient |
+| Recording duration timer on broadcast page | Show duration of current broadcast | Requires tracking `broadcastStartedAt` and computing elapsed time client-side | Viewer count + LIVE badge is sufficient signal; defer |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Pipeline Observability (structured JSON logs)
-    └──enables──> Stuck Session Recovery Cron
-                  └──queries──> DynamoDB transcriptStatus GSI (already exists)
-                  └──guards with──> processingStartedAt field (new field on session)
+X-Ray tracing
+    requires --> Lambda active tracing enabled in CDK (session-stack.ts)
+    requires --> X-Ray SDK / Powertools Tracer added to Lambda bundles
+    requires --> Subsegment wrapping of AWS SDK clients per handler
 
-Speaker Attribution
-    └──requires──> Transcribe diarization params on StartTranscriptionJob (new)
-    └──requires──> Participant join/leave timestamps in DynamoDB (new fields)
-    └──enhances──> Transcript panel on Upload Video Player page
+Event schema validation
+    requires --> Zod (new dep) OR hand-rolled validation at top of processEvent()
+    enhances --> DLQ re-drive (validated events produce better error messages in DLQ)
 
-Chat Moderation: Bounce
-    └──requires──> IVS Chat DisconnectUser API (backend)
-    └──requires──> Bounce check on POST /chat-token (backend guard)
-    └──requires──> BOUNCE_NOTICE IVS Chat event handling (frontend)
+DLQ re-drive tooling
+    requires --> DLQ URLs / queue names (already in CDK; need to surface via CLI)
+    enhances --> debug-pipeline.js (existing tool covers session-level state)
+    depends-on --> existing SQS DLQs (shipped in v1.6 Phase 31)
 
-Chat Moderation: Report
-    └──independent of Bounce (separate DynamoDB record type)
-    └──shares──> MODLOG DynamoDB record structure with Bounce
+Idempotency hardening
+    requires --> understanding which handlers lack guards (transcribe-completed, store-summary)
+    conflicts-with --> Powertools Idempotency library (adds DynamoDB dep; targeted guards preferred)
 
-Upload Video Player Page
-    └──requires──> session.recordingHlsUrl (already stored)
-    └──requires──> Async Comments backend (new)
-    └──enhances with──> Speaker-attributed transcript (click-to-seek shares same player API)
+UI polish -- transcript display
+    requires --> existing TranscriptDisplay component (already built)
+    requires --> existing SummaryDisplay component (already built)
+    enhances --> upload video player (transcript panel shared via VideoInfoPanel)
 
-Async Comments
-    └──requires──> Upload Video Player Page (no standalone comments outside player context)
-    └──uses──> same player seekTo API as transcript click-to-seek
+UI polish -- activity feed
+    requires --> reactionSummary field on session (already stored)
+    requires --> thumbnailUrl field on session (already stored)
+    enhances --> broadcast/hangout cards (same card components)
 ```
 
 ### Dependency Notes
 
-- **Structured logs and stuck-session cron are parallel, not sequential:** Logs inform human debugging; the cron queries DynamoDB fields, not CloudWatch. Build both in the same phase but treat them as independent concerns.
-- **Speaker attribution requires participant join timestamps:** Without them, the `spk_N` → username mapping degrades to `Speaker N` fallback. Add `participantJoinedAt` fields to the session's hangout participant list in the same phase as diarization.
-- **Bounce requires a reconnect block:** `DisconnectUser` alone is insufficient; without the `POST /chat-token` guard, the bounced user refreshes and rejoins. These are part of the same feature unit.
-- **Async comments are scoped to the upload video player page:** Build the player page shell first; add comments as a component. Do not ship comments without the player page.
-- **Quality selector is part of the player page:** It is not a separate phase; implement it as part of the initial player build using HLS.js `hls.levels`.
+- **X-Ray requires CDK change first.** Lambda `tracing: lambda.Tracing.ACTIVE` must be set before any tracer code runs. CDK change is the prerequisite for all X-Ray handler work.
+- **Schema validation before DLQ re-drive.** Better validation errors make DLQ message triage faster; do validation first in the same phase if possible.
+- **Idempotency is independent of X-Ray.** These can be phased separately without coupling.
+- **UI polish tracks are independent of backend tracks.** Frontend and backend work can be parallelized across phases.
+- **`transcribe-completed` and `store-summary` are the priority idempotency targets.** `recording-ended` has partial protection via MediaConvert job ID storage; `transcode-completed` has `ConflictException` guard on Transcribe. The two with no guard are `transcribe-completed` (S3 overwrite risk) and `store-summary` (Bedrock reinvocation risk).
 
 ---
 
-## MVP Definition (v1.5 Scope)
+## MVP Definition for v1.7
 
-### Launch With (all 5 feature areas in scope for v1.5)
+### Launch With (all of these are in scope)
 
-- [ ] Structured JSON pipeline logs: `sessionId`, `pipelineStage`, `status`, `durationMs` on all pipeline Lambdas
-- [ ] Stuck-session recovery cron: 15-minute schedule, 30-minute threshold, re-fires recovery EventBridge event
-- [ ] SQS DLQ on EventBridge pipeline rules + CloudWatch alarm on DLQ depth > 0
-- [ ] `processingStartedAt` field on session record for cron to query
-- [ ] Speaker-attributed transcript lines with username mapping; fallback to `Speaker N`
-- [ ] Participant join/leave timestamps in DynamoDB (prerequisite for speaker mapping)
-- [ ] Bounce action: broadcaster UI button + IVS Chat DisconnectUser + reconnect block on `/chat-token` + `BOUNCE_NOTICE` event to user
-- [ ] Report action: inline flag on other-users' messages + DynamoDB MODLOG record + "Message reported" toast
-- [ ] `/video/:sessionId` page with HLS.js player, ABR, manual quality selector, playback rate controls
-- [ ] Transcript + AI summary collapsible side panel on video page
-- [ ] Async comments: DynamoDB storage, video timestamp anchor, click-to-seek, two-level threading, dual sort modes
-- [ ] Seek bar comment position markers
+- [ ] X-Ray active tracing on all 5 pipeline Lambdas with subsegment-wrapped AWS clients
+- [ ] Schema validation at top of each `processEvent()` in all 5 handlers
+- [ ] `transcribe-completed` and `store-summary` idempotency guards
+- [ ] DLQ inspection + re-drive CLI tool (list, show, re-drive, delete)
+- [ ] UI: transcript click-to-seek + summary status distinct styling
+- [ ] UI: activity feed cards show thumbnail, duration, accurate pipeline state
+- [ ] UI: broadcast/hangout end-session confirmation dialog + hangout reactions parity
+- [ ] UI: upload video player — processing state accurate, comments + transcript panels complete
 
-### Defer After v1.5 Launch
+### Defer to v1.8
 
-- [ ] DLQ auto-replay cron — manual via stuck-session cron is sufficient; auto-replay adds idempotency complexity
-- [ ] Active comment highlighting during playback — UX polish; not blocking
-- [ ] Broadcaster moderation panel showing report counts — useful but not on critical path for launch
-- [ ] Manual speaker re-labeling UI — `Speaker N` fallback covers failure case
-- [ ] Comment reactions (like/heart) — not blocking initial async comments launch
-
-### Future Consideration (v2+)
-
-- [ ] AI auto-moderation / keyword filters
-- [ ] Platform-wide bans + admin moderation dashboard
-- [ ] Video chapters from AI summary
-- [ ] Comment popularity sorting
-- [ ] Download button (S3 pre-signed URL generation)
-- [ ] Nested replies beyond two levels
-- [ ] Real-time comment WebSocket sync
+- [ ] Powertools Idempotency utility (DynamoDB-backed) — targeted guards are sufficient
+- [ ] Transcript translation — requires Amazon Translate integration
+- [ ] Activity feed pagination — useful but not blocking
+- [ ] Follower/following feed — social graph is a milestone-level feature
+- [ ] Video download — access-control complexity, defer
 
 ---
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Structured pipeline logs | HIGH (operator) | LOW | P1 |
-| Stuck session recovery cron | HIGH (operator reliability) | MEDIUM | P1 |
-| EventBridge DLQ + CloudWatch alarm | HIGH (operator visibility) | LOW | P1 |
-| Speaker-attributed transcripts | HIGH (viewer UX) | MEDIUM | P1 |
-| Broadcaster bounce | HIGH (broadcaster safety) | MEDIUM | P1 |
-| Report message (inline) | MEDIUM (user safety) | LOW | P1 |
-| Upload video player + quality selector | HIGH (viewer engagement) | MEDIUM | P1 |
-| Async comments with timestamps | MEDIUM (engagement) | MEDIUM | P1 |
-| Transcript + AI panel on video page | HIGH (platform differentiator) | LOW | P1 |
-| Seek bar comment markers | MEDIUM (UX polish) | MEDIUM | P2 |
-| Bounce notice sent to kicked user | MEDIUM (UX clarity) | LOW | P2 |
-| Broadcaster report count view | LOW (moderator utility) | LOW | P2 |
-| Color-coded speaker blocks | LOW (UX polish) | LOW | P2 |
-| Active comment highlighting during playback | LOW (UX polish) | MEDIUM | P3 |
-| DLQ auto-replay cron | MEDIUM (ops automation) | MEDIUM | P3 |
+| Feature | User / Dev Value | Implementation Cost | Priority |
+|---------|-----------------|---------------------|----------|
+| X-Ray tracing on pipeline Lambdas | HIGH (operational) | MEDIUM | P1 |
+| Schema validation at handler boundaries | HIGH (reliability) | LOW | P1 |
+| `transcribe-completed` + `store-summary` idempotency | HIGH (correctness) | LOW | P1 |
+| DLQ inspection + re-drive CLI | HIGH (operational) | MEDIUM | P1 |
+| UI: transcript click-to-seek | MEDIUM (UX) | LOW | P1 |
+| UI: summary status distinct styling | MEDIUM (UX) | LOW | P1 |
+| UI: activity card thumbnails + duration | HIGH (UX) | LOW | P1 |
+| UI: end-session confirm dialog | MEDIUM (safety) | LOW | P1 |
+| UI: hangout reactions parity with broadcast | MEDIUM (parity) | MEDIUM | P2 |
+| UI: transcript search / filter | LOW (UX) | MEDIUM | P2 |
+| Activity feed pagination | MEDIUM (UX) | MEDIUM | P2 |
+| X-Ray custom group / filter expression | LOW (nice-to-have) | LOW | P2 |
+| Powertools Idempotency utility | LOW (overkill for this scale) | HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for v1.5 launch
-- P2: Should have, add in same milestone if time allows
-- P3: Nice to have, defer to v1.6 or later
+- P1: Must have for v1.7 launch
+- P2: Add if phase capacity allows
+- P3: Defer to future milestone
 
 ---
 
 ## Sources
 
-- [Amazon EventBridge DLQ documentation](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html)
-- [Improved failure recovery for Amazon EventBridge (AWS blog)](https://aws.amazon.com/blogs/compute/improved-failure-recovery-for-amazon-eventbridge/)
-- [AWS Lambda Powertools (TypeScript) — npm](https://www.npmjs.com/package/@aws-lambda-powertools/logger)
-- [AWS Serverless Observability best practices](https://aws-observability.github.io/observability-best-practices/guides/serverless/aws-native/lambda-based-observability/)
-- [Amazon Transcribe speaker diarization — batch](https://docs.aws.amazon.com/transcribe/latest/dg/diarization.html)
-- [Amazon Transcribe diarization batch output example](https://docs.aws.amazon.com/transcribe/latest/dg/diarization-output-batch.html)
-- [Amazon IVS Chat moderation — DisconnectUser (DEV.to/AWS)](https://dev.to/aws/manually-moderating-amazon-ivs-chat-messages-5646)
-- [GetStream: 7 UX Best Practices for Livestream Chat](https://getstream.io/blog/7-ux-best-practices-for-livestream-chat/)
-- [GetStream: Live Stream Chat Moderation](https://getstream.io/blog/live-stream-chat-moderation/)
-- [HLS.js 2025 guide — VideoSDK](https://www.videosdk.live/developer-hub/hls/hls-js)
-- [Mux: Best Practices for Video Playback 2025](https://www.mux.com/articles/best-practices-for-video-playback-a-complete-guide-2025)
-- [Mux: Adaptive Bitrate Streaming explained](https://www.mux.com/articles/adaptive-bitrate-streaming-how-it-works-and-how-to-get-it-right)
-- [EventBridge Archive + Replay with Circuit Breaker pattern](https://sbrisals.medium.com/amazon-eventbridge-archive-replay-events-in-tandem-with-a-circuit-breaker-c049a4c6857f)
-- [AssemblyAI: What is speaker diarization (2026)](https://www.assemblyai.com/blog/what-is-speaker-diarization-and-how-does-it-work)
-- [Vidizmo: Speaker diarization in enterprise video](https://vidizmo.ai/blog/speaker-diarization-enterprise-video)
+- Direct code analysis: `backend/src/handlers/recording-ended.ts`, `transcode-completed.ts`, `transcribe-completed.ts`, `store-summary.ts`, `on-mediaconvert-complete.ts`
+- Direct code analysis: `web/src/features/replay/TranscriptDisplay.tsx`, `SummaryDisplay.tsx`
+- Direct code analysis: `web/src/features/activity/ActivityFeed.tsx`, `SessionAuditLog.tsx`
+- Direct code analysis: `web/src/features/upload/VideoPage.tsx`
+- Direct code analysis: `web/src/features/broadcast/BroadcastPage.tsx`, `web/src/features/hangout/HangoutPage.tsx`
+- Direct code analysis: `infra/lib/stacks/session-stack.ts`, `monitoring-stack.ts`
+- Direct code analysis: `tools/debug-pipeline.js`, `tools/replay-pipeline.js`
+- Project context: `.planning/PROJECT.md` v1.7 requirements and v1.6 shipped features
 
 ---
 
-*Feature research for: v1.5 Pipeline Reliability, Moderation & Upload Experience*
-*Researched: 2026-03-10*
+*Feature research for: VideoNowAndLater v1.7 Event Hardening & UI Polish*
+*Researched: 2026-03-12*

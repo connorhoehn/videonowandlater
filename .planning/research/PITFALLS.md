@@ -1,284 +1,366 @@
-# Pitfalls Research: v1.5 Pipeline Reliability, Moderation & Upload Experience
+# Pitfalls Research
 
-**Domain:** AWS Lambda + EventBridge pipeline hardening, Amazon Transcribe diarization, IVS Chat moderation, HLS.js adaptive video player, async comments on existing streaming platform
-**Researched:** 2026-03-10
-**Confidence:** HIGH — based on existing codebase analysis (recording-ended.ts, start-transcribe.ts, transcribe-completed.ts, useChatRoom.ts), prior hotfix history from MEMORY.md, and verified AWS service constraints
+**Domain:** Event-driven SQS/Lambda pipeline hardening + React UI polish on existing AWS IVS platform
+**Researched:** 2026-03-12
+**Confidence:** HIGH (X-Ray and idempotency pitfalls verified against official Powertools docs; DLQ pitfalls from AWS official docs; Zod pitfalls from official changelog and community benchmarks; start-transcribe error-path pitfall confirmed by codebase inspection)
 
 ---
 
 ## Context: System-Specific Risk Profile
 
-This codebase has already experienced production bugs in exactly the EventBridge pipeline it is now trying to harden:
-- Phase mismatch in userMetadata (`'21-uploads'` vs `'19-transcription'`) broke EventBridge rule matching
-- Stale condition check (`session.recordingStatus` vs computed `finalStatus`) silently blocked MediaConvert submission
-- Missing `iam:PassRole` permission caused runtime failures after a clean deploy
-- The trigger fix required restructuring event flow (MediaConvert completion → direct PutEvents instead of relying on EventBridge rule matching MediaConvert events)
-
-The pitfalls below are calibrated to this specific history. They are not generic advice.
+v1.7 adds instrumentation and validation ON TOP of a working pipeline. The five SQS-backed handlers (`recording-ended`, `transcode-completed`, `on-mediaconvert-complete`, `transcribe-completed`, `store-summary`) all follow the same batchSize:1 + batchItemFailures pattern established in v1.6. Pitfalls below are calibrated to what could go wrong when adding Powertools Tracer, Zod schema validation, Powertools idempotency, and DLQ re-drive tooling to this specific codebase — not generic AWS Lambda advice.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Audit Log CloudWatch Log Group Does Not Exist at First Invocation
+### Pitfall 1: X-Ray Tracer Active Tracing Not Enabled in CDK — Silent Trace Dropping
 
 **What goes wrong:**
-Lambda functions auto-create their `/aws/lambda/FunctionName` log group on first invocation — but only if the execution role has `logs:CreateLogGroup`. When a new audit Lambda (e.g., a structured pipeline logger) is deployed and immediately triggered by a live event, if the log group creation fails silently the first invocation produces no logs. The Lambda still succeeds (returns 200/void) but the audit trail is empty for that event. The developer checks CloudWatch Insights, finds nothing, and assumes the event was never received.
+All `tracer.captureAWSv3Client()` calls succeed at runtime (no exception thrown) but the X-Ray console has zero traces. Every instrumented AWS SDK call is silently dropped. There is no log message, no error, no warning. The developer believes tracing is working because the code runs clean.
 
 **Why it happens:**
-- CDK Lambda construct grants `logs:CreateLogStream` and `logs:PutLogEvents` by default, but NOT `logs:CreateLogGroup` in all configurations
-- If `logRetention` or an explicit `logs.LogGroup` resource is specified in CDK, the log group must be created before the Lambda is invoked — but CDK uses a custom resource for log retention, and timing during first deploy can create a window where invocations arrive before the log group exists
-- The existing `ivs-event-audit.ts` handler uses `console.log(JSON.stringify(...))` which goes to CloudWatch via the Lambda runtime; this works fine. But when adding a NEW Lambda that calls `CloudWatchLogsClient.PutLogEvents` directly (for cross-handler structured logging), the log group must pre-exist
+CDK's `NodejsFunction` does not enable X-Ray active tracing by default. Without `tracing: lambda.Tracing.ACTIVE` on each function in `session-stack.ts`, Lambda operates in PassThrough mode. Powertools Tracer auto-disables when `_X_AMZN_TRACE_ID` is absent from the Lambda execution context — the same behaviour that makes it safe to run locally. There is no runtime error.
 
 **How to avoid:**
-- In CDK: explicitly declare `new logs.LogGroup(this, 'PipelineAuditLogGroup', { logGroupName: '/vnl/pipeline/audit', removalPolicy: RemovalPolicy.DESTROY })` for any log group targeted by PutLogEvents calls
-- Do NOT rely on Lambda auto-creation for log groups referenced in code (only safe for the default `/aws/lambda/FunctionName` group)
-- Prefer `console.log(JSON.stringify({ structured: true, ... }))` over direct CloudWatch SDK calls — the Lambda runtime handles log delivery reliably
-- If direct PutLogEvents is used: wrap in try/catch and fall back to console.log; never let audit log failure propagate to the caller
+In `session-stack.ts`, add `tracing: lambda.Tracing.ACTIVE` to every `NodejsFunction` being instrumented. CDK automatically adds `xray:PutTraceSegments` and `xray:PutTelemetryRecords` to the function's execution role when this property is set — no separate IAM grant needed. After `cdk deploy`, verify in the Lambda console under "Configuration > Monitoring and operations tools" that X-Ray active tracing shows "Active."
 
 **Warning signs:**
-- CloudWatch Insights query returns 0 results for a new audit Lambda that you know was invoked
-- Lambda shows successful invocations in metrics but empty log streams
-- CDK deploy log shows `Custom::LogRetention` resource creation failures or warnings
+- X-Ray console shows zero traces 5+ minutes after handler invocations
+- CloudWatch logs show normal handler execution but no X-Ray entries
+- `POWERTOOLS_TRACE_ENABLED` env var not set, or explicitly set to `false`
 
-**Phase to address:**
-Phase adding pipeline audit logging (v1.5 Phase 1) — pre-create all log groups in CDK before any Lambda code references them
+**Phase to address:** X-Ray tracing phase
 
 ---
 
-### Pitfall 2: Cron Recovery Handler Re-Fires Already-Processing Sessions (Double MediaConvert Submission)
+### Pitfall 2: AWS SDK Clients Constructed Inside `processEvent` — Tracer Cannot Capture Them
 
 **What goes wrong:**
-A cron Lambda scans DynamoDB for sessions where `transcriptStatus` is `null` or `'pending'` and `endedAt` is older than 30 minutes. It re-fires the EventBridge event to start the pipeline. If the session is ALREADY in `transcriptStatus: 'processing'` (MediaConvert job submitted, job running) but hasn't finished yet (e.g., job takes 25 minutes for a long recording), the cron fires again, submits a SECOND MediaConvert job, and both jobs complete. The second job overwrites `transcript.json` in S3 with identical content — harmless in the happy path but wastes MediaConvert cost and creates confusing audit trail entries.
+Four of the five pipeline handlers (`recording-ended`, `store-summary`, `transcribe-completed`, `on-mediaconvert-complete`) construct their AWS SDK clients (`MediaConvertClient`, `S3Client`, `BedrockRuntimeClient`, `EventBridgeClient`) inside the `processEvent()` function, not at module scope. `tracer.captureAWSv3Client()` must wrap the client at initialization — it cannot retroactively instrument a client that was created after the trace segment opened. The result is a trace map that shows the Lambda function node but no downstream AWS service nodes (no DynamoDB, no S3, no Bedrock, no MediaConvert).
 
 **Why it happens:**
-- The cron checks `transcriptStatus` for `null` / `'pending'` but the existing code sets `transcriptStatus = 'processing'` when the MediaConvert job is submitted (see `recording-ended.ts` line ~294). A session with a slow-running job shows `transcriptStatus: 'processing'` for 20-30 minutes — which the cron should NOT retry
-- If the cron threshold is set too tight (e.g., "retry after 15 minutes") it will hit sessions mid-processing
-- The deeper issue: if the cron fires while the original Lambda is also running (race), two simultaneous MediaConvert jobs get submitted with different `jobName` values but the same `sessionId`. Both write to the same S3 output key (`${sessionId}/transcript.json`). The second write wins
+The current per-invocation client construction pattern predates Tracer. The `start-transcribe.ts` handler is the only one that already constructs its `TranscribeClient` at module scope. The other four handlers construct clients inside `processEvent` because that was idiomatic when they were written. When adding Tracer, developers add `tracer.captureAWSv3Client()` calls inside `processEvent` alongside the existing constructors — the wrapping call succeeds but the resulting instrumented client is discarded after the function returns.
 
 **How to avoid:**
-- Cron filter must exclude sessions with `transcriptStatus = 'processing'` AND where `mediaconvertJobId` is set — only retry sessions where `transcriptStatus` is null, `'pending'`, or `'failed'`
-- Use a longer threshold: 45+ minutes before marking stuck (MediaConvert jobs for long recordings can take 20-30 minutes)
-- Add a DynamoDB conditional write to set a `cronRecoveryAt` timestamp before re-firing, preventing the same session from being recovered twice within a cooldown window
-- For truly stuck sessions (processing for >2 hours), set `transcriptStatus = 'failed'` rather than retrying indefinitely
+Move all AWS SDK client construction to module scope, the same level as the existing `Logger` instance. Apply `tracer.captureAWSv3Client()` at that scope:
+
+```typescript
+// Module scope — correct
+const logger = new Logger({ serviceName: 'vnl-pipeline', ... });
+const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
+const s3 = tracer.captureAWSv3Client(new S3Client({}));
+const eventBridge = tracer.captureAWSv3Client(new EventBridgeClient({}));
+```
+
+The `MediaConvertClient` in `recording-ended.ts` requires `{ region: awsRegion }` from an env var. Since `AWS_REGION` is always set in Lambda, `new MediaConvertClient({ region: process.env.AWS_REGION! })` is safe at module scope.
 
 **Warning signs:**
-- Multiple MediaConvert jobs with the same `sessionId` prefix in the AWS console
-- `transcript.json` S3 object `Last-Modified` timestamp is newer than the MediaConvert job completion time
-- CloudWatch shows two `start-transcribe` Lambda invocations within minutes for the same sessionId
+- X-Ray trace map shows Lambda node but no downstream service nodes
+- `captureAWSv3Client` call inside `processEvent` returns an instrumented client but produces no subsegments in X-Ray
 
-**Phase to address:**
-Phase adding the stuck session cron (v1.5 Phase 2) — the filter expression for "stuck" must be defined precisely before implementation, not assumed
+**Phase to address:** X-Ray tracing phase
 
 ---
 
-### Pitfall 3: Cron DynamoDB Scan Reads Every Item in the Table (Cost + Throttle)
+### Pitfall 3: Applying `@tracer.captureLambdaHandler()` to the SQS Outer Handler Creates One Trace Per Batch
 
 **What goes wrong:**
-The stuck session cron calls `ScanCommand` on the single-table DynamoDB table to find sessions where `status = 'ended'` AND `transcriptStatus` is not `'available'`. The table contains sessions, pool resources, chat messages, reactions, and processing events — all sharing one table. A full scan reads ALL of them. At current scale (small) this is cheap. As the table grows (each session generates 10-50 chat message items, multiple reaction items, multiple processing event items), a scan that runs every 5 minutes costs increasingly more and consumes read capacity units that could throttle other operations.
+Using the `@tracer.captureLambdaHandler()` decorator on the exported `handler` function creates a single root segment for the entire SQS batch. With `batchSize:1`, this is harmless in practice, but if batchSize is ever increased or if the decorator is applied to a handler processing multiple records, all per-record spans appear as subsegments of a single trace — making it impossible to isolate a single failing message in the X-Ray console. The trace for "batch processed 3 records, 1 failed" looks like one unit of work rather than three separable operations.
 
 **Why it happens:**
-- The existing `recording-ended.ts` handler already does a full table scan to find sessions by channel ARN (line ~74). This is a known anti-pattern already in the codebase — the cron is tempted to follow the same pattern
-- The single-table design has no GSI optimized for "sessions by transcript status"
-- DynamoDB Filter expressions do NOT reduce RCU consumption — you pay to read every item, then filter client-side
+The decorator pattern is the idiomatic Powertools approach for non-SQS handlers. It is natural to copy it to the SQS handler. The problem is that SQS batches are parallel work units that benefit from per-message traces.
 
 **How to avoid:**
-- Add a GSI before implementing the cron, keyed on pipeline status. Example: `GSI_PIPELINE_PK = PIPELINE#${transcriptStatus}`, `GSI_PIPELINE_SK = ${endedAt}` — allows efficient query for all sessions with a given transcript status
-- Alternatively: maintain a separate DynamoDB item as a "pipeline queue" (PK: `PIPELINE_QUEUE`, SK: `${sessionId}`) that is written when a session ends and deleted when pipeline completes — cron queries this small set only
-- If adding a GSI is deferred: limit scan with `FilterExpression` on `entityType = 'SESSION'` first, scope to PK prefix `SESSION#` using a begins_with condition
+Do not use `@tracer.captureLambdaHandler()` on the outer SQS handler. Instead, open a manual subsegment per record inside the processing loop:
+
+```typescript
+for (const record of event.Records) {
+  const subsegment = tracer.getSegment()?.addNewSubsegment(`record-${record.messageId}`);
+  try {
+    await processEvent(JSON.parse(record.body));
+    subsegment?.close();
+  } catch (err) {
+    subsegment?.addError(err as Error);
+    subsegment?.close();
+    failures.push({ itemIdentifier: record.messageId });
+  }
+}
+```
+
+Given `batchSize:1`, this is cosmetic for now, but establishes the correct pattern if batchSize is ever relaxed.
 
 **Warning signs:**
-- DynamoDB `ConsumedReadCapacityUnits` metric spikes every 5 minutes in CloudWatch
-- Cron Lambda duration climbs over time as table grows
-- `ScanCommand` returns hundreds of non-session items before filtering
+- X-Ray trace map shows single Lambda invocation with all downstream calls bundled under one segment regardless of message count
+- Per-message tracing cannot be filtered in X-Ray console by messageId
 
-**Phase to address:**
-Phase adding the stuck session cron (v1.5 Phase 2) — design the query strategy before writing cron code; do not start with a scan
+**Phase to address:** X-Ray tracing phase
 
 ---
 
-### Pitfall 4: IVS Chat Bounce Does Not Prevent Immediate Reconnection
+### Pitfall 4: Powertools Idempotency Defaults to Full SQS Event as Key — DLQ Redrives Always Re-Execute
 
 **What goes wrong:**
-The broadcaster calls `DisconnectUser` via the IVS Chat Management API. The user is kicked from the WebSocket connection. Within 2-3 seconds, the frontend's `useChatRoom` hook detects the disconnect event (the `disconnect` listener fires with `reason: 'KICKED_BY_MODERATOR'` or similar) and — if the error handling is not explicit — automatically calls `room.connect()` again via a reconnection retry. The kicked user is back in the chat before the broadcaster notices they were removed.
+If `makeIdempotent` is applied without an `eventKeyJmesPath`, the idempotency hash is computed over the entire function argument — which, for the SQS outer handler, includes `receiptHandle`, `attributes.SentTimestamp`, and other SQS-generated fields that change on every delivery, including DLQ redrives. Every retry looks like a unique new event. Idempotency is bypassed entirely for retried or redriven messages.
+
+Conversely, if `makeIdempotent` is applied at the outer `handler` level (wrapping the SQS batch event), and an `eventKeyJmesPath` of `Records[0].messageId` is used, the key is the SQS `messageId` — which is stable for retries of the same delivery but changes when a message is redriven from the DLQ (redriven messages get new `messageId` values).
 
 **Why it happens:**
-- `useChatRoom.ts` has a `disconnect` listener that sets `connectionState = 'disconnected'` and logs the reason — but it does NOT suppress reconnection attempts
-- The `amazon-ivs-chat-messaging` SDK does not implement automatic reconnection itself, but frontend code that wraps the SDK in a useEffect might re-invoke `room.connect()` if `connectionState === 'disconnected'`
-- More critically: `DisconnectUser` does not invalidate the existing chat token. The frontend still holds a valid token. Calling `tokenProvider()` again returns a new valid token (since `create-chat-token.ts` has no ban check), and the user reconnects with full permissions
+The interaction between SQS wrapper metadata and the underlying EventBridge event body is not intuitive. Developers reach for `messageId` as the idempotency key because it is guaranteed unique by SQS — but DLQ redrives invalidate that assumption.
 
 **How to avoid:**
-- Backend: `create-chat-token.ts` must check a moderation blocklist (DynamoDB) before issuing tokens. If `userId` is on the blocklist for `sessionId`, return `403 Forbidden`. This is the only reliable reconnection barrier
-- Backend: Store bounced users in DynamoDB: `PK: MODERATION#${sessionId}`, `SK: BAN#${userId}`, with a TTL for temporary bans or no TTL for session-duration bans
-- Frontend: On receiving a disconnect event with reason `KICKED_BY_MODERATOR`, set a `wasBounced` state flag and display a "You have been removed from this session" message — do NOT attempt reconnection
-- The `DisconnectUser` API call alone is a display action only (removes user from current viewers' perspective) — the token block is what prevents re-entry
+Apply idempotency at the `processEvent` level (not the outer `handler` level), keyed on a stable business identifier extracted from the EventBridge event detail:
+
+```typescript
+// In transcode-completed.ts
+const config = new IdempotencyConfig({
+  eventKeyJmesPath: 'detail.jobId',  // MediaConvert job ID — stable across redrives
+});
+const idempotentProcessEvent = makeIdempotent(processEvent, { persistenceStore, config });
+```
+
+For handlers keyed on sessionId:
+```typescript
+const config = new IdempotencyConfig({
+  eventKeyJmesPath: 'detail.sessionId',
+});
+```
+
+Note: `transcode-completed.ts` already has a manual `ConflictException` catch for Transcribe idempotency. Keep that catch alongside Powertools idempotency — it is the fallback if the idempotency record has been cleared.
 
 **Warning signs:**
-- User reappears in chat within seconds of being kicked
-- `useChatRoom.ts` disconnect handler does not branch on disconnect reason
-- `create-chat-token.ts` has no moderation check before calling `CreateChatToken`
+- Idempotency DynamoDB table has zero entries despite multiple pipeline runs (key is changing on every invocation)
+- DLQ redrive causes duplicate Transcribe jobs, duplicate MediaConvert jobs, or duplicate Bedrock invocations
+- `ConflictException` from Transcribe API fires on redrives despite idempotency utility being in place
 
-**Phase to address:**
-Phase adding broadcaster bounce controls (v1.5 Phase 3) — implement the DynamoDB moderation store and token check before wiring the disconnect API call; the API call alone is insufficient
+**Phase to address:** Idempotency gap coverage phase
 
 ---
 
-### Pitfall 5: Transcribe Diarization Stores Oversized JSON in DynamoDB (400KB Limit)
+### Pitfall 5: Idempotency DynamoDB Table Missing TTL — Table Grows Without Bound
 
 **What goes wrong:**
-When `ShowSpeakerLabels: true` is added to the Transcribe job config, the JSON output grows substantially. A 1-hour session with active multi-speaker conversation produces a transcript JSON with the full `speaker_labels` section: per-utterance speaker assignments, each with `start_time`, `end_time`, `speaker_label`, and nested `items` arrays. A 60-minute 4-speaker session can produce 150KB–400KB of JSON. The existing `transcribe-completed.ts` handler reads the full JSON from S3, parses it, extracts `results.transcripts[0].transcript`, and stores the plain text directly on the session DynamoDB item (`transcript` field). If the plain text is large, or if the handler is changed to store the full diarized JSON on the session item, it will hit the 400KB DynamoDB item limit.
+Powertools writes an `expiration` Unix timestamp on every idempotency record but does not delete expired records itself. DynamoDB only removes expired items if `timeToLiveAttribute` is configured on the table. Without TTL, every session that passes through the pipeline leaves a permanent idempotency record. At ~5 pipeline stages per session, the table accumulates 5N records for N sessions, growing indefinitely. Old records prevent forced reprocessing of sessions after the idempotency window should have expired.
 
 **Why it happens:**
-- The current handler extracts plain text only (line ~76-77: `transcribeOutput.results.transcripts[0].transcript`) — this is safe for text-only transcripts
-- When adding diarization, there is pressure to also store the speaker-attributed segment array on the session item for frontend display
-- Each diarized segment looks like: `{ speakerLabel: 'spk_0', startTime: 1.2, endTime: 4.5, text: '...' }` — a 60-minute session at 1 segment/3 seconds = 1200 segments × ~80 bytes each = ~96KB just for segments
-- If stored inline on the `SESSION#${sessionId} | METADATA` item alongside all other session fields (aiSummary, transcript, streamMetrics, etc.), the combined item size can exceed 400KB
+CDK table creation and DynamoDB TTL configuration are a two-step process. The CDK `Table` construct has a `timeToLiveAttribute` property but it is optional and not mentioned in the Powertools quickstart CDK snippet. The default Powertools `DynamoDBPersistenceLayer` uses the attribute name `expiration` — if the table TTL attribute is named anything else (e.g., `ttl`, `expires`), TTL deletion silently stops working.
 
 **How to avoid:**
-- Store diarized segments in S3 only — keep the existing `transcriptS3Path` pointer on the session item and add a `diarizedTranscriptS3Path` field pointing to the full diarized JSON
-- Store a speaker attribution summary on the session item only: `speakerMap: { spk_0: 'alice', spk_1: 'bob' }` (small, bounded)
-- Never store per-segment arrays directly on a DynamoDB session item — always reference via S3 URI
-- The `TranscriptDisplay` frontend component already fetches from S3 via the `GET /sessions/{id}/transcript` endpoint — extend this endpoint to serve diarized data from S3, not DynamoDB
+In CDK, when creating the idempotency table, the attribute name must exactly match Powertools' default:
+
+```typescript
+const idempotencyTable = new dynamodb.Table(this, 'IdempotencyTable', {
+  partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+  timeToLiveAttribute: 'expiration',  // Must match Powertools default exactly
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.DESTROY,
+});
+```
+
+Set `expiresAfterSeconds` in `DynamoDBPersistenceLayer` to 86400 (24 hours) — long enough to cover DLQ retry windows (3 retries × 5-minute visibility timeout = 15 minutes maximum) while allowing reprocessing the next day.
 
 **Warning signs:**
-- DynamoDB `UpdateCommand` returns `ValidationException: Item size has exceeded the maximum allowed size`
-- Transcribe completion handler sets `transcriptStatus = 'failed'` silently after a large recording
-- `get-transcript.ts` returns truncated or partial transcript for long sessions
+- Idempotency table item count grows proportionally to session count with no apparent cleanup
+- DynamoDB "Time to live" column in the table console shows no TTL attribute configured
+- Old sessions from weeks ago still appear in the idempotency table
 
-**Phase to address:**
-Phase adding speaker diarization (v1.5 Phase 4) — establish the S3 storage contract for diarized data before any code is written; never put segment arrays in DynamoDB
+**Phase to address:** Idempotency gap coverage phase
 
 ---
 
-### Pitfall 6: Speaker Labels Cannot Be Reliably Mapped to Usernames Without Enrollment Data
+### Pitfall 6: Lambda Context Not Registered — INPROGRESS Records Block Retries After Timeout
 
 **What goes wrong:**
-Amazon Transcribe assigns labels `spk_0`, `spk_1`, etc. in the order speakers are first detected in the audio. These labels are NOT stable across jobs (a second Transcribe job on the same audio may assign `spk_0` to a different speaker), and they carry no metadata about who was speaking. The goal of "map speaker labels to session usernames" requires external context: you need to know which participant was speaking when, and that information is not in the Transcribe output. For hangout sessions (IVS RealTime, up to 5 participants), there is no audio track-to-participant mapping in the IVS RealTime recording structure. For broadcast sessions, there is only one broadcaster — diarization is straightforward (one labeled speaker = broadcaster). For hangouts, the composite recording does not expose per-participant audio tracks.
+If a Lambda times out while holding an idempotency record in `INPROGRESS` state and `config.registerLambdaContext(context)` was never called, Powertools cannot set `inProgressExpiryTimestamp`. The next retry finds the `INPROGRESS` record, determines it should still be in-progress (no expiry timestamp to check against), and blocks execution entirely — stalling the pipeline until DynamoDB TTL cleans up the record, which takes up to 48 hours after the `expiration` time. The session is stuck with `transcriptStatus = 'processing'` with no recovery path other than manual DynamoDB intervention.
 
 **Why it happens:**
-- IVS RealTime stage recording produces a composite video file that mixes all participant audio into a single audio track — there are no separate audio channels per participant
-- Transcribe receives the composite audio and assigns speaker labels purely based on voice acoustics — it has no knowledge of who each voice belongs to
-- The assumption "Transcribe will tell me speaker 0 is Alice and speaker 1 is Bob" is incorrect — Transcribe produces `spk_0` and `spk_1` only; the mapping to names requires voice enrollment (Amazon Transcribe has no enrollment feature) or manual labeling
+The existing handler signature is `async (event: SQSEvent): Promise<SQSBatchResponse>` — the Lambda `context` argument is present but not currently used by any handler. When applying `makeIdempotent`, developers copy the config setup from documentation but omit the `registerLambdaContext` call because nothing in the existing code uses `context`.
 
 **How to avoid:**
-- Scope diarization to: "show turn-by-turn transcript with consistent speaker labels" — NOT "show Alice: / Bob:" headers
-- For broadcast sessions: since there is only one voice (the broadcaster), `spk_0 = session.userId` is a valid assumption — but only if the recording is a single-speaker broadcast
-- For hangout sessions with multiple speakers: display `Speaker 1 / Speaker 2` labels, not usernames — this is honest about what the data actually provides
-- Optionally: if hangout sessions used IVS RealTime with per-participant recording enabled, individual participant recordings exist in S3 and could be transcribed separately. This is a significant architecture change; scope carefully
-- Document the limitation explicitly in the frontend: "Speakers are labeled by voice, not by name"
+Update every handler signature to capture `context`, and call `config.registerLambdaContext(context)` at the start of the processing function (not inside the try/catch). The existing handlers all have `(event: SQSEvent)` — add `, context: Context` from `aws-lambda`.
 
 **Warning signs:**
-- Phase plan includes "map spk_0 to first speaker in participants list" — this is unreliable (order in participants list != order of first utterance in audio)
-- Requirement says "show username next to each transcript segment" without a defined mapping source
+- Pipeline stalls after a Lambda timeout with no downstream processing and no error logs
+- Idempotency table has records stuck in `INPROGRESS` status for more than the Lambda timeout duration
+- CloudWatch DLQ depth alarm fires but re-drive produces no handler invocation logs
 
-**Phase to address:**
-Phase adding speaker diarization (v1.5 Phase 4) — scope the feature to turn-by-turn display with generic labels; explicitly defer username mapping to a future phase requiring per-participant audio tracks
+**Phase to address:** Idempotency gap coverage phase
+
+---
+
+### Pitfall 7: Zod Validation Failures Retry via SQS and Land in DLQ — Wasting 3 Retries on Permanent Failures
+
+**What goes wrong:**
+Zod's `parse()` throws a `ZodError` on validation failure. If the catch block in the SQS outer handler treats `ZodError` identically to transient errors (pushes to `failures` array), SQS retries the malformed message 3 times before routing it to the DLQ. This wastes Lambda invocations and DLQ capacity on events that will never succeed regardless of retry count. The DLQ then fills with structurally invalid messages, obscuring genuinely retryable failures.
+
+**Why it happens:**
+All five pipeline handlers use a uniform catch pattern that pushes any exception to `failures` for SQS retry. There is no current distinction between permanent failures (bad schema) and transient failures (downstream unavailable). Adding Zod without updating the catch pattern propagates the wrong semantics.
+
+**How to avoid:**
+Use `safeParse()` at the handler boundary. On a `ZodError`, acknowledge the message (do NOT push to `failures`) and log the structured error with the raw message body:
+
+```typescript
+const parseResult = RecordingEndedEventSchema.safeParse(ebEvent);
+if (!parseResult.success) {
+  logger.error('Schema validation failed — poisoned event acknowledged without retry', {
+    messageId: record.messageId,
+    issues: parseResult.error.issues,
+    // log body only at DEBUG level to avoid CloudWatch Logs exposure of full payload
+  });
+  // No push to failures — SQS will ACK and delete the message
+  continue;
+}
+```
+
+Alert on this path via a CloudWatch metric filter on `"poisoned event acknowledged"` log string, not via DLQ depth.
+
+**Warning signs:**
+- DLQ fills with messages that all share the same malformed structure (same missing field across many messages)
+- CloudWatch shows 3 Lambda invocations per `messageId` before DLQ routing for schema errors
+- Same `messageId` appears 3 times in CloudWatch logs before disappearing from the source queue
+
+**Phase to address:** Schema validation phase
+
+---
+
+### Pitfall 8: start-transcribe Handler Swallows Transient Errors — Messages Silently Lost
+
+**What goes wrong:**
+The current `start-transcribe.ts` `processEvent` function catches all errors internally and logs them but does not re-throw. The outer SQS handler loop therefore never receives an exception, never adds the `messageId` to `failures`, and SQS acknowledges and deletes the message as successfully processed. A transient `ThrottlingException` from the Transcribe API — which would be completely recoverable with a retry — permanently loses the message. The session is stuck at `transcriptStatus = 'processing'` with no recovery path other than `scan-stuck-sessions`.
+
+This is confirmed by inspecting the handler (line 87-90 in `start-transcribe.ts`):
+
+```typescript
+} catch (error) {
+  // Log error but don't throw - non-blocking pattern
+  logger.error('Pipeline stage failed', { ... });
+}
+```
+
+**Why it happens:**
+`start-transcribe` was originally a fire-and-forget EventBridge direct-trigger target. The "non-blocking" comment reflects that design. It was wrapped in an SQS handler in v1.6 without updating the error-handling semantics — the same v1.6 hardening that was applied to `recording-ended`, `transcode-completed`, and `on-mediaconvert-complete` was not applied to `start-transcribe`.
+
+**How to avoid:**
+In the schema validation phase (natural time to audit all handler error paths), update `start-transcribe.ts` to re-throw on transient Transcribe API errors. Permanent failures (missing `sessionId`, missing `recordingHlsUrl`) should remain non-throwing (acknowledge and log). This matches the error-handling pattern in all other four handlers.
+
+**Warning signs:**
+- Sessions stuck at `transcriptStatus = 'processing'` with no `start-transcribe` error logs after Transcribe API throttling
+- CloudWatch `start-transcribe` invocation count matches SQS message count, DLQ is empty, but sessions never complete transcription
+- `scan-stuck-sessions` continuously recovers the same session (because the root cause — swallowed Transcribe error — is not fixed)
+
+**Phase to address:** Schema validation phase (error-path audit pass)
+
+---
+
+### Pitfall 9: DLQ Re-drive Idempotency Window Conflict — Forced Reprocessing Does Nothing
+
+**What goes wrong:**
+A message is redriven from the DLQ for intentional forced reprocessing (e.g., after a bug fix deployment). If the original processing completed successfully and the idempotency record is still within its `expiresAfterSeconds` window, Powertools returns the cached result and skips all business logic. The re-drive appears to succeed (no error) but no downstream work is done. The developer is left debugging why the pipeline did not re-execute.
+
+**Why it happens:**
+DLQ redrives after bug fixes are intentional re-executions, not retries of failures. The idempotency window is designed to prevent duplicate execution during failure recovery — not to block intentional forced reprocessing. The two use cases are in conflict and the resolution requires a manual step.
+
+**How to avoid:**
+Document the re-drive playbook explicitly:
+1. For routine DLQ redrives after transient failures: idempotency behaves correctly — skips if already processed.
+2. For forced reprocessing after a bug fix: manually delete the idempotency DynamoDB record for the affected `sessionId` before re-driving. The idempotency table partition key format is `functionName#hash` — the hash is derived from the `eventKeyJmesPath` value. A helper CLI script that accepts `sessionId` and deletes all idempotency records matching it should be part of the re-drive tooling.
+
+The existing `transcode-completed.ts` `ConflictException` catch should be preserved as a backstop — if the idempotency record is cleared but the Transcribe job already exists, the `ConflictException` path handles it gracefully.
+
+**Warning signs:**
+- Re-drive from DLQ produces no CloudWatch logs for the handler's processing logic
+- Re-drive appears to succeed (SQS message deleted) but session state is unchanged
+- Support tickets: "I re-drove the DLQ but nothing happened for session X"
+
+**Phase to address:** DLQ re-drive tooling phase (playbook must include forced-reprocessing path) and idempotency gap phase (CLI helper for record deletion)
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: HLS.js Quality Level Switch Causes Buffering Stall on Mobile Safari
+### Pitfall 10: Zod Added at Module Scope With Large Union Schemas Increases Cold Start Duration
 
 **What goes wrong:**
-Adding a manual resolution selector (quality level picker) to the upload video player creates a known HLS.js failure mode on Safari (desktop and iOS): when `hls.currentLevel` is set manually to a higher quality, Safari's Media Source Extensions implementation sometimes stalls the SourceBuffer append operation during the quality transition. The player freezes for 2-10 seconds. On iOS 18, this is exacerbated by a `bufferStalledError` bug. Users see a spinner; they assume the video is broken.
+Defining a large shared `PipelineEventSchema` at module scope (e.g., a `z.discriminatedUnion()` covering all five pipeline event variants) registers the schema in every Lambda's initialization path, including handlers that only process one event type. For memory-constrained Lambdas (128MB default), large schema initialization can add 50-200ms to cold start duration.
 
 **Why it happens:**
-- HLS.js uses `startFragPrefetch` and segment pre-fetching to smooth quality transitions — but Safari has historically had partial MSE support
-- When switching to a higher quality level, HLS.js must decode a fragment at the new bitrate that does not have a PTS overlap with the currently buffered content — in Safari, if the PTS intersection is not found, the buffer enters a stall state
-- The existing `useReplayPlayer.ts` (used by `UploadViewer.tsx`) does not configure any HLS.js quality-switching parameters — default values may be aggressive for Safari
+The natural instinct is to define all pipeline event schemas in a shared `pipeline-events.ts` file and import from it. With esbuild bundling, the entire imported module is included in each Lambda's bundle regardless of what's actually used — tree-shaking does not work reliably with Zod's class-based schema definitions.
 
 **How to avoid:**
-- Set `hls.config.startLevel = -1` (auto) and `hls.config.capLevelToPlayerSize = true` — never force a specific level on first load
-- For the manual quality picker, use `hls.nextLevel` (sets level at next segment boundary) rather than `hls.currentLevel` (immediate switch) — `nextLevel` is dramatically more stable
-- Add a 500ms debounce on quality selector changes — rapid clicking crashes Safari
-- Detect Safari: `navigator.vendor.includes('Apple')` — for Safari, hide the quality picker and let ABR run automatically
-- Test on real iOS devices (not simulator) — HLS.js bugs in Safari are device-specific and not reproducible in simulators
+Keep each handler's schema co-located in its own handler file, scoped to exactly the event type that handler processes. No shared pipeline-events module. Each file defines one schema of 3-6 fields. Cold start impact per handler stays under 5ms.
 
 **Warning signs:**
-- Quality selector works in Chrome but hangs in Safari
-- Console shows `bufferStalledError` or `No PTS intersection found` immediately after quality switch
-- Video freezes and never recovers without page refresh
+- Lambda init duration increases by 50ms+ after schema module is added (visible in CloudWatch INIT duration)
+- All five pipeline handlers show increased cold start times simultaneously
 
-**Phase to address:**
-Phase building the upload video player (v1.5 Phase 5) — implement quality switching with Safari detection from the first iteration; do not add it as an afterthought
+**Phase to address:** Schema validation phase
 
 ---
 
-### Pitfall 8: CORS on HLS Manifests Blocks Quality Level Fetching on UploadViewer
+### Pitfall 11: X-Ray Sampling Rate Too Low for Low-Volume Pipeline — Zero Traces in Console
 
 **What goes wrong:**
-The upload video player loads a CloudFront-served HLS manifest (`recordingHlsUrl`). The manifest references sub-manifests for each quality level (e.g., `1080p/index.m3u8`, `720p/index.m3u8`) using relative paths. If CloudFront's CORS configuration returns the `Access-Control-Allow-Origin` header only for the manifest request but not for the quality-level sub-manifest or segment requests, HLS.js fails to load segments at levels other than the first. The player appears to work at the lowest quality but the quality picker does nothing.
+X-Ray default sampling is 1 request/second + 5% of additional requests. For a pipeline that processes 10-50 sessions per day (roughly 50-250 handler invocations/day), the default sampling may capture only a fraction of traces. During debugging, the developer triggers a single pipeline run expecting to see it in X-Ray and finds nothing.
 
 **Why it happens:**
-- CloudFront CORS configuration is set on S3 bucket origin policies and CloudFront cache behaviors. The existing setup was tested for the replay player (which loads `master.m3u8` at a single quality). The new upload player needs CloudFront to return CORS headers on ALL paths: `*.m3u8`, `*.ts`, `*.mp4`
-- MediaConvert (used for upload encoding) produces an ABR output group with multiple quality tiers — the CloudFront distribution must have CORS enabled for all `recordings/*` path prefixes, not just the master manifest
+The default sampling rule is designed for high-volume web APIs where 100% tracing would be cost-prohibitive. For a low-volume pipeline, the same rule results in near-zero traces at off-peak times.
 
 **How to avoid:**
-- Verify CloudFront cache behavior for `recordings/*` includes `Access-Control-Allow-Origin: *` (or origin allowlist) on all responses
-- In CDK `session-stack.ts`, the CloudFront distribution should add CORS response headers policy to the recordings origin
-- Test with browser DevTools Network tab: every `.m3u8` and `.ts` request must return `Access-Control-Allow-Origin` header
-- HLS.js `xhrSetup` callback can add headers for debugging but is not a CORS fix — CORS must be configured server-side
+Create a custom X-Ray sampling rule targeting `serviceName = 'vnl-pipeline'` with `fixedRate = 1.0` (100% sampling). At the expected volume of <500 pipeline invocations/day, 100% sampling produces fewer than 500 traces/day — well within the 100,000 free traces/month tier. Add this rule in CDK as an `aws_xray.CfnSamplingRule` resource.
+
+X-Ray pricing: first 100,000 recorded traces/month free; $0.000005 per additional trace. 500 traces/day × 30 days = 15,000 traces/month — entirely within free tier.
 
 **Warning signs:**
-- Chrome DevTools shows `CORS policy: No 'Access-Control-Allow-Origin' header` on `720p/index.m3u8` but not on `master.m3u8`
-- Quality level list shows multiple levels in `hls.levels` array but switching to any non-default level produces an error
-- Only the first quality level works; all others fail silently
+- X-Ray console shows traces for only 1-2 of 10 pipeline runs
+- Traces appear at the start of a test run (the 1/sec rule fires) but subsequent runs produce no traces
 
-**Phase to address:**
-Phase building the upload video player (v1.5 Phase 5) — verify CORS on all manifest paths during CDK stack update, not as a follow-up fix
+**Phase to address:** X-Ray tracing phase
 
 ---
 
-### Pitfall 9: Async Comments Timestamp Drift Relative to Playback Position
+### Pitfall 12: UI Transcript Panel Shows Blank Instead of Status-Appropriate State
 
 **What goes wrong:**
-Async comments (timestamped to a video position) are stored with `videoPositionMs` recorded at submission time using `player.currentTime * 1000`. When the comment is displayed during playback, the frontend must highlight or scroll-to comments within a ±500ms window of the current playback position. If the player's `currentTime` drifts (e.g., seek, buffering recovery, quality switch), the comment appears to be out of sync. This manifests as comments appearing a few seconds before or after the relevant moment, or comments never appearing because the playback position never exactly matches the window.
+When `transcriptStatus = 'processing'` or `transcriptStatus = 'failed'`, the transcript panel renders blank (no content, no loading indicator, no error message). Users cannot distinguish between "transcript not started yet," "transcript is being processed," and "transcript failed." Users who see a blank panel assume the feature is broken.
 
 **Why it happens:**
-- `player.currentTime` on an HLS.js player during a quality switch may jump forward (when the buffer is consumed during the switch and ABR recalculates the position)
-- The existing `useReplayPlayer.ts` uses `player.getPosition() * 1000` for reaction sync — this is the correct pattern. Comments that use `videoElement.currentTime` directly (without the IVS player abstraction) will drift on quality switches
-- Seek operations compound the issue: a comment stored at 2:34.500 should appear whether the user seeks to 2:34.000 or 2:34.800 — the display window must be wide enough
+The transcript panel was built to display transcript content. The `transcriptStatus` field exists on the session record but the UI rendering logic may not branch on all possible values — particularly `failed`. The panel may also not distinguish between `transcriptStatus = undefined` (pre-pipeline) and `transcriptStatus = 'failed'` (pipeline ran but failed).
 
 **How to avoid:**
-- Use a display window of ±1500ms (not ±500ms) for comment highlighting — provides tolerant matching across seek and buffer events
-- Store `videoPositionMs` in seconds (float), not milliseconds — reduces precision mismatch on truncation
-- For comment display: use a polling approach (poll every 250ms, show comments within ±1.5s of current position) rather than event-driven (subscribe to exact timecodes)
-- When user seeks: clear the currently-displayed comment immediately and allow the polling to re-match after seek settles (add a 500ms debounce after seek events)
+Implement explicit rendering branches for each `transcriptStatus` value:
+- `undefined` / `null`: "Transcript not available for this session"
+- `'processing'`: "Transcript being generated..." with elapsed-time indicator
+- `'available'`: render transcript content
+- `'failed'`: "Transcript generation failed" with option to report the issue
+
+Test each branch manually before marking the UI polish phase complete.
 
 **Warning signs:**
-- Comments are visible in the list but don't highlight during playback
-- Comments appear consistently N seconds late or early (suggests a unit mismatch — ms vs seconds)
-- Comments never appear after a quality switch
+- Blank transcript panel with no loading or error indicator for sessions in non-`available` states
+- `transcriptStatus = 'failed'` sessions show the same blank panel as `transcriptStatus = 'processing'`
 
-**Phase to address:**
-Phase adding async comments (v1.5 Phase 6) — define the timestamp storage format and display window tolerance before implementing the frontend polling hook
+**Phase to address:** UI polish phase
 
 ---
 
-### Pitfall 10: EventBridge Pipeline Audit Logging Adds Per-Event DynamoDB Writes That Inflate Costs
+### Pitfall 13: Activity Feed Stale After Pipeline Completion — No State Refresh Trigger
 
 **What goes wrong:**
-The `ProcessingEvent` domain model is already defined in `session.ts` (lines 122-171) with a full entity structure including `eventId`, `eventType`, `eventStatus`, `timestamp`, `details`. If the audit logging phase writes a `ProcessingEvent` item to DynamoDB for EVERY pipeline stage (MediaConvert submitted, MediaConvert complete, Transcribe submitted, Transcribe complete, AI started, AI complete), that is 6 DynamoDB writes per session, per pipeline run. At scale with the stuck session cron retrying sessions, these writes multiply. More importantly, these items accumulate in the table permanently (no TTL) and inflate the table size, increasing scan costs for all operations that scan the table.
+A user navigates to the activity feed while a session's pipeline is running. The session card shows "Processing" status. The pipeline completes (transcript available, AI summary ready). The user refreshes manually and sees the updated state. But if the user stays on the page without refreshing, the card shows stale state indefinitely. For AI summaries (which can take 2-5 minutes after recording ends), this creates a confusing experience where the summary appears to be missing.
 
 **Why it happens:**
-- `ProcessingEvent` items have `PK: SESSION#${sessionId}` and `SK: EVENT#${timestamp}#${eventId}` — they are session-scoped and never deleted
-- The cron scan reads ALL items under `SESSION#*` prefix — processing event items are returned alongside session metadata items, increasing scan cost without benefit
-- The `recording-ended.ts` handler already writes `transcriptStatus = 'processing'` to the session metadata item — a separate `ProcessingEvent` item is additive cost for the same information
+The frontend fetches session state once on page load with no background refresh for sessions in non-terminal states. The pipeline completion events fire in the backend but there is no push mechanism to the frontend.
 
 **How to avoid:**
-- Add `TTL` attribute to `ProcessingEvent` items: set to `now + 30 days` — keeps the audit trail available for debugging but cleans up automatically
-- Scope audit events to CloudWatch Logs (structured `console.log`) for real-time debugging, and to DynamoDB only for replay/support investigation
-- The cron scan filter should explicitly exclude `entityType = 'PROCESSING_EVENT'` items — add `entityType = :session` to the FilterExpression so scan does not return event items
-- Alternatively: store audit events in a separate DynamoDB table with its own TTL — keeps the session table clean
+For sessions where `transcriptStatus` is `'processing'` or `aiSummaryStatus` is `'processing'`, implement polling with exponential backoff: check every 15s, then 30s, then 60s (cap at 60s). Stop polling when the status reaches a terminal value (`available` or `failed`). The total polling window for a typical session should be under 10 minutes.
+
+Do not implement WebSocket or SSE push for this — polling is sufficient given the processing time of 2-5 minutes and the low frequency of checks.
 
 **Warning signs:**
-- DynamoDB table item count grows much faster than session count (10-15x)
-- Cron scan duration increases over weeks even with no growth in active sessions
-- CloudWatch cost report shows unexpected DynamoDB read charges
+- Activity feed session cards show "Processing" permanently without refreshing the page
+- AI summaries appear only after manual page reload
 
-**Phase to address:**
-Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL policy for `ProcessingEvent` items before writing the first one
+**Phase to address:** UI polish phase
 
 ---
 
@@ -286,11 +368,12 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Full table DynamoDB scan in cron handler | No GSI change needed | Unbounded cost growth as table grows | Never — add GSI or queue pattern before shipping cron |
-| Store plain-text `transcript` directly on session item | Simple, no extra S3 fetch | 400KB item limit hit on long recordings with diarization | Only for short sessions (<30 min); add S3-only path for diarized output |
-| `DisconnectUser` without token blocklist | Kick is instant and visible | User reconnects in seconds | Never — token blocklist is required for bounce to be meaningful |
-| Use `hls.currentLevel` (immediate) instead of `hls.nextLevel` (graceful) | Simpler API | Buffering stall on Safari | Never for production quality switcher |
-| Logging to CloudWatch only (no DynamoDB) for pipeline events | No DynamoDB cost | No audit trail for manual recovery investigation | Acceptable for phase 1 if DynamoDB audit added later |
+| Skipping `captureAWSv3Client` for S3 and DynamoDB calls inside `processEvent` | Faster implementation | Blind spots in X-Ray traces; cannot see downstream read/write latency | Never for the 5 pipeline-critical handlers |
+| Using `z.any()` for unverified EventBridge detail fields | Avoids schema definition work | Defeats schema validation; poisoned events pass through silently | Never in pipeline handlers |
+| Sharing one idempotency DynamoDB table across all 5 handlers | One table instead of five | Partition key collisions theoretically possible if two handlers use the same sessionId-based key (recovery events could trigger this); monitoring harder | Acceptable for v1.7 at current volume |
+| Applying X-Ray to 3 of 5 handlers to save phase time | Faster shipping | Incomplete trace maps; gaps appear exactly at failure hotspots | Never — all 5 handlers or none |
+| Manual DLQ re-drive via AWS console | No build time | Console viewing counts against `maxReceiveCount` on source queue, can accidentally move messages to DLQ prematurely | Never for production re-drives |
+| Polling transcript status from frontend on every page load | Simple to implement | Unnecessary API calls for terminal sessions (already `available` or `failed`) | Acceptable if terminal states skip polling after first fetch |
 
 ---
 
@@ -298,14 +381,14 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| IVS Chat `DisconnectUser` | Calling it without backing token blocklist | Block token issuance in `create-chat-token.ts` first; disconnect is cosmetic only |
-| Amazon Transcribe diarization | Setting `MaxSpeakerLabels` to actual participant count | Set to the MAXIMUM possible count (e.g., 5 for hangouts) to avoid misattribution when count is under-specified |
-| Amazon Transcribe diarization | Mapping `spk_0` to first participant in roster | Impossible without per-participant audio tracks; only safe for single-speaker broadcasts |
-| HLS.js quality switching | Calling `hls.currentLevel = N` directly | Use `hls.nextLevel = N` (switches at next segment) or `hls.loadLevel = N` for preloading |
-| HLS.js on Safari | Assuming DevTools CORS errors are a code bug | CORS must be configured on CloudFront; HLS.js cannot work around missing CORS headers |
-| EventBridge `PutEvents` | Publishing without `EventBusName` field | Without `EventBusName`, events go to the default bus; custom rules on custom bus never trigger |
-| DynamoDB cron scan | Using `FilterExpression` to reduce cost | Filter expressions reduce ITEMS returned but NOT RCU consumed — full table is still read |
-| CloudWatch structured logging | Calling `CloudWatchLogsClient.PutLogEvents` from inside Lambda | Prefer `console.log(JSON.stringify(...))` — Lambda runtime handles delivery without SDK calls or log group pre-creation |
+| Powertools Tracer + Logger | Assuming Logger automatically includes X-Ray trace ID in log entries | Trace IDs are NOT automatically injected into Logger output; use `tracer.getRootXrayTraceId()` and add to persistent keys manually if log-to-trace correlation is needed |
+| Powertools Tracer + SQS batch handler | Applying `@tracer.captureLambdaHandler()` decorator to the outer SQS handler | Creates one root segment per batch; use manual subsegments per record inside the processing loop |
+| Zod + esbuild bundler | Importing a shared pipeline-events schema module that contains all 5 event schemas | esbuild bundles the entire module regardless of what is imported; keep schemas per-file to minimize bundle size |
+| Idempotency + SQS `batchSize:1` | Applying `makeIdempotent` to the outer `handler` function keyed on `Records[0].messageId` | `messageId` changes on DLQ redrive; key on EventBridge `detail` fields at the `processEvent` level |
+| SQS DLQ redrive + idempotency | Expecting forced reprocessing after a bug fix to work automatically | If the idempotency record is within its TTL window, re-drive returns cached result; must delete the record manually first |
+| X-Ray + Lambda at low invocation volume | Default 1 req/sec + 5% sampling rule misses all pipeline runs at <50/day | Create a custom X-Ray sampling rule at 100% for `serviceName = 'vnl-pipeline'` |
+| DLQ re-drive CLI + IAM | Missing `sqs:StartMessageMoveTask`, `sqs:GetQueueAttributes`, or `sqs:ReceiveMessage` on DLQ | All three permissions required; test with IAM policy simulator before shipping the CLI |
+| SQS DLQ re-drive + messages sent directly to DLQ | `CouldNotDetermineMessageSource` error when re-driving messages added directly to DLQ (not via SQS redrive policy) | Recovery events from `scan-stuck-sessions` go directly to EventBridge, not SQS — these messages never appear in the DLQ and cannot be re-driven via SQS tooling |
 
 ---
 
@@ -313,10 +396,10 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Cron scanning full DynamoDB table every 5 min | DynamoDB read costs spike; cron duration grows weekly | Add GSI keyed on pipeline status before shipping cron | 10K+ session items (~100K total items including messages/reactions) |
-| Comment fan-out query (all comments for a video, every 250ms) | API rate limit hit; DynamoDB reads spike during playback | Fetch all comments once on load; filter by position client-side | More than 500 comments on a single video |
-| Full diarized JSON stored inline on session item | DynamoDB write failures on recordings >30 min | Store in S3; store only S3 URI on session item | Session with 60-min multi-speaker content |
-| HLS.js downloading all quality levels in parallel (preloading) | High CloudFront egress cost on upload player | Set `hls.config.maxMaxBufferLength` and `hls.config.maxBufferLength` appropriately | Videos longer than 60 min with many quality levels |
+| AWS SDK clients constructed inside `processEvent` (current in 4 of 5 handlers) | Cold start pays client initialization cost on every invocation; Tracer cannot capture calls | Move all clients to module scope alongside Logger and Tracer | Already present at current volume; worsens with Tracer instrumentation overhead |
+| X-Ray `captureHTTPsRequests: true` (default) with Bedrock calls in `store-summary` | HTTPS request tracing adds ~5ms per invocation; Bedrock response body may exceed 64KB X-Ray segment limit causing truncation | Set `captureHTTPsRequests: false` for `store-summary` or disable per-method | Any Bedrock call with transcript input >60KB |
+| Idempotency DynamoDB reads on every invocation without local cache | 2 DDB reads + 2 DDB writes per unique invocation across all 5 handlers × N sessions/day | Enable `useLocalCache: true` in `IdempotencyConfig`; effective for same-execution-environment warm retries | Not a concern at current volume; worth enabling from the start for cleanliness |
+| Zod schema parsing full SQS envelope (not just `record.body`) | Minor overhead; more importantly, SQS envelope fields vary between test and production | Parse only the JSON-parsed `record.body` content; never validate the SQS wrapper structure | Not a performance concern but a correctness concern |
 
 ---
 
@@ -324,10 +407,9 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Chat bounce without token blocklist | Kicked user reconnects immediately; moderation is cosmetic | Block token issuance per sessionId+userId in `create-chat-token.ts` |
-| Moderation log without userId validation | Broadcaster can log moderation actions against arbitrary userIds not in the session | Validate `targetUserId` is an actual session participant before writing moderation record |
-| S3 path for diarized transcript constructed from user input | Path traversal if sessionId contains `../` | Existing `recording-ended.ts` already validates against path traversal — apply same validation pattern |
-| Cron Lambda with DynamoDB read-all permissions | Over-privileged; can read all session data including private session metadata | Scope IAM permissions to specific GSI or table prefix |
+| DLQ re-drive CLI tool using broad pipeline Lambda execution role credentials | Stolen credential can replay any pipeline event, triggering duplicate MediaConvert jobs and Bedrock calls | Scope the re-drive IAM role to `sqs:StartMessageMoveTask` + `sqs:ReceiveMessage` on specific DLQ ARNs only; do not reuse Lambda execution role |
+| X-Ray traces capturing full event detail including `recording_s3_key_prefix` and `sessionId` | S3 path structure exposed in X-Ray console — same account so low severity, but violates least-exposure principle | Set `captureResponse: false` on handlers that process session data; add sessionId and status as explicit annotations only |
+| Zod error messages logged at ERROR level with full `record.body` | CloudWatch Logs may expose raw EventBridge event payload at ERROR level to anyone with log read access | Log only `parseResult.error.issues` at ERROR; log `record.body` only at DEBUG level (which is typically not retained long-term) |
 
 ---
 
@@ -335,23 +417,27 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Quality picker visible on Safari but broken | User selects 1080p, video freezes, user thinks platform is broken | Detect Safari and hide manual quality picker; show "Auto" only |
-| Transcript shows `spk_0` / `spk_1` without explanation | Users don't understand why their name isn't shown | Label as "Speaker 1 / Speaker 2" with tooltip: "Speaker names are identified by voice pattern" |
-| Bounce shows no feedback to broadcaster | Broadcaster doesn't know if kick worked | Show toast: "User removed from chat" after `DisconnectUser` API returns 200 |
-| Async comments not visible during buffering | User posts a comment, buffering occurs, timestamp offset by buffer duration | Show comment in list immediately; timestamp assignment uses player position at submit time, not wall clock |
-| Upload player loads at lowest quality (240p) by default | Video looks blurry on first load, user adjusts manually | Set `hls.config.startLevel = -1` (ABR auto) with `capLevelToPlayerSize: true` for sensible default |
+| Transcript panel shows blank for `transcriptStatus = 'failed'` | User cannot distinguish failed transcript from processing transcript; assumes feature is broken | Show explicit "Transcript generation failed" state with distinct styling from loading state |
+| AI summary displayed with no attribution label | Users may mistake AI-generated text for a human description; incorrect summaries damage trust | Add "AI-generated summary" label with a help tooltip |
+| Upload video player has no "processing" state when `transcriptStatus` is not `available` | Transcript panel appears broken; video loads but sidebar is empty | Implement per-panel loading states independent of video player readiness |
+| Activity feed session cards show stale pipeline status indefinitely | User sees "Processing" forever after pipeline has completed; may report a bug | Poll for non-terminal states with exponential backoff; stop polling on terminal state |
+| Live session page "End Session" button does not disable on click | Double-tap triggers two API calls; second call fails with confusing error | Disable button immediately on first click; re-enable only on explicit API error |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **EventBridge audit logging:** Lambda logs appear in CloudWatch — verify the log group was pre-created in CDK, not auto-created on first invocation
-- [ ] **Cron recovery:** Cron fires and re-submits stuck sessions — verify it excludes sessions with `transcriptStatus = 'processing'` AND `mediaconvertJobId` set
-- [ ] **IVS Chat bounce:** `DisconnectUser` API call returns 200 — verify `create-chat-token.ts` blocks token issuance for bounced users before confirming bounce is "done"
-- [ ] **Speaker diarization:** Transcribe job completes and `speaker_labels` section exists in JSON — verify pipeline stores diarized data in S3 only and does NOT inline segment arrays in DynamoDB
-- [ ] **Quality switching:** Resolution picker changes quality in Chrome — verify Safari is handled separately and does not stall
-- [ ] **Async comments:** Comments appear in list view — verify they highlight correctly at the right playback position including after a seek operation
-- [ ] **Moderation log:** Reports and bounces write to DynamoDB — verify `TTL` attribute is set or the table has a TTL cleanup policy to prevent unbounded growth
+- [ ] **X-Ray tracing:** `tracing: lambda.Tracing.ACTIVE` set on **every** instrumented Lambda in `session-stack.ts` — verify in Lambda console "Configuration > Monitoring" tab shows "Active" for each function
+- [ ] **X-Ray tracing:** `tracer.captureAWSv3Client()` called at module scope for every AWS SDK client — verify by triggering a pipeline run and confirming DynamoDB, S3, MediaConvert, Transcribe, Bedrock nodes appear on the X-Ray service map
+- [ ] **X-Ray sampling:** Custom sampling rule created at 100% for `serviceName = 'vnl-pipeline'` — verify a single triggered pipeline run produces a complete trace in the X-Ray console
+- [ ] **Idempotency:** DynamoDB idempotency table has `timeToLiveAttribute: 'expiration'` set — verify in DynamoDB console "Additional settings > Time to Live attribute" shows `expiration`
+- [ ] **Idempotency:** `config.registerLambdaContext(context)` called in every wrapped handler — verify by checking handler signature includes `context: Context` argument
+- [ ] **Idempotency:** `eventKeyJmesPath` set to a stable business identifier (not SQS `messageId`) in every handler — verify by inspecting the DynamoDB idempotency table; partition keys should contain sessionId or jobId values, not SQS messageId values
+- [ ] **Schema validation:** Every handler uses `safeParse()` at the SQS record loop level and does NOT push schema errors to `failures` — verify by sending a malformed test event and confirming the message is acknowledged (not in DLQ) with an ERROR log
+- [ ] **start-transcribe error handling:** `processEvent` throws on transient Transcribe API errors — verify by mocking a `ThrottlingException` and confirming the message appears in the DLQ after 3 retries
+- [ ] **DLQ re-drive tooling:** Re-drive CLI documents the forced-reprocessing path (delete idempotency record + re-drive) — verify the playbook is tested with a real DLQ message
+- [ ] **UI polish — transcript:** All four `transcriptStatus` values (`undefined`, `processing`, `available`, `failed`) render distinct states — verify manually with sessions in each state
+- [ ] **UI polish — activity feed:** Sessions in non-terminal pipeline states refresh automatically without page reload — verify by triggering pipeline completion while on activity feed page
 
 ---
 
@@ -359,11 +445,14 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Audit log group missing; first invocations have no logs | LOW | Create log group manually in AWS console; add explicit CDK resource; re-run affected EventBridge events via SNS or manual Lambda invoke |
-| Cron double-submits MediaConvert jobs | LOW | Identify duplicate jobs in MediaConvert console; cancel the second job; update session `transcriptStatus` manually if second job completed first |
-| Bounced user reconnects (token blocklist missing) | MEDIUM | Add token blocklist check, redeploy `create-chat-token` Lambda; no data recovery needed |
-| Diarized JSON stored in DynamoDB causes item size errors | HIGH | Migration required: move transcript data to S3, update session items with S3 URI, update all read paths; expensive if many sessions affected |
-| Quality switcher stalls Safari; users report broken video | LOW | Deploy Safari detection to hide quality picker; no data recovery needed |
+| Active tracing not enabled in CDK | LOW | Add `tracing: lambda.Tracing.ACTIVE`; `cdk deploy`; traces appear on next invocation |
+| SDK clients in handler scope — no X-Ray capture | LOW | Move clients to module scope; redeploy; verify trace map on next run |
+| Wrong idempotency key — DLQ redrives re-execute or fail to re-execute | MEDIUM | Clear idempotency records for affected sessionIds from DynamoDB; redeploy with correct `eventKeyJmesPath`; re-drive DLQ |
+| Idempotency table missing TTL | LOW | Update CDK with `timeToLiveAttribute: 'expiration'`; `cdk deploy`; DynamoDB begins TTL deletion within 48h of expiry timestamps |
+| Lambda context not registered — stuck INPROGRESS records | MEDIUM | Manually delete stuck `INPROGRESS` idempotency records from DynamoDB; add `registerLambdaContext` call; redeploy |
+| Zod validation errors retrying 3x and landing in DLQ | LOW | Inspect DLQ messages for malformed pattern; fix upstream EventBridge rule or event producer; purge DLQ; switch to `safeParse` in handler |
+| start-transcribe swallows errors — sessions stuck at processing | MEDIUM | Use `scan-stuck-sessions` CLI to recover affected sessions; fix error-handling in `start-transcribe.ts`; redeploy |
+| DLQ re-drive returns cached idempotency result for forced reprocessing | LOW | Delete the specific idempotency DynamoDB record for the sessionId; re-drive the message |
 
 ---
 
@@ -371,48 +460,36 @@ Phase adding EventBridge pipeline audit logging (v1.5 Phase 1) — define TTL po
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| CloudWatch log group auto-creation race | v1.5 Phase 1 (pipeline audit) | CDK resource list includes explicit `LogGroup` before any Lambda references it |
-| Cron double-execution (re-fires processing sessions) | v1.5 Phase 2 (stuck session cron) | Unit test: session with `transcriptStatus = 'processing'` is excluded from cron candidate set |
-| Cron full table scan cost | v1.5 Phase 2 (stuck session cron) | Query plan documented; GSI or queue mechanism used; scan forbidden |
-| IVS Chat bounce without token blocklist | v1.5 Phase 3 (chat moderation) | Integration test: disconnect user → attempt reconnect → token endpoint returns 403 |
-| Diarized JSON exceeds DynamoDB 400KB limit | v1.5 Phase 4 (speaker diarization) | Test with synthesized 60-min multi-speaker transcript; verify S3-only storage path |
-| Speaker label-to-username mapping impossible | v1.5 Phase 4 (speaker diarization) | Feature spec explicitly says "Speaker 1 / Speaker 2" labels only; no username mapping in scope |
-| HLS.js quality switch stalls Safari | v1.5 Phase 5 (upload video player) | Test on real iOS device or Safari; verify `nextLevel` used; Safari detection hides manual picker |
-| CORS on HLS sub-manifests | v1.5 Phase 5 (upload video player) | Network tab shows `Access-Control-Allow-Origin` on all `.m3u8` and `.ts` requests |
-| Async comment timestamp drift | v1.5 Phase 6 (async comments) | Test: seek to 2:00, verify comment at 2:01 appears; seek rapidly, verify no duplicate display |
-| ProcessingEvent items inflate table without TTL | v1.5 Phase 1 (pipeline audit) | DynamoDB TTL enabled on `ProcessingEvent` items; item count checked 7 days after deploy |
+| Active tracing not enabled in CDK | X-Ray tracing phase | Lambda console shows "Active" for each instrumented function |
+| SDK clients in handler scope — Tracer cannot capture | X-Ray tracing phase | X-Ray service map shows downstream nodes (DDB, S3, Bedrock, MediaConvert, Transcribe) |
+| Single trace per SQS batch (decorator misuse) | X-Ray tracing phase | Single-message DLQ re-drive produces its own isolatable trace |
+| Wrong idempotency key for EventBridge-in-SQS events | Idempotency gap phase | DLQ redrive within TTL window returns cached result without re-executing; key is sessionId or jobId in DynamoDB records |
+| Idempotency table missing TTL configuration | Idempotency gap phase | DynamoDB TTL attribute set to `expiration`; table item count stabilizes after first pipeline run |
+| Lambda context not registered for timeout protection | Idempotency gap phase | Lambda timeout test: INPROGRESS record expires and next invocation re-executes |
+| Zod validation errors retrying on SQS | Schema validation phase | Malformed event test: message acknowledged (no DLQ entry) with ERROR log, not retried |
+| Zod cold start overhead from shared schema module | Schema validation phase | Lambda init duration metric unchanged after adding per-file schemas |
+| start-transcribe swallows transient errors | Schema validation phase (error-path audit) | Throttle simulation: message appears in DLQ after 3 retries |
+| DLQ re-drive idempotency window conflict | DLQ re-drive tooling phase + idempotency phase | Forced-reprocessing playbook documented and tested; idempotency record deletion helper in CLI |
+| Transcript UI blank for non-available states | UI polish phase | Manual test: all four `transcriptStatus` values show distinct UI states |
+| Activity feed stale after pipeline completion | UI polish phase | Pipeline completion while on feed: card updates within 60s without manual reload |
 
 ---
 
 ## Sources
 
-**HIGH confidence (codebase analysis):**
-- `/backend/src/handlers/recording-ended.ts` — existing scan pattern, MediaConvert submission, `transcriptStatus = 'processing'` set on job submission
-- `/backend/src/handlers/start-transcribe.ts` — current transcript-only (no diarization) Transcribe job config
-- `/backend/src/handlers/transcribe-completed.ts` — plain text extraction from `results.transcripts[0].transcript`; speaker_labels section not currently parsed
-- `/backend/src/handlers/on-mediaconvert-complete.ts` — EventBridge `PutEvents` without `EventBusName` being the original bug that was hotfixed
-- `/backend/src/domain/session.ts` — `ProcessingEvent` entity defined with all pipeline stages; `transcript` field is a string stored inline
-- `/web/src/features/chat/useChatRoom.ts` — `disconnect` listener does not branch on reason; no bounce detection
-- `MEMORY.md` hotfix history — phase mismatch, stale condition check, missing PassRole, MediaConvert EventBridge matching bug
-
-**HIGH confidence (verified AWS docs):**
-- [IVS Chat DisconnectUser API](https://docs.aws.amazon.com/ivs/latest/ChatAPIReference/API_DisconnectUser.html) — confirmed: disconnect does not invalidate existing token; backend must block token creation to prevent reconnection
-- [Amazon Transcribe diarization output](https://docs.aws.amazon.com/transcribe/latest/dg/diarization.html) — confirmed: labels are `spk_0`/`spk_1`, no username mapping, overlap utterances are serialized by start time
-- [Amazon Transcribe Settings API](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_Settings.html) — confirmed: `MaxSpeakerLabels` range 2-30; accuracy degrades beyond 5 speakers
-- [CloudWatch Logs PutLogEvents](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutLogEvents.html) — confirmed: log group must exist; `logs:CreateLogGroup` required for auto-creation
-- [Lambda log group configuration](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-loggroups.html) — confirmed: auto-creation only for `/aws/lambda/FunctionName` default group
-
-**MEDIUM confidence (HLS.js community):**
-- [HLS.js GitHub: LL-HLS quality switching Safari issue #7165](https://github.com/video-dev/hls.js/issues/7165) — Safari quality switching stall documented
-- [HLS.js GitHub: bufferStalledError iOS 18 #6890](https://github.com/video-dev/hls.js/issues/6890) — iOS 18 specific buffering bug
-- [HLS.js stopLoad/startLoad causes regression to lowest level #5230](https://github.com/video-dev/hls.js/issues/5230) — `currentLevel` immediate switch is problematic
-
-**MEDIUM confidence (AWS patterns):**
-- [Lambda idempotency with DynamoDB conditional writes](https://aws.amazon.com/blogs/compute/handling-lambda-functions-idempotency-with-aws-lambda-powertools/) — at-least-once delivery; cron must be idempotent
-- [Serverless scheduling with EventBridge + DynamoDB](https://aws.amazon.com/blogs/architecture/serverless-scheduling-with-amazon-eventbridge-aws-lambda-and-amazon-dynamodb/) — queue pattern for cron-driven recovery
+- [Tracer - Powertools for AWS Lambda (TypeScript)](https://docs.aws.amazon.com/powertools/typescript/latest/features/tracer/) — module scope requirements, captureAWSv3Client, active tracing prerequisites, facade segment annotation limitations, HTTPS tracing overhead
+- [Implementing idempotent AWS Lambda functions with Powertools for AWS Lambda (TypeScript)](https://aws.amazon.com/blogs/compute/implementing-idempotent-aws-lambda-functions-with-powertools-for-aws-lambda-typescript/) — idempotency patterns, SQS integration, TTL configuration
+- [Idempotency - Powertools for AWS Lambda (TypeScript) 2.1.1](https://docs.aws.amazon.com/powertools/typescript/2.1.1/utilities/idempotency/) — DynamoDB table TTL attribute naming, eventKeyJmesPath, in-progress timeout behavior, registerLambdaContext requirement, response size limits, exception-vs-record-deletion behavior
+- [Troubleshoot Amazon SQS dead-letter queue and DLQ redrive issues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/troubleshooting-dlq-redrive.html) — CouldNotDetermineMessageSource error, console viewing counts against maxReceiveCount
+- [Best practices for implementing partial batch responses](https://docs.aws.amazon.com/prescriptive-guidance/latest/lambda-event-filtering-partial-batch-responses-for-sqs/best-practices-partial-batch-responses.html) — batchItemFailures interaction with idempotency
+- [Zod v4 release notes](https://zod.dev/v4) — bundle size improvements, Zod Mini option for tree-shaking
+- [Zod v4 CommonJS bundle size regression issue](https://github.com/colinhacks/zod/issues/4637) — 4x bundle size increase with CommonJS for v4
+- [AWS X-Ray pricing](https://aws.amazon.com/xray/pricing/) — 100K free traces/month, $0.000005/trace after; sampling at low invocation volume
+- [AWS X-Ray Adaptive Sampling announcement (2025)](https://aws.amazon.com/about-aws/whats-new/2025/09/aws-x-ray-adaptive-sampling-automatic-error/) — adaptive sampling for error detection
+- Codebase inspection (HIGH confidence): `recording-ended.ts`, `transcode-completed.ts`, `start-transcribe.ts`, `store-summary.ts`, `transcribe-completed.ts`, `session-stack.ts` — verified SDK client initialization locations, batchItemFailures patterns, missing error rethrow in start-transcribe, and absence of Tracer in all handlers
 
 ---
 
-*Pitfalls research for: v1.5 Pipeline Reliability, Moderation & Upload Experience*
-*Researched: 2026-03-10*
-*Supersedes: Previous PITFALLS.md (v1.4 Stream Quality & Creator Spotlight)*
+*Pitfalls research for: v1.7 Event Hardening & UI Polish on VideoNowAndLater AWS IVS platform*
+*Researched: 2026-03-12*
+*Supersedes: Previous PITFALLS.md (v1.5 Pipeline Reliability, Moderation & Upload Experience)*

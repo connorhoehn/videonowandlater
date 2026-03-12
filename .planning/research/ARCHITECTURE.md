@@ -1,756 +1,505 @@
 # Architecture Research
 
-**Domain:** AWS IVS streaming platform — v1.5 Pipeline Reliability, Moderation & Upload Experience
-**Researched:** 2026-03-10
-**Confidence:** HIGH (based on direct codebase analysis + AWS official docs)
+**Domain:** AWS Lambda event-driven pipeline hardening — X-Ray tracing, schema validation, DLQ re-drive, idempotency
+**Researched:** 2026-03-12
+**Confidence:** HIGH (verified against official Powertools docs, CDK v2 API docs, AWS SQS API reference)
 
----
+## Standard Architecture
 
-## System Overview
-
-```
-+-----------------------------------------------------------------------------------------------+
-|                               React Frontend (web/)                                            |
-|   /broadcast/:id  /viewer/:id  /replay/:id  /hangout/:id  /upload/:id  /video/:sessionId      |
-+-----------------------------------------------------------------------------------------------+
-                                          |
-                              API Gateway (Cognito REST)
-                                          |
-+-----------------------------------------------------------------------------------------------+
-|                                Lambda Handlers                                                 |
-|  Existing: create-session  get-session  recording-ended  transcribe-completed  store-summary   |
-|  NEW: bounce-user  report-message  scan-stuck-sessions  list-comments  create-comment          |
-+-----------------------------------------------------------------------------------------------+
-                                          |
-+-----------------------------------------------------------------------------------------------+
-|                      EventBridge (default bus + Scheduler)                                    |
-|  aws.ivs events -> pipeline + audit handlers                                                   |
-|  custom.vnl -> pipeline progression (Recording Available, Transcript Stored)                   |
-|  NEW: EventBridge Scheduler rate(30 min) -> scan-stuck-sessions                               |
-+-----------------------------------------------------------------------------------------------+
-                                          |
-+-----------------------------------------------------------------------------------------------+
-|                     DynamoDB (vnl-sessions, single-table)                                     |
-|  SESSION#{id} / METADATA    MODLOG#{sessionId} / BOUNCE#{ts}#{userId}                        |
-|  REACTION#{id}#{emoji}...   MODLOG#{sessionId} / REPORT#{msgId}#{ts}                         |
-|  PARTICIPANT#{id}...        COMMENT#{sessionId} / {paddedTs}#{commentId}                      |
-+-----------------------------------------------------------------------------------------------+
-                |
-+---------------+-------------------+--------------------+-------------------+
-|      S3/CF    |    Transcribe     |   MediaConvert     |    Bedrock        |
-|               | (+ diarization)   |                    |  (Nova Pro)       |
-+---------------+-------------------+--------------------+-------------------+
-```
-
----
-
-## Existing Architecture Baseline (inherited from v1.4)
-
-### DynamoDB Access Patterns (current)
-
-| PK | SK | Entity | GSI Used |
-|----|----|--------|----------|
-| `SESSION#{id}` | `METADATA` | Session record | GSI1PK=`STATUS#{status}`, GSI1SK=`createdAt` |
-| `SESSION#{id}` | `PARTICIPANT#{userId}` | Hangout participant | None (query by PK prefix) |
-| `RESOURCE#{arn}` | `METADATA` | Pool resource | GSI1PK=`STATUS#AVAILABLE#{type}` |
-| `REACTION#{sessionId}#{emojiType}#SHARD{n}` | `{time}#{reactionId}` | Reaction | GSI2 for time-range |
-| `CHAT#{sessionId}` | `{ts}#{messageId}` | Chat message | None |
-
-### Existing Lambda Handlers Relevant to v1.5
-
-| Handler | Trigger | v1.5 Change |
-|---------|---------|-------------|
-| `recording-ended.ts` | EventBridge IVS Recording End | Add structured log statements |
-| `start-transcribe.ts` | EventBridge `Upload Recording Available` | Add `ShowSpeakerLabels: true` |
-| `transcribe-completed.ts` | EventBridge `aws.transcribe` | Parse speaker_labels, store speakerSegments |
-| `transcode-completed.ts` | EventBridge MediaConvert COMPLETE | Add structured log statements |
-| `store-summary.ts` | EventBridge `Transcript Stored` | Add structured log statements |
-| `ivs-event-audit.ts` | EventBridge all aws.ivs | Existing — pattern to extend |
-
-### Session Domain Model (current, `backend/src/domain/session.ts`)
-
-The `Session` interface has 30+ fields. Key fields relevant to v1.5:
+### System Overview
 
 ```
-sessionId, userId, sessionType (BROADCAST|HANGOUT|UPLOAD), status
-claimedResources { channel?, stage?, chatRoom }
-transcriptStatus: 'pending' | 'processing' | 'available' | 'failed'
-transcriptS3Path, transcript
-aiSummary, aiSummaryStatus
-mediaconvertJobId
-recordingHlsUrl, recordingStatus
+EventBridge Rules
+       |
+       v
+SQS Queue (batchSize:1 + reportBatchItemFailures)
+  +-- recordingEndedQueue       --> recording-ended Lambda
+  +-- transcodeCompletedQueue   --> transcode-completed Lambda
+  +-- transcribeCompletedQueue  --> transcribe-completed Lambda
+  +-- storeSummaryQueue         --> store-summary Lambda
+  +-- startTranscribeQueue      --> start-transcribe Lambda
+          |
+          v (on maxReceiveCount=3 exceeded)
+      Handler DLQ
+          |
+          v
+   [v1.7: DLQ Inspector GET endpoint]
+   [v1.7: DLQ Redrive POST endpoint --> StartMessageMoveTask]
 ```
 
-`ProcessingEventType` enum and `ProcessingEvent` interface already exist in `session.ts` — the
-data model for a pipeline audit log is partially defined. This is the anchor for structured logging.
-
----
-
-## Integration Points: New vs Modified Components
-
-### New Lambda Handlers
-
-| File | Trigger | Responsibility |
-|------|---------|---------------|
-| `bounce-user.ts` | POST /sessions/{id}/bounce | IVS Chat DisconnectUser + write MODLOG item |
-| `report-message.ts` | POST /sessions/{id}/chat/{msgId}/report | Write MODLOG report item |
-| `scan-stuck-sessions.ts` | EventBridge Scheduler rate(30 min) | Find stuck sessions, emit recovery events |
-| `list-comments.ts` | GET /sessions/{id}/comments | Query COMMENT items for session |
-| `create-comment.ts` | POST /sessions/{id}/comments | Write timestamped COMMENT item |
-
-### Modified Lambda Handlers
-
-| File | Change | Scope |
-|------|--------|-------|
-| `recording-ended.ts` | Add structured JSON log at invocation, MediaConvert submission, and error paths | Log-only — no behavior change |
-| `transcode-completed.ts` | Add structured JSON log at invocation, transcribe submission, error paths | Log-only |
-| `transcribe-completed.ts` | Parse `speaker_labels` JSON, reconstruct speaker segments, store `speakerSegments` on session | Functional change |
-| `start-transcribe.ts` | Add `Settings.ShowSpeakerLabels = true`, `Settings.MaxSpeakerLabels = 10` to `StartTranscriptionJobCommand` | Functional change |
-| `store-summary.ts` | Add structured JSON log at invocation and result paths | Log-only |
-
-### New API Routes (wired in `api-stack.ts`)
-
-| Method | Route | Auth | Handler |
-|--------|-------|------|---------|
-| POST | `/sessions/{sessionId}/bounce` | Cognito required | `bounce-user.ts` |
-| POST | `/sessions/{sessionId}/chat/{msgId}/report` | Cognito required | `report-message.ts` |
-| GET | `/sessions/{sessionId}/comments` | Cognito required | `list-comments.ts` |
-| POST | `/sessions/{sessionId}/comments` | Cognito required | `create-comment.ts` |
-
-New CDK resource path: `{msgId}` must be added under the existing `sessionChatResource` in `api-stack.ts`:
-
-```typescript
-const msgIdResource = sessionChatResource.addResource('{msgId}');
-const reportResource = msgIdResource.addResource('report');
-const sessionCommentsResource = sessionIdResource.addResource('comments');
-```
-
-### New DynamoDB Item Schemas (all in existing `vnl-sessions` table)
-
-**Moderation log — bounce:**
-```
-PK:            MODLOG#{sessionId}
-SK:            BOUNCE#{ISO-timestamp}#{targetUserId}
-entityType:    MODERATION_EVENT
-eventType:     BOUNCE
-sessionId:     string
-actorUserId:   string   (cognito:username of broadcaster)
-targetUserId:  string   (cognito:username of bounced user)
-reason?:       string
-timestamp:     string   (ISO-8601)
-```
-
-**Moderation log — report:**
-```
-PK:            MODLOG#{sessionId}
-SK:            REPORT#{messageId}#{ISO-timestamp}
-entityType:    MODERATION_EVENT
-eventType:     REPORT
-sessionId:     string
-reporterUserId:   string
-messageId:     string   (IVS Chat message ID)
-messageContent:   string   (copy for audit)
-reason?:       string
-timestamp:     string
-```
-
-**Comment (upload/video page):**
-```
-PK:            COMMENT#{sessionId}
-SK:            {zeroPaddedSeconds}#{commentId}   e.g. "0000045.320#uuid-..."
-entityType:    COMMENT
-commentId:     string   (uuid)
-sessionId:     string
-userId:        string   (cognito:username)
-text:          string
-videoTimestamp:  number   (float seconds into video)
-createdAt:     string   (ISO-8601)
-```
-
-Zero-padded SK (10 digits before decimal, 3 after) ensures lexicographic sort = chronological by
-video position. This enables range queries: `KeyConditionExpression: 'PK = :pk AND SK BETWEEN :start AND :end'`
-for efficiently fetching comments near a playhead position.
-
-**Session METADATA — new fields (additive, backward compatible):**
-```typescript
-speakerSegments?: SpeakerSegment[]   // derived from Transcribe speaker_labels
-speakerCount?: number                // from speaker_labels.speakers
-```
-
-Where `SpeakerSegment`:
-```typescript
-interface SpeakerSegment {
-  speaker_label: string;   // "spk_0", "spk_1"
-  start_time: string;      // seconds as string (Transcribe format, e.g. "4.87")
-  end_time: string;
-  text: string;            // reconstructed sentence/phrase text for this segment
-}
-```
-
-### CDK Additions in `session-stack.ts`
-
-```typescript
-// scan-stuck-sessions Lambda + schedule
-const scanStuckFn = new nodejs.NodejsFunction(this, 'ScanStuckSessions', {
-  entry: '...scan-stuck-sessions.ts',
-  timeout: Duration.minutes(5),
-  environment: { TABLE_NAME: this.table.tableName },
-});
-this.table.grantReadWriteData(scanStuckFn);
-scanStuckFn.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['events:PutEvents'],
-  resources: ['arn:aws:events:*:*:event-bus/default'],
-}));
-new events.Rule(this, 'ScanStuckSessionsSchedule', {
-  schedule: events.Schedule.rate(Duration.minutes(30)),
-  targets: [new targets.LambdaFunction(scanStuckFn)],
-  description: 'Scan for stuck sessions every 30 minutes and re-trigger recovery events',
-});
-
-// Explicit logGroup on pipeline Lambdas (follow ivs-event-audit.ts pattern)
-// Add logGroup: new logs.LogGroup(...) to:
-//   RecordingEnded, TranscodeCompleted, TranscribeCompleted, StoreSummary
-```
-
-### CDK IAM Additions
-
-| Lambda | New Permission | Resource |
-|--------|---------------|---------|
-| `bounce-user.ts` | `ivschat:DisconnectUser` | `arn:aws:ivschat:*:*:room/*` |
-| `bounce-user.ts` | DynamoDB read/write | vnl-sessions table |
-| `report-message.ts` | DynamoDB read/write | vnl-sessions table |
-| `scan-stuck-sessions.ts` | DynamoDB read | vnl-sessions table |
-| `scan-stuck-sessions.ts` | `events:PutEvents` | default event bus |
-| `list-comments.ts` | DynamoDB read | vnl-sessions table |
-| `create-comment.ts` | DynamoDB read/write | vnl-sessions table |
-
-### New Frontend Components
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| `VideoPage.tsx` | `web/src/features/video/` | New `/video/:sessionId` route — full player with comments, transcript, reactions |
-| `useVideoComments.ts` | `web/src/features/upload/` | Fetch all comments, filter by syncTime proximity |
-| `CommentThread.tsx` | `web/src/features/upload/` | Render timestamped comments near playhead |
-| `BounceButton.tsx` | `web/src/features/moderation/` | Broadcaster-only: POST /bounce |
-| `ReportButton.tsx` | `web/src/features/moderation/` | Per-message: POST /chat/{msgId}/report |
-| `useModerationActions.ts` | `web/src/features/moderation/` | API wiring for bounce + report |
-
-### Modified Frontend Components
-
-| Component | Change |
-|-----------|--------|
-| `MessageRow.tsx` | Add `ReportButton` on other users' messages; add `BounceButton` when viewer is broadcaster |
-| `App.tsx` | Add `/video/:sessionId` route pointing to `VideoPage` |
-| `useReplayPlayer.ts` | Return `player` instance + `qualities` state array for resolution selector |
-| `UploadViewer.tsx` | Add `/video/:sessionId` redirect or supersede with `VideoPage` |
-| `TranscriptDisplay.tsx` | Extend to optionally render diarized `speakerSegments` (grouped by speaker label) |
-
----
-
-## Feature-Specific Architecture Decisions
-
-### 1. Structured Logging
-
-**Approach: inline structured JSON — do not add AWS Powertools/Middy dependency.**
-
-The existing `ivs-event-audit.ts` already uses `console.log(JSON.stringify({...}))` as the
-canonical pattern. AWS Powertools TypeScript would add ~400KB to cold-start payload and requires
-`middy` middleware wiring not present in the codebase. For this milestone the inline approach is
-the right fit.
-
-**Log schema — apply to all pipeline handlers:**
-```typescript
-console.log(JSON.stringify({
-  pipeline: 'vnl',
-  stage: 'recording-ended',        // unique per handler
-  sessionId,
-  event: 'mediaconvert_submitted', // handler-defined event name
-  jobId?,                          // event-specific context
-  error?,                          // on error paths
-  timestamp: new Date().toISOString(),
-}));
-```
-
-**Log group structure:** Each NodejsFunction in CDK gets its own log group. To make log groups
-long-lived and queryable, add `logGroup:` with explicit `RetentionDays` to each pipeline Lambda
-in `session-stack.ts`, following the `IvsEventAuditLogGroup` pattern already there.
-
-**CloudWatch Insights query across all pipeline stages:**
-```
-fields @timestamp, pipeline, stage, sessionId, event, error
-| filter pipeline = 'vnl'
-| sort @timestamp desc
-| limit 200
-```
-
-### 2. Stuck Session Cron Recovery
-
-**Trigger:** `events.Schedule.rate(Duration.minutes(30))` — consistent with existing
-`ReplenishPoolSchedule` pattern in `session-stack.ts`.
-
-**Query for stuck sessions — use GSI1 for `STATUS#ENDING`:**
-
-Sessions stuck in the pipeline have `status = 'ending'` (set when IVS stream ends) and were
-never transitioned to `'ended'` by `recording-ended.ts`. Query GSI1:
-
-```typescript
-const result = await docClient.send(new QueryCommand({
-  TableName: tableName,
-  IndexName: 'GSI1',
-  KeyConditionExpression: 'GSI1PK = :status',
-  ExpressionAttributeValues: { ':status': 'STATUS#ENDING' },
-}));
-
-const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-const stuck = result.Items?.filter(item =>
-  item.createdAt < thirtyMinAgo &&
-  (!item.transcriptStatus || item.transcriptStatus === 'processing')
-) || [];
-```
-
-This avoids a full table scan. The GSI1PK=`STATUS#ENDING` partition is small in practice
-(sessions transition out of ENDING quickly when the pipeline is healthy).
-
-**Recovery action — EventBridge PutEvents (preferred over direct Lambda invocation):**
-
-```typescript
-// Re-trigger transcription for sessions that have recordingHlsUrl but stuck in processing
-await eventBridgeClient.send(new PutEventsCommand({
-  Entries: [{
-    Source: 'custom.vnl',
-    DetailType: 'Upload Recording Available',
-    Detail: JSON.stringify({
-      sessionId: session.sessionId,
-      recordingHlsUrl: session.recordingHlsUrl,
-      recoveryAttempt: true,
-    }),
-  }],
-}));
-```
-
-For sessions without `recordingHlsUrl` (stuck before MediaConvert), emit a custom event
-`'Session Recording Recovery'` on `custom.vnl` and wire an EventBridge rule to invoke
-`recording-ended.ts` indirectly, or call shared repository functions directly from the cron Lambda.
-
-**Why PutEvents over direct Lambda.invoke:** Decouples cron from handler implementation.
-DLQ and retry semantics apply automatically. Consistent with pipeline architecture.
-
-### 3. Speaker-Attributed Transcripts
-
-**API change to `start-transcribe.ts`:**
-```typescript
-const transcribeParams = {
-  ...existingParams,
-  Settings: {
-    ShowSpeakerLabels: true,
-    MaxSpeakerLabels: 10,  // reasonable upper bound for video sessions
-  },
-};
-```
-
-**Transcribe output JSON structure (HIGH confidence — verified against AWS docs):**
-```json
-{
-  "results": {
-    "transcripts": [{ "transcript": "full plain text" }],
-    "items": [
-      {
-        "start_time": "4.87",
-        "end_time": "5.02",
-        "alternatives": [{ "confidence": "0.99", "content": "Hello" }],
-        "type": "pronunciation",
-        "speaker_label": "spk_0"
-      }
-    ],
-    "speaker_labels": {
-      "speakers": 2,
-      "segments": [
-        {
-          "start_time": "4.87",
-          "end_time": "6.88",
-          "speaker_label": "spk_0",
-          "items": [
-            { "start_time": "4.87", "end_time": "5.02", "speaker_label": "spk_0" }
-          ]
-        }
-      ]
-    }
-  }
-}
-```
-
-**Processing in `transcribe-completed.ts`:**
-1. Parse `speaker_labels.segments` from the full Transcribe JSON (already fetched from S3).
-2. For each segment, collect all `results.items` whose `start_time` falls within the segment
-   time window. Join their `alternatives[0].content` to reconstruct segment text.
-3. Build `speakerSegments: SpeakerSegment[]` array.
-4. Call `updateTranscriptStatus(...)` with additional `speakerSegments` and `speakerCount` fields.
-
-**Size guard:** If `JSON.stringify(speakerSegments).length > 50000` (50KB), truncate to the first
-N segments that fit and store `speakerSegmentsPartial: true`. Full segments remain available via
-`transcriptS3Path` in S3. Do not risk exceeding the 400KB DynamoDB item limit.
-
-**Speaker-to-username mapping:** NOT implemented in v1.5. Transcribe assigns `spk_0`, `spk_1`,
-etc. with no knowledge of which participant is which. Store generic labels; the frontend renders
-"Speaker 1", "Speaker 2". Future milestone can add an owner-labeling UI.
-
-**Frontend rendering:** Color-code segments by `speaker_label` consistently (stable hash of label
-string → CSS color). Sync highlighted segment to video position using `speaker_label.start_time`
-vs `player.getPosition()`.
-
-### 4. Chat Moderation (Bounce + Report)
-
-**IVS Chat DisconnectUser (HIGH confidence — verified against AWS IVS Chat API reference):**
-
-```typescript
-import { IvschatClient, DisconnectUserCommand } from '@aws-sdk/client-ivschat';
-
-const ivschat = new IvschatClient({});
-await ivschat.send(new DisconnectUserCommand({
-  roomIdentifier: session.claimedResources.chatRoom,  // room ARN on session
-  userId: targetUserId,                                // cognito:username
-  reason: 'Bounced by broadcaster',
-}));
-```
-
-Disconnects ALL connections by that `userId` from the room. The client receives a `disconnect`
-event automatically. Does NOT prevent reconnection — `create-chat-token.ts` would need a block-list
-check to enforce persistent ban (out of scope for v1.5 "bounce" which is a temporary kick).
-
-**`bounce-user.ts` logic:**
-1. Fetch session by `sessionId` from DynamoDB.
-2. Verify caller's Cognito identity === `session.userId` (broadcaster-only gating).
-3. Return 403 if caller is not the broadcaster.
-4. Call `DisconnectUserCommand`.
-5. Write MODLOG item to DynamoDB.
-6. Return 200.
-
-**`report-message.ts` logic:**
-1. Parse `reporterUserId` from Cognito context, `messageId` from path, `messageContent` from body.
-2. Guard: return 400 if `reporterUserId === messageOwnerUserId` (cannot report own messages).
-3. Write MODLOG item to DynamoDB.
-4. Return 200 (idempotent — duplicate reports just add items).
-
-**Frontend — where bounce and report buttons appear:**
-- `BounceButton`: rendered in `MessageRow.tsx` only when `authUser.userId === session.userId`
-  (caller is broadcaster) AND message sender is not the broadcaster.
-- `ReportButton`: rendered in `MessageRow.tsx` on all messages NOT from the current user.
-  Hidden by default, revealed on hover (to keep the chat UI clean).
-
-### 5. Upload Video Player Page (/video/:sessionId)
-
-**Route:** The existing `/upload/:sessionId` route renders `UploadViewer.tsx` and already shows
-the IVS player, transcript, and AI summary. The v1.5 target is a richer page at `/video/:sessionId`
-that adds: resolution selector, async comments, and reactions.
-
-**Decision: add `/video/:sessionId` as a new route; keep `/upload/:sessionId` as redirect.**
-`UploadActivityCard` links should be updated to use `/video/:sessionId`. This avoids a conflicting
-rewrite of existing `UploadViewer` mid-phase.
-
-**IVS Player hook — extend `useReplayPlayer`, do not fork:**
-
-`UploadViewer.tsx` uses `useReplayPlayer(url)` which returns `{ videoRef, syncTime }`. Extend it
-to also return `{ player, qualities }`:
-
-```typescript
-// In useReplayPlayer.ts
-const [player, setPlayer] = useState<any>(null);
-const [qualities, setQualities] = useState<any[]>([]);
-
-// After ivsPlayer.create():
-ivsPlayer.addEventListener(window.IVSPlayer.PlayerEventType.QUALITY_CHANGED, () => {
-  setQualities(ivsPlayer.getQualities());
-});
-// On load:
-setPlayer(ivsPlayer);
-```
-
-This gives `VideoPage.tsx` access to `player.setQuality(quality)` for the resolution selector.
-The change is non-breaking — existing callers that don't destructure `player` or `qualities` are
-unaffected.
-
-**Async comments — no new GSI needed:**
-
-All comments for a session have `PK = COMMENT#{sessionId}`. Full list query:
-```typescript
-new QueryCommand({
-  TableName: tableName,
-  KeyConditionExpression: 'PK = :pk',
-  ExpressionAttributeValues: { ':pk': `COMMENT#${sessionId}` },
-})
-```
-
-Returns comments sorted by SK = zero-padded video timestamp. Filter to a ±30s window around
-current `syncTime` in the frontend hook `useVideoComments`.
-
-**`create-comment.ts` body:**
-```typescript
-const body = JSON.parse(event.body!);
-const { text, videoTimestamp } = body;
-// videoTimestamp: float seconds
-const paddedTs = videoTimestamp.toFixed(3).padStart(14, '0');  // "0000045.320"
-const commentId = uuidv4();
-const sk = `${paddedTs}#${commentId}`;
-```
-
----
-
-## Data Flows
-
-### Pipeline Audit Log Flow
-
-```
-IVS Recording End
-    |
-    v
-recording-ended.ts
-    -> log { stage: 'recording-ended', event: 'invoked', sessionId }
-    -> submit MediaConvert
-    -> log { stage: 'recording-ended', event: 'mediaconvert_submitted', jobId }
-    |
-    v
-transcode-completed.ts
-    -> log { stage: 'transcode-completed', event: 'transcribe_submitted', sessionId }
-    |
-    v
-transcribe-completed.ts
-    -> log { stage: 'transcribe-completed', event: 'transcript_stored', sessionId }
-    -> parse speakerSegments
-    -> log { stage: 'transcribe-completed', event: 'speaker_segments_stored', speakerCount }
-    |
-    v
-store-summary.ts
-    -> log { stage: 'store-summary', event: 'summary_stored', sessionId }
-```
-
-### Stuck Session Recovery Flow
-
-```
-EventBridge Scheduler (rate 30 min)
-    |
-    v
-scan-stuck-sessions.ts
-    -> Query GSI1 STATUS#ENDING
-    -> Filter: createdAt < 30 min ago AND transcriptStatus missing or 'processing'
-    -> For each stuck session:
-         IF recordingHlsUrl present:
-           PutEvents 'Upload Recording Available' (re-triggers transcription pipeline)
-         IF recordingHlsUrl absent:
-           PutEvents 'Session Recording Recovery' (re-triggers from recording-ended)
-```
-
-### Moderation Flow
-
-```
-Broadcaster clicks Bounce
-    |
-    v
-POST /sessions/{id}/bounce { targetUserId }
-    |
-    v
-bounce-user.ts
-    -> verify caller === session.userId (403 if not broadcaster)
-    -> IvschatClient.DisconnectUser(roomArn, targetUserId)
-    -> DynamoDB PutItem MODLOG#{sessionId} / BOUNCE#{ts}#{userId}
-    -> return 200
-
-User clicks Report on message
-    |
-    v
-POST /sessions/{id}/chat/{msgId}/report { reason, messageContent }
-    |
-    v
-report-message.ts
-    -> verify reporterUserId !== messageOwnerId (400 if self-report)
-    -> DynamoDB PutItem MODLOG#{sessionId} / REPORT#{msgId}#{ts}
-    -> return 200
-```
-
-### Upload Video Player Flow
-
-```
-User opens /video/:sessionId
-    |
-    v
-VideoPage.tsx
-    -> GET /sessions/{sessionId} (fetch session + speakerSegments + aiSummary)
-    -> useReplayPlayer(session.recordingHlsUrl)
-       -> returns { videoRef, syncTime, player, qualities }
-    -> useVideoComments(sessionId)
-       -> GET /sessions/{sessionId}/comments
-       -> filter comments within ±30s of syncTime
-    |
-    v
-User selects resolution
-    -> player.setQuality(selectedQuality)
-
-User posts comment at T=45.3s
-    -> POST /sessions/{sessionId}/comments { text, videoTimestamp: 45.3 }
-    -> create-comment.ts writes COMMENT#${sessionId} / "0000045.300#uuid"
-    -> useVideoComments re-fetches and displays
-```
-
----
-
-## Recommended Project Structure Additions
+After v1.7 hardening, each Lambda gains:
+- `tracing: Tracing.ACTIVE` in CDK + X-Ray segments per invocation
+- `captureAWSv3Client` on DynamoDB/S3/Transcribe/Bedrock/MediaConvert clients
+- Zod schema `safeParse` at SQS record body entry point
+- Powertools Idempotency wrapper for handlers missing it
+- DLQ re-drive endpoint for manual replay of failed messages
+
+### Component Responsibilities
+
+| Component | Responsibility | Typical Implementation |
+|-----------|----------------|------------------------|
+| Tracer (module-scope) | Creates X-Ray subsegments, captures AWS SDK calls, annotates cold start | `new Tracer({ serviceName })` at module scope; `captureAWSv3Client` on each SDK client |
+| Zod schema | Parses `JSON.parse(record.body)` result into typed, validated shape | `z.object(...)` defined per handler; `safeParse` on the SQS body; ZodError routes to batchItemFailure |
+| Idempotency table | Stores `{id, status, expiration}` records keyed on event field per handler | Separate DynamoDB table; TTL on `expiration` attribute; pay-per-request billing |
+| DLQ re-drive Lambda | Calls `sqs:StartMessageMoveTask` with DLQ ARN as source | New Lambda + API Gateway route `POST /admin/dlq/redrive` |
+| DLQ inspector Lambda | Polls DLQ with `sqs:ReceiveMessage` (VisibilityTimeout=0); returns message list | New Lambda + API Gateway route `GET /admin/dlq/:handler` |
+
+## Recommended Project Structure
 
 ```
 backend/src/handlers/
-+-- bounce-user.ts            (NEW) POST /sessions/{id}/bounce
-+-- report-message.ts         (NEW) POST /sessions/{id}/chat/{msgId}/report
-+-- scan-stuck-sessions.ts    (NEW) EventBridge Scheduler cron
-+-- list-comments.ts          (NEW) GET /sessions/{id}/comments
-+-- create-comment.ts         (NEW) POST /sessions/{id}/comments
++-- recording-ended.ts          # Modify: add Tracer, Zod schema, captureAWSv3Client
++-- transcode-completed.ts      # Modify: add Tracer, Zod schema, idempotency, captureAWSv3Client
++-- transcribe-completed.ts     # Modify: add Tracer, Zod schema, captureAWSv3Client
++-- store-summary.ts            # Modify: add Tracer, Zod schema, idempotency, captureAWSv3Client
++-- start-transcribe.ts         # Modify: add Tracer, Zod schema, captureAWSv3Client
++-- on-mediaconvert-complete.ts # Modify: add Tracer, Zod schema (direct EB handler, not SQS)
++-- dlq-inspector.ts            # NEW: poll DLQ, return messages without deleting
++-- dlq-redrive.ts              # NEW: move messages from DLQ back to source queue
 
-web/src/features/
-+-- moderation/
-|   +-- BounceButton.tsx      (NEW)
-|   +-- ReportButton.tsx      (NEW)
-|   +-- useModerationActions.ts (NEW)
-+-- video/
-|   +-- VideoPage.tsx         (NEW) /video/:sessionId
-+-- upload/
-    +-- useVideoComments.ts   (NEW)
-    +-- CommentThread.tsx     (NEW)
+backend/src/schemas/            # NEW: Zod schemas shared across handlers
++-- recording-ended-event.ts    # BroadcastRecordingEnd + StageParticipantRecordingEnd union
++-- transcode-completed-event.ts
++-- transcribe-completed-event.ts
++-- transcript-stored-event.ts
++-- upload-recording-available-event.ts
+
+infra/lib/stacks/session-stack.ts
+# Modify: add tracing: Tracing.ACTIVE to 5+ pipeline Lambdas
+# Modify: CDK adds xray:PutTraceSegments + xray:GetSamplingRules automatically
+# Add: IdempotencyTable DynamoDB resource (vnl-idempotency)
+# Add: DLQ inspector/redrive Lambda + API Gateway admin routes
+# Add: IDEMPOTENCY_TABLE_NAME env var on transcode-completed + store-summary
 ```
 
----
+### Structure Rationale
+
+- **`backend/src/schemas/`:** Centralising Zod schemas keeps handler files focused on business logic; schemas can be unit-tested independently; shared schemas prevent drift between handlers that reference the same event format (e.g. EventBridge envelope wrapper `source`, `detail-type`, `detail`)
+- **`dlq-inspector.ts` / `dlq-redrive.ts` separate from pipeline handlers:** DLQ operations are operator tooling, not part of the event pipeline; they need different IAM permissions (SQS management actions vs. DynamoDB/Transcribe/Bedrock) and different API Gateway routes (admin-gated)
 
 ## Architectural Patterns
 
-### Pattern 1: Inline Structured JSON Logging (extend existing)
+### Pattern 1: Tracer at Module Scope + captureAWSv3Client
 
-**What:** Every pipeline handler emits `console.log(JSON.stringify({ pipeline, stage, event, ... }))`.
-**When to use:** Any Lambda in the `custom.vnl` or `aws.ivs` pipeline that needs CloudWatch observability.
-**Trade-offs:** Simple, zero dependencies, queryable with CloudWatch Insights. Less ergonomic
-than Powertools but avoids a 400KB cold-start penalty.
+**What:** `Tracer` is instantiated once outside the handler export. Each AWS SDK client is wrapped with `tracer.captureAWSv3Client()` at module scope. The SQS handler manually opens a subsegment bracketing the `processEvent()` call, then closes it in `finally`.
 
-### Pattern 2: GSI Query + In-Lambda Filter for Cron Scans
+**When to use:** Required for every pipeline Lambda. Module scope init pays the cold-start cost once; subsequent warm invocations reuse the already-instrumented clients with no repeated wrapping overhead.
 
-**What:** Query GSI1 for a bounded status partition, then filter by timestamp in Lambda.
-**When to use:** When the population of interest (stuck sessions) is small and bounded by status.
-**Trade-offs:** GSI query is efficient when `STATUS#ENDING` partition stays small (it should — sessions
-cycle through ENDING quickly). Full table scan is unacceptable for a cron job as the table grows.
+**Trade-offs:**
+- Pro: automatic subsegments for every DynamoDB/S3/Transcribe/Bedrock/MediaConvert call; sessionId annotation is filterable in X-Ray console
+- Pro: CDK `Tracing.ACTIVE` automatically grants `xray:PutTraceSegments` and `xray:GetSamplingRules` — no manual IAM needed
+- Con: adds ~2ms overhead per subsegment creation; must set `captureResponse: false` on large-payload handlers (transcript JSON) to stay under X-Ray's 64 KB metadata limit
+- Con: SQS→Lambda trace links show as disconnected nodes in the X-Ray service map (SQS breaks the W3C trace header chain); this is an X-Ray platform limitation, not a bug
 
-### Pattern 3: EventBridge PutEvents for Async Recovery
+**Example:**
+```typescript
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 
-**What:** Cron Lambda emits custom events on `custom.vnl` to re-trigger existing pipeline handlers.
-**When to use:** Recovery from stuck state; handler re-use without coupling.
-**Trade-offs:** EventBridge DLQ and retry apply; decoupled from handler implementation.
-Small delay (~ms) vs direct Lambda.invoke.
+const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
+const rawDdbClient = new DynamoDBClient({});
+const ddbClient = tracer.captureAWSv3Client(rawDdbClient); // auto-subsegments per call
 
-### Pattern 4: Co-located COMMENT Items on Shared PK
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const segment = tracer.getSegment();
+  const subsegment = segment?.addNewSubsegment('## handler');
+  if (subsegment) tracer.setSegment(subsegment);
+  tracer.annotateColdStart();
 
-**What:** All comments for a session share `PK = COMMENT#{sessionId}`, sorted by video timestamp in SK.
-**When to use:** Access pattern is always "all comments for this session, near this time".
-**Trade-offs:** Single table partition per session; efficient key-based queries with optional SK range.
-No GSI needed for v1.5 scale.
+  try {
+    // ... processEvent loop
+  } finally {
+    subsegment?.close();
+    if (segment) tracer.setSegment(segment);
+  }
+};
+```
 
-### Pattern 5: Extend `useReplayPlayer` Hook, Don't Fork
+**CDK change required (per pipeline Lambda):**
+```typescript
+const recordingEndedFn = new nodejs.NodejsFunction(this, 'RecordingEnded', {
+  // ... existing config unchanged
+  tracing: lambda.Tracing.ACTIVE,  // ADD THIS LINE
+});
+// CDK automatically grants xray:PutTraceSegments + xray:GetSamplingRules
+```
 
-**What:** Add `player` and `qualities` to the return value of the existing hook.
-**When to use:** New callers need IVS player internals; existing callers must not break.
-**Trade-offs:** Non-breaking because new destructured values are optional. Avoids duplicate
-player initialization logic.
+### Pattern 2: Zod Schema Validation at SQS Record Body Entry
 
----
+**What:** Each handler defines a Zod schema matching its expected EventBridge event shape. Inside the SQS for-loop, `JSON.parse(record.body)` output is passed to `schema.safeParse()`. A `ZodError` (`.success === false`) is caught and pushed to `batchItemFailures` without rethrowing — schema errors are permanent failures and retrying a structurally invalid message provides no value.
+
+**When to use:** At the top of the SQS for-loop, before calling `processEvent()`. The correct placement is outside `processEvent()` because: (1) `processEvent` receives a typed argument; (2) catching ZodError separately from transient errors enables different disposition (permanent DLQ vs. retry).
+
+**Trade-offs:**
+- Pro: surfaces malformed events immediately as structured logs with field-level Zod error details; prevents downstream AWS SDK calls on bad data
+- Pro: Zod's `.infer<typeof Schema>` eliminates the `as any` casts present in current handlers (e.g. `detail as any` in `transcode-completed.ts`)
+- Con: Zod adds ~25 KB to the bundled Lambda; this is acceptable given Powertools is already ~800 KB in the bundle
+
+**SQS handler lifecycle with Zod:**
+```
+SQSEvent.Records iteration:
+  1. JSON.parse(record.body)                -- raw deserialization
+  2. MyEventSchema.safeParse(parsed)        -- schema validation (NEW)
+     ZodError -> batchItemFailure, continue  -- permanent: don't retry
+  3. processEvent(parseResult.data)         -- business logic with typed input
+     throw Error -> batchItemFailure         -- transient: SQS retries
+```
+
+**Example:**
+```typescript
+import { z } from 'zod';
+
+const TranscodeCompletedSchema = z.object({
+  source: z.literal('aws.mediaconvert'),
+  detail: z.object({
+    status: z.enum(['COMPLETE', 'ERROR', 'CANCELED']),
+    userMetadata: z.object({
+      sessionId: z.string().min(1),
+      phase: z.string(),
+    }),
+    outputGroupDetails: z.array(z.object({
+      outputDetails: z.array(z.object({
+        outputFilePaths: z.array(z.string()),
+      })).optional(),
+    })).optional(),
+  }),
+});
+
+// In handler for-loop:
+const parseResult = TranscodeCompletedSchema.safeParse(JSON.parse(record.body));
+if (!parseResult.success) {
+  logger.error('Schema validation failed', {
+    errors: parseResult.error.issues,
+    messageId: record.messageId,
+  });
+  failures.push({ itemIdentifier: record.messageId }); // permanent: don't retry
+  continue;
+}
+await processEvent(parseResult.data); // now fully typed
+```
+
+### Pattern 3: Powertools Idempotency with JMESPath Key on SQS Events
+
+**What:** `makeIdempotent` wraps `processEvent()` using `DynamoDBPersistenceLayer`. The idempotency key uses a JMESPath expression pointing to a stable field in the validated EventBridge event. A separate DynamoDB table stores idempotency records with TTL.
+
+**When to use:** Apply to handlers that perform non-idempotent mutations:
+- `transcode-completed`: starts a Transcribe job (currently guarded with manual `ConflictException` catch — replace with Powertools)
+- `store-summary`: invokes Bedrock + writes DynamoDB (no guard today; Bedrock is not idempotent)
+
+Do NOT apply to handlers that are already safe to replay:
+- `transcribe-completed`: S3 `PutObject` is idempotent; DynamoDB `SET` attributes are idempotent
+- `recording-ended`: pool release uses conditional DynamoDB writes; MediaConvert submission is the only risk (add idempotency here only if replay scenarios require it)
+- `start-transcribe`: verify if a `ConflictException` guard already exists
+
+**Trade-offs:**
+- Pro: eliminates the manual `ConflictException` check in `transcode-completed`; protects `store-summary` from duplicate Bedrock invocations on SQS retry
+- Pro: DynamoDB idempotency records auto-expire via TTL; no manual cleanup
+- Con: requires a new DynamoDB table; adds 1 DynamoDB read (and conditional write) per invocation
+- Con: `makeIdempotent` wraps the function before the SQS outer loop sees the result — `context.registerLambdaContext(context)` is required for Lambda timeout protection
+
+**Key decision — separate table vs main table:**
+Use a dedicated `vnl-idempotency` table. Rationale: (1) Powertools uses a fixed PK format (`functionName#hash`) that would pollute the single-table namespace; (2) TTL is 1 hour vs the main table's multi-year data; (3) keeping them separate preserves clean DLQ replay analysis.
+
+**Example (transcode-completed):**
+```typescript
+import { DynamoDBPersistenceLayer } from '@aws-lambda-powertools/idempotency/dynamodb';
+import { IdempotencyConfig, makeIdempotent } from '@aws-lambda-powertools/idempotency';
+
+const persistence = new DynamoDBPersistenceLayer({
+  tableName: process.env.IDEMPOTENCY_TABLE_NAME!,
+});
+
+const idempotencyConfig = new IdempotencyConfig({
+  eventKeyJmesPath: 'detail.userMetadata.sessionId', // stable per MediaConvert job
+  expiresAfterSeconds: 3600,
+});
+
+const processEventIdempotently = makeIdempotent(processEvent, {
+  persistenceStore: persistence,
+  config: idempotencyConfig,
+});
+
+export const handler = async (event: SQSEvent, context: Context): Promise<SQSBatchResponse> => {
+  idempotencyConfig.registerLambdaContext(context); // timeout protection
+  for (const record of event.Records) {
+    const parseResult = TranscodeCompletedSchema.safeParse(JSON.parse(record.body));
+    if (!parseResult.success) { failures.push(...); continue; }
+    try {
+      await processEventIdempotently(parseResult.data);
+    } catch (err) {
+      failures.push({ itemIdentifier: record.messageId });
+    }
+  }
+  return { batchItemFailures: failures };
+};
+```
+
+**CDK table definition:**
+```typescript
+const idempotencyTable = new dynamodb.Table(this, 'IdempotencyTable', {
+  partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+  timeToLiveAttribute: 'expiration',
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.DESTROY,
+  tableName: 'vnl-idempotency',
+});
+idempotencyTable.grantReadWriteData(transcodeCompletedFn);
+idempotencyTable.grantReadWriteData(storeSummaryFn);
+// Add IDEMPOTENCY_TABLE_NAME env var to each
+```
+
+### Pattern 4: DLQ Re-drive via StartMessageMoveTask
+
+**What:** A `dlq-redrive` Lambda exposes a `POST /admin/dlq/redrive` endpoint. It calls `sqs:StartMessageMoveTask` with `SourceArn` set to the selected DLQ ARN and no `DestinationArn` (AWS defaults to the DLQ's registered source queue). A `dlq-inspector` Lambda exposes `GET /admin/dlq/:handler` using `sqs:ReceiveMessage` with `VisibilityTimeout=0` to preview DLQ contents without consuming messages.
+
+**Why StartMessageMoveTask is applicable here:** Our DLQs are configured as the `deadLetterQueue` property on SQS queues (e.g. `recordingEndedQueue.deadLetterQueue = recordingEndedDlq`). This satisfies the API requirement: "source queue must be a DLQ of another Amazon SQS queue." The API limitation that blocks re-drive affects Lambda function-level OnFailure destinations and SNS subscription DLQs — neither of which we use.
+
+**Trade-offs:**
+- Pro: `StartMessageMoveTask` is fully async and AWS-managed; no polling loop in Lambda
+- Pro: no second consumer Lambda needed — original SQS-triggered handlers process redriven messages naturally
+- Con: only one active move task per queue; cannot re-drive one specific message (all-or-nothing per queue)
+- Con: inspect-without-consuming (`VisibilityTimeout=0`) briefly hides messages from other consumers — use small `MaxNumberOfMessages` (1–10) and short call duration
+
+**Required IAM on the re-drive Lambda:**
+```
+sqs:StartMessageMoveTask
+sqs:ListMessageMoveTasks
+sqs:CancelMessageMoveTask
+sqs:ReceiveMessage        (for inspector)
+sqs:DeleteMessage         (required by StartMessageMoveTask internals)
+sqs:GetQueueAttributes
+sqs:ListDeadLetterSourceQueues
+```
+
+**Example:**
+```typescript
+// dlq-redrive.ts
+import { SQSClient, StartMessageMoveTaskCommand } from '@aws-sdk/client-sqs';
+
+const sqs = new SQSClient({});
+
+const DLQ_ARNS: Record<string, string> = {
+  'recording-ended':       process.env.RECORDING_ENDED_DLQ_ARN!,
+  'transcode-completed':   process.env.TRANSCODE_COMPLETED_DLQ_ARN!,
+  'transcribe-completed':  process.env.TRANSCRIBE_COMPLETED_DLQ_ARN!,
+  'store-summary':         process.env.STORE_SUMMARY_DLQ_ARN!,
+  'start-transcribe':      process.env.START_TRANSCRIBE_DLQ_ARN!,
+};
+
+export const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
+  const { handlerName } = JSON.parse(event.body || '{}');
+  const dlqArn = DLQ_ARNS[handlerName];
+  if (!dlqArn) return { statusCode: 400, body: JSON.stringify({ error: 'Unknown handler' }) };
+
+  const result = await sqs.send(new StartMessageMoveTaskCommand({ SourceArn: dlqArn }));
+  return { statusCode: 200, body: JSON.stringify({ taskHandle: result.TaskHandle }) };
+};
+```
+
+## Data Flow
+
+### Pipeline Event Flow (Current — v1.6)
+
+```
+IVS / MediaConvert / Transcribe / custom.vnl event
+       |
+       v
+  EventBridge Rule
+       |
+       v
+  SQS Queue (visibilityTimeout = 6x Lambda timeout, maxReceiveCount=3)
+       |  (Lambda polls, batchSize:1)
+       v
+  Handler Lambda
+    1. JSON.parse(record.body)
+    2. processEvent(ebEvent)          --> DynamoDB writes, AWS API calls
+    3. Success: return {}
+    4. Failure throw: batchItemFailures --> message returns to queue
+       After 3 receives --> DLQ (14-day retention)
+```
+
+### Pipeline Event Flow After v1.7 Hardening
+
+```
+EventBridge Rule --> SQS Queue --> Handler Lambda
+    |
+    +-- [NEW] Tracer subsegment opened (## handler)
+    +-- [NEW] Zod schema.safeParse(JSON.parse(record.body))
+    |         ZodError --> batchItemFailure (permanent: skip retry)
+    +-- [NEW] makeIdempotent check in DynamoDB (transcode-completed, store-summary only)
+    |         Already-processed --> return cached result immediately
+    +-- processEvent(validatedEvent)
+    |     +-- captureAWSv3Client calls auto-create X-Ray subsegments per AWS call
+    |     +-- tracer.putAnnotation('sessionId', sessionId)
+    +-- [NEW] Tracer subsegment closed
+    +-- batchItemFailures --> DLQ (unchanged)
+              |
+              v [NEW v1.7 operator tooling]
+         GET /admin/dlq/:handler    --> inspect DLQ without consuming
+         POST /admin/dlq/redrive   --> StartMessageMoveTask (move all back to source queue)
+```
+
+### X-Ray Trace Topology
+
+```
+Lambda invocation (segment auto-created by runtime with Tracing.ACTIVE)
+  +-- ## handler (manual subsegment)
+        +-- DynamoDB:GetItem        (auto via captureAWSv3Client)
+        +-- DynamoDB:UpdateItem     (auto via captureAWSv3Client)
+        +-- MediaConvert:CreateJob  (auto via captureAWSv3Client)
+        +-- S3:GetObject            (auto via captureAWSv3Client)
+        +-- Transcribe:StartTranscriptionJob (auto via captureAWSv3Client)
+
+Annotations (indexed, filterable): { sessionId, pipelineStage, coldStart }
+Metadata (context, not indexed):   { jobId, durationMs, status }
+```
+
+Note: SQS-to-Lambda trace links appear as separate, disconnected trace nodes in the X-Ray service map. AWS X-Ray does not propagate trace context through SQS message attributes in the Lambda trigger path. Lambda segments will correctly show their downstream AWS call subsegments, but will not be visually connected to the upstream EventBridge or SQS node. This is an X-Ray platform constraint, confirmed in AWS documentation on SQS+X-Ray integration.
+
+## Integration Points
+
+### X-Ray Integration Points
+
+| Integration Point | Change Required | Location |
+|-------------------|-----------------|----------|
+| Lambda tracing enabled | `tracing: lambda.Tracing.ACTIVE` per function | `session-stack.ts` NodejsFunction props (5 pipeline Lambdas + on-mediaconvert-complete) |
+| X-Ray IAM permissions | Auto-added by CDK when `Tracing.ACTIVE` is set | No manual action needed |
+| SDK client instrumentation | `tracer.captureAWSv3Client(client)` at module scope | Each handler file, wrap each SDK client used |
+| Subsegment lifecycle | Manual open before `processEvent()` / close in `finally` | Each handler file |
+| Cold start annotation | `tracer.annotateColdStart()` | Once per handler, in the subsegment block |
+| Session annotation | `tracer.putAnnotation('sessionId', sessionId)` | Inside `processEvent` after sessionId is extracted from validated event |
+| Large payload protection | Do not capture response on transcript/speakerSegment payloads | `transcribe-completed.ts`, `store-summary.ts` |
+
+### Schema Validation Integration Points
+
+| Handler | Event Shape | ZodError Disposition | Current Risk Without Schema |
+|---------|-------------|----------------------|-----------------------------|
+| `recording-ended.ts` | IVS Recording End (2 variants: channel + stage) | batchItemFailure (permanent) | `event.detail as Record<string, any>` — panics on missing fields reach SQS retry loop |
+| `transcode-completed.ts` | MediaConvert State Change | batchItemFailure (permanent) | `detail as any` cast — missing `userMetadata` causes silent undefined |
+| `transcribe-completed.ts` | Transcribe State Change | batchItemFailure (permanent) | Job name regex handles one case; detail fields not validated |
+| `store-summary.ts` | Custom `Transcript Stored` | batchItemFailure (permanent) | `event.detail` typed via interface but not validated at runtime |
+| `start-transcribe.ts` | Custom `Upload Recording Available` | batchItemFailure (permanent) | Not yet examined; likely uses `as any` |
+| `on-mediaconvert-complete.ts` | MediaConvert State Change (direct EB, not SQS) | throw (EventBridge retries) | `detail.jobName` parsed by regex only |
+
+### Idempotency Coverage After v1.7
+
+| Handler | Gap Without Idempotency | Key Used | Priority |
+|---------|------------------------|----------|----------|
+| `transcode-completed.ts` | Duplicate Transcribe job start on SQS retry (currently catches ConflictException manually — fragile) | `detail.userMetadata.sessionId` | HIGH — replace manual guard |
+| `store-summary.ts` | Duplicate Bedrock invocation + duplicate DynamoDB write (no guard today) | `detail.sessionId` | HIGH — Bedrock not idempotent |
+| `recording-ended.ts` | Duplicate MediaConvert job submission (pool release uses conditional writes, but MediaConvert submission is unguarded on retry) | `resources[0]` (IVS resource ARN) | MEDIUM — MediaConvert accepts duplicate tags silently; add if v1.7 scope allows |
+| `transcribe-completed.ts` | S3 PutObject is idempotent; DynamoDB SET is idempotent | N/A | LOW — safe to replay naturally |
+| `start-transcribe.ts` | Transcribe ConflictException handling — verify if guard exists | `detail.sessionId` | MEDIUM — verify before deprioritising |
+
+### DLQ Re-drive Integration Points
+
+| DLQ | Source Queue | Re-drive Mechanism | Why StartMessageMoveTask Applies |
+|-----|-------------|--------------------|---------------------------------|
+| `vnl-recording-ended-dlq` | `vnl-recording-ended` | `StartMessageMoveTask` (no DestinationArn = auto-source) | DLQ configured on SQS queue, not Lambda function |
+| `vnl-transcode-completed-dlq` | `vnl-transcode-completed` | Same | Same |
+| `vnl-transcribe-completed-dlq` | `vnl-transcribe-completed` | Same | Same |
+| `vnl-store-summary-dlq` | `vnl-store-summary` | Same | Same |
+| `vnl-start-transcribe-dlq` | `vnl-start-transcribe` | Same | Same |
+
+### New vs Modified Components Summary
+
+| Component | Status | Change Description |
+|-----------|--------|--------------------|
+| `recording-ended.ts` | Modified | Add Tracer + captureAWSv3Client on MediaConvertClient + DynamoDB client; add Zod schema validation |
+| `transcode-completed.ts` | Modified | Add Tracer + captureAWSv3Client; add Zod schema; replace ConflictException guard with Powertools idempotency |
+| `transcribe-completed.ts` | Modified | Add Tracer + captureAWSv3Client on S3Client + EventBridgeClient; add Zod schema |
+| `store-summary.ts` | Modified | Add Tracer + captureAWSv3Client on S3Client + BedrockRuntimeClient; add Zod schema; add idempotency |
+| `start-transcribe.ts` | Modified | Add Tracer + captureAWSv3Client; add Zod schema |
+| `on-mediaconvert-complete.ts` | Modified | Add Tracer + captureAWSv3Client; add Zod schema (direct EB handler, throw not batchItemFailures) |
+| `dlq-inspector.ts` | New | GET /admin/dlq/:handler — ReceiveMessage with VisibilityTimeout=0, return messages |
+| `dlq-redrive.ts` | New | POST /admin/dlq/redrive — StartMessageMoveTask per handler name |
+| `backend/src/schemas/` | New dir | 5 Zod schema files, one per pipeline handler event type |
+| `vnl-idempotency` DynamoDB table | New | PK=`id` (STRING), TTL attribute=`expiration`, pay-per-request |
+| `session-stack.ts` | Modified | `Tracing.ACTIVE` on 6 Lambdas; IdempotencyTable; DLQ Lambda + API routes; DLQ ARN env vars |
+
+## Build Order
+
+Phase dependencies drive this ordering:
+
+**Phase A: X-Ray Tracing (no dependencies — build first)**
+
+Add `tracing: lambda.Tracing.ACTIVE` to all 6 pipeline Lambdas in `session-stack.ts`. Add `Tracer` module-scope instantiation + `captureAWSv3Client` wrappers + manual subsegment lifecycle to each handler. Add `@aws-lambda-powertools/tracer` — it is already in `backend/package.json` at `^2.31.0` so no package changes required.
+
+Rationale: purely additive — zero risk of breaking existing behavior. Ships observability before touching any core logic. Subsequent phases benefit from X-Ray traces during testing.
+
+**Phase B: Schema Validation (depends on: understanding handler inputs, benefits from Phase A observability)**
+
+Create `backend/src/schemas/` with Zod schemas. Add `safeParse` call in each handler's SQS for-loop. Install `zod` package (`npm install zod`). Route ZodError to batchItemFailures (not throw). Write unit tests for each schema with valid and invalid inputs.
+
+Rationale: schema validation is additive at runtime — ZodError on malformed events goes to DLQ (same as a panic today, but now with structured error detail). Having typed inputs from Zod makes Phase C idempotency key extraction reliable via JMESPath.
+
+**Phase C: Idempotency (depends on: Phase B — typed/validated events make JMESPath key extraction reliable)**
+
+Add `@aws-lambda-powertools/idempotency` package. Add `vnl-idempotency` table to CDK. Wire `makeIdempotent` to `transcode-completed` and `store-summary`. Remove the manual `ConflictException` guard from `transcode-completed`. Add `IDEMPOTENCY_TABLE_NAME` env var. Grant DynamoDB read/write to the two handlers.
+
+Rationale: idempotency wraps `processEvent()` which now receives typed input from Phase B. The JMESPath expressions in `IdempotencyConfig` point to validated field paths.
+
+**Phase D: DLQ Re-drive Tooling (depends on: Phase A for observability; independent of Phases B and C)**
+
+Create `dlq-inspector.ts` + `dlq-redrive.ts`. Add API Gateway admin routes (Cognito-gated). Add CDK Lambda definitions + IAM for SQS management actions. Pass DLQ ARNs as env vars.
+
+Rationale: DLQ tooling is independent of pipeline hardening and can be built in parallel with Phases B and C if development resources allow. Benefits from Phase A tracing when diagnosing why messages landed in DLQ.
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Storing Full Transcribe JSON on DynamoDB Session Item
+### Anti-Pattern 1: Sharing the Main DynamoDB Table for Idempotency Records
 
-**What people do:** Write `JSON.stringify(transcribeOutput)` directly to a session attribute after
-fetching it from S3.
-**Why it's wrong:** Full Transcribe JSON for a 1-hour session is 2-5MB — exceeds DynamoDB's 400KB
-item limit and causes silent write failures or `ItemCollectionSizeLimitExceededException`.
-**Do this instead:** Parse the JSON in Lambda, extract only the compact `speakerSegments` array
-(one entry per speaker turn, not per word). Keep `transcriptS3Path` pointing to full raw JSON.
+**What people do:** Reuse `vnl-sessions` for idempotency records, adding `PK=IDEMPOTENCY#...` items alongside session data.
 
-### Anti-Pattern 2: Direct Lambda.invoke for Cron Recovery
+**Why it's wrong:** Powertools DynamoDBPersistenceLayer uses its own PK format (`functionName#hash`); these records pollute the single-table namespace and complicate DLQ replay analysis. Idempotency records have a 1-hour TTL that would require a filter expression on all queries to exclude expired state.
 
-**What people do:** Call `LambdaClient.send(new InvokeCommand({ FunctionName: 'RecordingEnded' }))` from the cron.
-**Why it's wrong:** Bypasses EventBridge DLQ/retry semantics; creates tight coupling; `recording-ended.ts`
-expects a specific IVS EventBridge event shape that is non-trivial to fake.
-**Do this instead:** Emit a `custom.vnl` EventBridge event; let the existing rule routing handle
-delivery. The cron stays decoupled from handler internals.
+**Do this instead:** Provision a dedicated `vnl-idempotency` table. At current volume it costs essentially nothing (pay-per-request, ~1 write + 1 read per pipeline invocation per day).
 
-### Anti-Pattern 3: New DynamoDB Table for Moderation Log
+### Anti-Pattern 2: Using `captureResponse: true` (Default) on Large Payload Handlers
 
-**What people do:** Create `vnl-moderation` table for bounce/report records.
-**Why it's wrong:** Requires separate IAM grants, adds CDK complexity, and DynamoDB doesn't support
-cross-table joins — you can't efficiently get "session + its moderation events" in one request.
-**Do this instead:** Use `PK: MODLOG#{sessionId}` in the existing `vnl-sessions` table. All
-moderation events for a session are co-located and queryable with one DynamoDB Query call.
+**What people do:** Use default Tracer settings on handlers that process large objects like transcript JSON or speaker segment arrays.
 
-### Anti-Pattern 4: Polling IVS Chat for Bounce Enforcement
+**Why it's wrong:** X-Ray has a 64 KB limit on segment metadata. `transcribe-completed` fetches transcript JSON that can be hundreds of KB; `store-summary` processes transcript text. With default settings X-Ray silently truncates or rejects the segment.
 
-**What people do:** After writing a bounce flag to DynamoDB, check it on every incoming message
-or let the user stay connected but drop their messages.
-**Why it's wrong:** IVS Chat `DisconnectUser` already severs the WebSocket server-side. The client
-receives a `disconnect` event immediately. No polling needed.
-**Do this instead:** Call `DisconnectUser` — the user is gone from the room. For persistent bans,
-gate `create-chat-token.ts` with a block-list check (not in v1.5 scope).
+**Do this instead:** Do not call `tracer.addResponseAsMetadata()` on handlers that process large payloads, or annotate only identifiers (sessionId, jobId, textLength) not the payload content itself.
 
-### Anti-Pattern 5: New Route `/video/:sessionId` That Duplicates `/upload/:sessionId` Entirely
+### Anti-Pattern 3: Using `schema.parse()` (Throwing) Inside `processEvent()` Instead of `safeParse` in the SQS Loop
 
-**What people do:** Create `VideoPage.tsx` as a near-copy of `UploadViewer.tsx`.
-**Why it's wrong:** Two components with the same IVS player lifecycle create duplicate code and
-diverge in behavior. Existing `useReplayPlayer` already handles the player setup.
-**Do this instead:** Extend `useReplayPlayer` to return the player instance and qualities, then
-build `VideoPage.tsx` on top of it — sharing the player hook with `UploadViewer`.
+**What people do:** Call `schema.parse(JSON.parse(record.body))` inside `processEvent()`, letting ZodError propagate to the outer catch block which pushes to `batchItemFailures`, triggering SQS retries.
 
----
+**Why it's wrong:** Schema validation failures are permanent — the event structure will not change between retries. Retrying 3 times wastes Lambda invocations, inflates CW alarm metrics, and delays the message reaching the DLQ where it can be inspected.
 
-## Build Order (Phase Dependencies)
+**Do this instead:** Use `schema.safeParse()` in the SQS for-loop before calling `processEvent()`. On `!result.success`, log the ZodError issues and immediately push to `failures`. Only transient errors (network, throttling, downstream API unavailability) should use the retry path.
 
-```
-Phase 25: Structured Pipeline Logging
-  Modify: recording-ended.ts, transcode-completed.ts, transcribe-completed.ts, store-summary.ts
-  CDK: add explicit logGroup to pipeline Lambdas in session-stack.ts
-  No new Lambdas. No behavior change. Unblocks observability for all subsequent debugging.
+### Anti-Pattern 4: Assuming Lambda Function-level DLQs Support StartMessageMoveTask
 
-Phase 26: Stuck Session Cron Recovery
-  New: scan-stuck-sessions.ts
-  CDK: EventBridge Scheduler rule in session-stack.ts
-  Depends on Phase 25 (logging makes it possible to verify cron behavior in CloudWatch).
+**What people do:** Configure `deadLetterQueueEnabled: true` on a Lambda function (Lambda OnFailure DLQ) and expect `StartMessageMoveTask` to re-drive those messages.
 
-Phase 27: Speaker-Attributed Transcripts
-  Modify: start-transcribe.ts (add ShowSpeakerLabels)
-  Modify: transcribe-completed.ts (parse + store speakerSegments)
-  Domain: extend Session interface with speakerSegments, speakerCount
-  Frontend: extend TranscriptDisplay to render diarized segments
-  Independent of Phase 26 (can run in parallel).
+**Why it's wrong:** `StartMessageMoveTask` only accepts DLQ ARNs that are the `deadLetterQueue` of another SQS queue. Lambda function DLQs and SNS subscription DLQs are explicitly unsupported per the AWS API reference.
 
-Phase 28: Chat Moderation (Bounce + Report)
-  New: bounce-user.ts, report-message.ts
-  CDK: new routes in api-stack.ts, ivschat:DisconnectUser IAM
-  Frontend: BounceButton, ReportButton, useModerationActions, MessageRow changes
-  Independent of Phases 26 and 27 (can run in parallel with Phase 27).
+**Do this instead:** Ensure DLQs are configured at the SQS queue level (the `deadLetterQueue` property on the SQS Queue construct), not at the Lambda function level. This is exactly the existing pattern in `session-stack.ts` — all 5 pipeline queue pairs use `new sqs.Queue(..., { deadLetterQueue: { queue: xyzDlq, maxReceiveCount: 3 } })`. These DLQs fully support `StartMessageMoveTask`.
 
-Phase 29: Upload Video Player Page
-  New: create-comment.ts, list-comments.ts, VideoPage.tsx, useVideoComments.ts
-  CDK: new /comments routes in api-stack.ts
-  Modify: useReplayPlayer.ts (return player + qualities)
-  App.tsx: add /video/:sessionId route
-  Depends on: Phase 27 (for diarized transcript display on the page).
-  Comments and resolution selector are independent of Phase 27.
-```
+## Scaling Considerations
 
-Phases 27 and 28 are independent and can be developed simultaneously by different phases if needed.
-Phase 29 can start comments/player work before Phase 27 is complete; speaker segments display is
-the only Phase 27 dependency in Phase 29.
-
----
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| Current (~100 sessions/day) | X-Ray 5 traces/second default sampling covers all invocations; no adjustments needed |
+| 1k–10k sessions/day | Consider X-Ray sampling rules to reduce storage costs; idempotency table scales automatically on-demand |
+| 100k+ sessions/day | X-Ray sampling critical (both cost and performance); disable response capture globally; consider Powertools Tracer `POWERTOOLS_TRACER_CAPTURE_RESPONSE=false` env var |
 
 ## Sources
 
-- Codebase direct analysis: `backend/src/handlers/`, `backend/src/repositories/`, `infra/lib/stacks/`, `web/src/` (HIGH confidence)
-- [Amazon Transcribe Diarization Batch Output](https://docs.aws.amazon.com/transcribe/latest/dg/diarization-output-batch.html) — HIGH confidence, JSON schema verified
-- [IVS Chat DisconnectUser API Reference](https://docs.aws.amazon.com/ivs/latest/ChatAPIReference/API_DisconnectUser.html) — HIGH confidence, parameters and behavior verified
-- [AWS Lambda Powertools TypeScript Logger](https://docs.aws.amazon.com/powertools/typescript/2.8.0/core/logger/) — considered and rejected for this milestone
-- [EventBridge Scheduler invoke Lambda](https://docs.aws.amazon.com/lambda/latest/dg/with-eventbridge-scheduler.html) — HIGH confidence, matches existing replenish-pool pattern
+- [Tracer - Powertools for AWS Lambda (TypeScript) official docs](https://docs.aws.amazon.com/powertools/typescript/latest/features/tracer/) — HIGH confidence
+- [CDK NodejsFunction API — tracing property](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda_nodejs.NodejsFunctionProps.html) — HIGH confidence
+- [Idempotency - Powertools for AWS Lambda (TypeScript) 1.18](https://docs.aws.amazon.com/powertools/typescript/1.18.0/utilities/idempotency/) — HIGH confidence
+- [Implementing idempotent AWS Lambda functions with Powertools - AWS Blog](https://aws.amazon.com/blogs/compute/implementing-idempotent-aws-lambda-functions-with-powertools-for-aws-lambda-typescript/) — HIGH confidence
+- [StartMessageMoveTask SQS API Reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_StartMessageMoveTask.html) — HIGH confidence
+- [SQS DLQ Redrive configuration guide](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-configure-dead-letter-queue-redrive.html) — HIGH confidence
+- [Amazon SQS and AWS X-Ray](https://docs.aws.amazon.com/xray/latest/devguide/xray-services-sqs.html) — HIGH confidence (explains SQS trace topology and disconnected node behavior)
+- [How to reprocess Lambda DLQ messages on-demand - Yan Cui](https://theburningmonk.com/2024/01/how-would-you-reprocess-lambda-dead-letter-queue-messages-on-demand/) — MEDIUM confidence (community source; StartMessageMoveTask limitation for Lambda DLQs verified against AWS API docs)
+- [Parser (Zod) - Powertools for AWS Lambda (TypeScript)](https://docs.aws.amazon.com/powertools/typescript/2.1.1/utilities/parser/) — HIGH confidence
+- Codebase direct analysis: `infra/lib/stacks/session-stack.ts`, all 5 pipeline handler files, `backend/package.json` — HIGH confidence
 
 ---
-
-*Architecture research for: VideoNowAndLater v1.5 Pipeline Reliability, Moderation & Upload Experience*
-*Researched: 2026-03-10*
+*Architecture research for: VideoNowAndLater v1.7 Event Hardening & UI Polish*
+*Researched: 2026-03-12*

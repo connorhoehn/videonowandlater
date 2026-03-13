@@ -1,6 +1,5 @@
 {
   "mode": "yolo",
-  "depth": "comprehensive",
   "parallelization": true,
   "commit_docs": true,
   "model_profile": "quality",
@@ -10,5 +9,6 @@
     "verifier": true,
     "auto_advance": false,
     "_auto_chain_active": false
-  }
+  },
+  "granularity": "fine"
 }

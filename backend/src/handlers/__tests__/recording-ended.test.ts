@@ -775,7 +775,7 @@ describe('recording-ended handler', () => {
             'detail': {
               channel_name: 'Valid Channel',
               stream_id: 'st_valid_stream',
-              recording_status: 'ACTIVE',
+              recording_status: 'Recording End',
               recording_s3_bucket_name: 'my-bucket',
               recording_s3_key_prefix: 'prefix/',
               recording_duration_ms: 100000,

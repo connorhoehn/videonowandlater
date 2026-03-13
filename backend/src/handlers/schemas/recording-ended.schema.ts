@@ -6,7 +6,7 @@ import { z } from 'zod';
 const BroadcastRecordingEndedSchema = z.object({
   channel_name: z.string(),
   stream_id: z.string(),
-  recording_status: z.enum(['ACTIVE', 'STOPPED', 'FAILED']),
+  recording_status: z.enum(['Recording End', 'Recording End Failure']),
   recording_s3_bucket_name: z.string(),
   recording_s3_key_prefix: z.string(),
   recording_duration_ms: z.number().nonnegative(),

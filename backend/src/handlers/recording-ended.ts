@@ -12,6 +12,7 @@ import type { Subsegment } from 'aws-xray-sdk-core';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand as UpdateCommandDirect, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { RecordingEndedDetailSchema, type RecordingEndedDetail } from './schemas/recording-ended.schema';
 import {
   updateSessionStatus,
   updateRecordingMetadata,
@@ -49,8 +50,13 @@ interface StageParticipantRecordingEndDetail {
   recording_duration_ms: number;
 }
 
+// Type guard for broadcast/hangout events (non-recovery)
+function isBroadcastOrHangoutEvent(detail: any): detail is (BroadcastRecordingEndDetail | StageParticipantRecordingEndDetail) {
+  return 'recording_s3_bucket_name' in detail && 'recording_duration_ms' in detail;
+}
+
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>,
+  event: EventBridgeEvent<string, RecordingEndedDetail>,
   tracer: Tracer,
   docClient: DynamoDBDocumentClient,
   mediaConvertClient: MediaConvertClient
@@ -67,8 +73,8 @@ async function processEvent(
 
   // Recovery event path: dispatched by scan-stuck-sessions.ts for stalled pipeline sessions.
   // Recovery events use source 'custom.vnl' and carry session context in event.detail directly.
-  if (event.detail?.recoveryAttempt === true) {
-    const recoverySessionId = event.detail.sessionId as string | undefined;
+  if ('recoveryAttempt' in event.detail && event.detail.recoveryAttempt === true) {
+    const recoverySessionId = (event.detail as any).sessionId as string | undefined;
     if (!recoverySessionId) {
       logger.error('Recovery event missing sessionId in detail');
       return;
@@ -76,7 +82,7 @@ async function processEvent(
     tracer.putAnnotation('sessionId', recoverySessionId);
     logger.appendPersistentKeys({ sessionId: recoverySessionId });
     logger.info('Pipeline stage entered (recovery)', {
-      recoveryAttemptCount: event.detail.recoveryAttemptCount,
+      recoveryAttemptCount: (event.detail as any).recoveryAttemptCount,
     });
 
     // Re-submit MediaConvert using stored recordingHlsUrl from session.
@@ -252,6 +258,10 @@ async function processEvent(
 
     try {
       // Validate required event fields
+      if (!isBroadcastOrHangoutEvent(event.detail)) {
+        throw new Error('Invalid event detail: not a broadcast or hangout event');
+      }
+
       recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
       recordingsBucket = event.detail.recording_s3_bucket_name;
       recordingDuration = event.detail.recording_duration_ms;
@@ -279,7 +289,8 @@ async function processEvent(
       }
 
       // recording_status field only exists on broadcast events; Stage "Recording End" events are always successful
-      finalStatus = event.detail.recording_status === 'Recording End Failure'
+      const detail = event.detail as any;
+      finalStatus = detail.recording_status === 'Recording End Failure'
         ? 'failed'
         : 'available';
 
@@ -292,7 +303,7 @@ async function processEvent(
 
       logger.info('Recording metadata updated:', {
         sessionId,
-        recordingDuration: event.detail.recording_duration_ms,
+        recordingDuration: recordingDuration,
         recordingStatus: finalStatus,
       });
     } catch (metadataError: any) {
@@ -491,7 +502,30 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 
       tracer.putAnnotation('pipelineStage', 'recording-ended');
 
-      await processEvent(ebEvent, tracer, docClient, mediaConvertClient);
+      // Validate EventBridge envelope
+      if (!ebEvent.detail) {
+        logger.error('Missing EventBridge detail field', { messageId: record.messageId });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate detail schema
+      const detailResult = RecordingEndedDetailSchema.safeParse(ebEvent.detail);
+      if (!detailResult.success) {
+        const fieldErrors = detailResult.error.flatten().fieldErrors;
+        logger.error('Event validation failed', {
+          messageId: record.messageId,
+          handler: 'recording-ended',
+          validationErrors: Object.entries(fieldErrors).map(([field, messages]) => ({
+            field,
+            issues: messages,
+          })),
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      await processEvent(ebEvent as EventBridgeEvent<string, RecordingEndedDetail>, tracer, docClient, mediaConvertClient);
     } catch (err: any) {
       tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {

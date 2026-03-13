@@ -14,9 +14,9 @@
 
 ### Validation
 
-- [ ] **VALID-01**: All 5 pipeline handlers validate required event fields with Zod at the start of processEvent() before any side effects
-- [ ] **VALID-02**: Schema validation failures route the event to DLQ (via batchItemFailures) without triggering SQS retries
-- [ ] **VALID-03**: start-transcribe error handling fixed — transient Transcribe API errors throw and trigger SQS retry instead of being silently swallowed
+- [x] **VALID-01**: All 5 pipeline handlers validate required event fields with Zod at the start of processEvent() before any side effects
+- [x] **VALID-02**: Schema validation failures route the event to DLQ (via batchItemFailures) without triggering SQS retries
+- [x] **VALID-03**: start-transcribe error handling fixed — transient Transcribe API errors throw and trigger SQS retry instead of being silently swallowed
 - [ ] **VALID-04**: Validation failures log structured error details (field name, received value, handler name) via Powertools Logger
 
 ### Idempotency
@@ -83,9 +83,9 @@
 | TRACE-02 | Phase 36 | Complete |
 | TRACE-03 | Phase 36 | Complete |
 | TRACE-04 | Phase 36 | Complete |
-| VALID-01 | Phase 37 | Pending |
-| VALID-02 | Phase 37 | Pending |
-| VALID-03 | Phase 37 | Pending |
+| VALID-01 | Phase 37 | Complete |
+| VALID-02 | Phase 37 | Complete |
+| VALID-03 | Phase 37 | Complete |
 | VALID-04 | Phase 37 | Pending |
 | IDEM-01 | Phase 38 | Pending |
 | IDEM-02 | Phase 38 | Pending |

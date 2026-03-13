@@ -129,7 +129,7 @@ Plans:
 - [x] 037-01-PLAN.md — TDD: Define Zod schemas + validation test cases (Wave 0 contracts) — completed 2026-03-13
 - [x] 037-02-PLAN.md — Implement validation in recording-ended + transcode-completed (Wave 1) — completed 2026-03-13
 - [x] 037-03-PLAN.md — Implement validation in transcribe-completed + store-summary + on-mediaconvert-complete (Wave 1) — completed 2026-03-13
-- [ ] 037-04-PLAN.md — Fix start-transcribe transient error bug + implement validation (Wave 2)
+- [x] 037-04-PLAN.md — Fix start-transcribe transient error bug + implement validation (Wave 2) — completed 2026-03-13
 
 ### Phase 38: Idempotency Gap Coverage
 **Goal**: The two remaining pipeline handlers without idempotency guards (transcribe-completed and store-summary) safely handle duplicate SQS deliveries without re-executing expensive operations
@@ -195,7 +195,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 36. X-Ray Distributed Tracing | v1.7 | 4/4 | Complete | 2026-03-12 |
-| 37. Event Schema Validation | v1.7 | 0/4 | Not started | - |
+| 37. Event Schema Validation | v1.7 | 4/4 | Complete | 2026-03-13 |
 | 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
 | 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |

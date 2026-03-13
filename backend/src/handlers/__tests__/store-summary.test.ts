@@ -906,4 +906,142 @@ describe('store-summary handler', () => {
       expect.objectContaining({ aiSummaryStatus: 'available' })
     );
   });
+
+  // =========================================================================
+  // Validation Failure Tests (Plan 01)
+  // =========================================================================
+
+  it('should add invalid event to batchItemFailures without calling Bedrock SDK', async () => {
+    const result = await handler(makeSqsEvent({
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'Transcript Stored',
+      'source': 'custom.vnl',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': [],
+      'detail': {
+        // Missing required transcriptS3Uri field
+        sessionId: 'test-session',
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+    // Verify Bedrock SDK was NOT called
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+  });
+
+  it('should handle multiple records with one invalid', async () => {
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce('Valid transcript'),
+      },
+    });
+
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          output: {
+            message: {
+              content: [{ type: 'text', text: 'Valid summary' }],
+            },
+          },
+          usage: { inputTokens: 100, outputTokens: 50 },
+        })
+      ),
+    });
+
+    const result = await handler({
+      Records: [
+        {
+          messageId: 'valid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'valid-event-id',
+            'detail-type': 'Transcript Stored',
+            'source': 'custom.vnl',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              sessionId: 'valid-session',
+              transcriptS3Uri: 's3://bucket/valid/transcript.json',
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-store-summary',
+          awsRegion: 'us-east-1',
+        },
+        {
+          messageId: 'invalid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'invalid-event-id',
+            'detail-type': 'Transcript Stored',
+            'source': 'custom.vnl',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              // Missing transcriptS3Uri
+              sessionId: 'invalid-session',
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-store-summary',
+          awsRegion: 'us-east-1',
+        },
+      ],
+    });
+
+    // One invalid, one valid
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('invalid-message-id');
+  });
+
+  it('should handle invalid JSON in record body', async () => {
+    const result = await handler({
+      Records: [{
+        messageId: 'malformed-json-id',
+        receiptHandle: 'test-receipt-handle',
+        body: 'not valid json {{{',
+        attributes: {
+          ApproximateReceiveCount: '1',
+          SentTimestamp: '1234567890',
+          SenderId: 'test-sender',
+          ApproximateFirstReceiveTimestamp: '1234567890',
+        },
+        messageAttributes: {},
+        md5OfBody: 'test-md5',
+        eventSource: 'aws:sqs',
+        eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-store-summary',
+        awsRegion: 'us-east-1',
+      }],
+    });
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('malformed-json-id');
+  });
 });

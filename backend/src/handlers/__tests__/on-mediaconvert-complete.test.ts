@@ -703,4 +703,70 @@ describe('on-mediaconvert-complete handler', () => {
       consoleSpy.mockRestore();
     });
   });
+
+  // =========================================================================
+  // Validation Failure Tests (Plan 01)
+  // =========================================================================
+
+  it('should handle missing jobName gracefully', async () => {
+    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      source: 'aws.mediaconvert',
+      detailType: 'MediaConvert Job State Change',
+      detail: {
+        // Missing required jobName
+        jobId: 'job-missing-name',
+        status: 'COMPLETE',
+      },
+      time: new Date().toISOString(),
+      region: 'us-east-1',
+      account: '123456789012',
+      id: 'event-missing-jobname',
+      resources: [],
+    } as any;
+
+    // Handler should throw due to missing required field
+    await expect(handler(event)).rejects.toThrow();
+  });
+
+  it('should handle missing status gracefully', async () => {
+    const sessionId = 'test-session-missing-status';
+    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      source: 'aws.mediaconvert',
+      detailType: 'MediaConvert Job State Change',
+      detail: {
+        jobName: `vnl-${sessionId}-1234567890`,
+        jobId: 'job-missing-status',
+        // Missing required status
+      },
+      time: new Date().toISOString(),
+      region: 'us-east-1',
+      account: '123456789012',
+      id: 'event-missing-status',
+      resources: [],
+    } as any;
+
+    // Handler should throw due to missing required field
+    await expect(handler(event)).rejects.toThrow();
+  });
+
+  it('should handle invalid status enum', async () => {
+    const sessionId = 'test-session-invalid-status';
+    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      source: 'aws.mediaconvert',
+      detailType: 'MediaConvert Job State Change',
+      detail: {
+        jobName: `vnl-${sessionId}-1234567890`,
+        jobId: 'job-invalid-status',
+        status: 'INVALID_STATUS', // Not one of the enum values
+      },
+      time: new Date().toISOString(),
+      region: 'us-east-1',
+      account: '123456789012',
+      id: 'event-invalid-status',
+      resources: [],
+    } as any;
+
+    // Handler should throw due to invalid enum value
+    await expect(handler(event)).rejects.toThrow();
+  });
 });

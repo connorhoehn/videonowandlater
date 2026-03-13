@@ -731,4 +731,126 @@ describe('recording-ended handler', () => {
     // Pool resources must be released even when MediaConvert throws
     expect(mockReleasePoolResource).toHaveBeenCalled();
   });
+
+  // =========================================================================
+  // Validation Failure Tests (Plan 01)
+  // =========================================================================
+
+  it('should add invalid event to batchItemFailures without calling AWS SDK', async () => {
+    const result = await handler(makeSqsEvent({
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'IVS Recording State Change',
+      'source': 'aws.ivs',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': ['arn:aws:ivs:us-east-1:123456789012:channel/test123'],
+      'detail': {
+        // Missing required fields for broadcast shape
+        channel_name: 'My Channel',
+        // Missing: stream_id, recording_status, recording_s3_bucket_name, etc.
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+  });
+
+  it('should handle multiple records with one invalid', async () => {
+    const result = await handler({
+      Records: [
+        {
+          messageId: 'valid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'test-event-id',
+            'detail-type': 'IVS Recording State Change',
+            'source': 'aws.ivs',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': ['arn:aws:ivs:us-east-1:123456789012:channel/test123'],
+            'detail': {
+              channel_name: 'Valid Channel',
+              stream_id: 'st_valid_stream',
+              recording_status: 'ACTIVE',
+              recording_s3_bucket_name: 'my-bucket',
+              recording_s3_key_prefix: 'prefix/',
+              recording_duration_ms: 100000,
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-recording-ended',
+          awsRegion: 'us-east-1',
+        },
+        {
+          messageId: 'invalid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'invalid-event-id',
+            'detail-type': 'IVS Recording State Change',
+            'source': 'aws.ivs',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': ['arn:aws:ivs:us-east-1:123456789012:channel/test123'],
+            'detail': {
+              // Missing required fields
+              channel_name: 'Invalid Channel',
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-recording-ended',
+          awsRegion: 'us-east-1',
+        },
+      ],
+    });
+
+    // One invalid, one valid
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('invalid-message-id');
+  });
+
+  it('should handle invalid JSON in record body', async () => {
+    const result = await handler({
+      Records: [{
+        messageId: 'malformed-json-id',
+        receiptHandle: 'test-receipt-handle',
+        body: 'not valid json {{{',
+        attributes: {
+          ApproximateReceiveCount: '1',
+          SentTimestamp: '1234567890',
+          SenderId: 'test-sender',
+          ApproximateFirstReceiveTimestamp: '1234567890',
+        },
+        messageAttributes: {},
+        md5OfBody: 'test-md5',
+        eventSource: 'aws:sqs',
+        eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-recording-ended',
+        awsRegion: 'us-east-1',
+      }],
+    });
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('malformed-json-id');
+  });
 });

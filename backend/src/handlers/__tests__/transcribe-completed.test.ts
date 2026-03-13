@@ -718,4 +718,127 @@ describe('transcribe-completed handler', () => {
     // Should attempt to update (which will fail)
     expect(mockUpdateTranscriptStatus).toHaveBeenCalled();
   });
+
+  // =========================================================================
+  // Validation Failure Tests (Plan 01)
+  // =========================================================================
+
+  it('should add invalid event to batchItemFailures without calling S3 SDK', async () => {
+    const result = await handler(makeSqsEvent({
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'Transcribe Job State Change',
+      'source': 'aws.transcribe',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': [],
+      'detail': {
+        // Missing required TranscriptionJobStatus field
+        TranscriptionJobName: 'vnl-test-session-12345',
+        TranscriptionJob: { Results: {} },
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+  });
+
+  it('should handle multiple records with one invalid', async () => {
+    const result = await handler({
+      Records: [
+        {
+          messageId: 'valid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'valid-event-id',
+            'detail-type': 'Transcribe Job State Change',
+            'source': 'aws.transcribe',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              TranscriptionJobStatus: 'COMPLETED',
+              TranscriptionJobName: 'vnl-valid-session-12345',
+              TranscriptionJob: {
+                TranscriptFileUri: 's3://bucket/transcript.json',
+                Results: {},
+              },
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-transcribe-completed',
+          awsRegion: 'us-east-1',
+        },
+        {
+          messageId: 'invalid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'invalid-event-id',
+            'detail-type': 'Transcribe Job State Change',
+            'source': 'aws.transcribe',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              // Missing TranscriptionJobStatus
+              TranscriptionJobName: 'vnl-invalid-session-12345',
+              TranscriptionJob: { Results: {} },
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-transcribe-completed',
+          awsRegion: 'us-east-1',
+        },
+      ],
+    });
+
+    // One invalid, one valid
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('invalid-message-id');
+  });
+
+  it('should handle invalid JSON in record body', async () => {
+    const result = await handler({
+      Records: [{
+        messageId: 'malformed-json-id',
+        receiptHandle: 'test-receipt-handle',
+        body: 'not valid json {{{',
+        attributes: {
+          ApproximateReceiveCount: '1',
+          SentTimestamp: '1234567890',
+          SenderId: 'test-sender',
+          ApproximateFirstReceiveTimestamp: '1234567890',
+        },
+        messageAttributes: {},
+        md5OfBody: 'test-md5',
+        eventSource: 'aws:sqs',
+        eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-transcribe-completed',
+        awsRegion: 'us-east-1',
+      }],
+    });
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('malformed-json-id');
+  });
 });

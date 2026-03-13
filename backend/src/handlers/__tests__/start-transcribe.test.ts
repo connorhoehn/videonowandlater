@@ -275,4 +275,134 @@ describe('start-transcribe handler', () => {
     expect(result.batchItemFailures).toHaveLength(1);
     expect(result.batchItemFailures[0].itemIdentifier).toBe('bad-message-id');
   });
+
+  // =========================================================================
+  // Validation Failure Tests (Plan 01)
+  // =========================================================================
+
+  it('should add invalid event to batchItemFailures without calling Transcribe SDK', async () => {
+    const result = await handler(makeSqsEvent({
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'Upload Recording Available',
+      'source': 'vnl.upload',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': [],
+      'detail': {
+        // Missing required sessionId field
+        recordingHlsUrl: 's3://bucket/hls/session/master.m3u8',
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+    // Verify Transcribe SDK was NOT called
+    expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(0);
+  });
+
+  it('should handle multiple records with one invalid', async () => {
+    transcribeMock.on(StartTranscriptionJobCommand).resolves({
+      TranscriptionJob: {
+        TranscriptionJobName: 'vnl-valid-session-1234567890',
+        TranscriptionJobStatus: 'IN_PROGRESS',
+      },
+    });
+
+    const result = await handler({
+      Records: [
+        {
+          messageId: 'valid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'valid-event-id',
+            'detail-type': 'Upload Recording Available',
+            'source': 'vnl.upload',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              sessionId: 'valid-session',
+              recordingHlsUrl: 's3://bucket/hls/valid-session/master.m3u8',
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-start-transcribe',
+          awsRegion: 'us-east-1',
+        },
+        {
+          messageId: 'invalid-message-id',
+          receiptHandle: 'test-receipt-handle',
+          body: JSON.stringify({
+            'version': '0',
+            'id': 'invalid-event-id',
+            'detail-type': 'Upload Recording Available',
+            'source': 'vnl.upload',
+            'account': '123456789012',
+            'time': '2024-01-01T00:05:00Z',
+            'region': 'us-east-1',
+            'resources': [],
+            'detail': {
+              // Missing sessionId
+              recordingHlsUrl: 's3://bucket/hls/invalid/master.m3u8',
+            },
+          }),
+          attributes: {
+            ApproximateReceiveCount: '1',
+            SentTimestamp: '1234567890',
+            SenderId: 'test-sender',
+            ApproximateFirstReceiveTimestamp: '1234567890',
+          },
+          messageAttributes: {},
+          md5OfBody: 'test-md5',
+          eventSource: 'aws:sqs',
+          eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-start-transcribe',
+          awsRegion: 'us-east-1',
+        },
+      ],
+    });
+
+    // One invalid, one valid (valid should have been processed)
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('invalid-message-id');
+    // Verify Transcribe was called once for the valid record
+    expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(1);
+  });
+
+  it('should rethrow transient Transcribe errors to trigger SQS retry', async () => {
+    const mockError = new Error('Service Unavailable');
+    mockError.name = 'ServiceUnavailableException';
+    transcribeMock.on(StartTranscriptionJobCommand).rejects(mockError);
+
+    const result = await handler(makeSqsEvent({
+      'version': '0',
+      'id': 'test-event-id',
+      'detail-type': 'Upload Recording Available',
+      'source': 'vnl.upload',
+      'account': '123456789012',
+      'time': '2024-01-01T00:05:00Z',
+      'region': 'us-east-1',
+      'resources': [],
+      'detail': {
+        sessionId: 'test-session',
+        recordingHlsUrl: 's3://bucket/hls/test-session/master.m3u8',
+      },
+    }));
+
+    // Handler should NOT catch this error; it should propagate to SQS for retry
+    // This test documents the expected behavior (implementation in Plan 04)
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+  });
 });

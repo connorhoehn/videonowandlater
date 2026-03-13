@@ -126,9 +126,9 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 037-01-PLAN.md — TDD: Define Zod schemas + validation test cases (Wave 0 contracts)
-- [ ] 037-02-PLAN.md — Implement validation in recording-ended + transcode-completed (Wave 1)
-- [ ] 037-03-PLAN.md — Implement validation in transcribe-completed + store-summary + on-mediaconvert-complete (Wave 1)
+- [x] 037-01-PLAN.md — TDD: Define Zod schemas + validation test cases (Wave 0 contracts) — completed 2026-03-13
+- [x] 037-02-PLAN.md — Implement validation in recording-ended + transcode-completed (Wave 1) — completed 2026-03-13
+- [x] 037-03-PLAN.md — Implement validation in transcribe-completed + store-summary + on-mediaconvert-complete (Wave 1) — completed 2026-03-13
 - [ ] 037-04-PLAN.md — Fix start-transcribe transient error bug + implement validation (Wave 2)
 
 ### Phase 38: Idempotency Gap Coverage

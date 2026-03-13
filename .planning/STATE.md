@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: executing
-stopped_at: Completed 036-04-PLAN.md
-last_updated: "2026-03-12T19:08:44.945Z"
-last_activity: "2026-03-12 — Completed 036-04: CDK Tracing.ACTIVE deployed + X-Ray service map verified for all 5 pipeline Lambda functions; Phase 36 complete"
+stopped_at: Completed 037-02-PLAN.md
+last_updated: "2026-03-13T14:30:00.000Z"
+last_activity: "2026-03-13 — Completed 037-02: Zod validation at SQS boundaries for recording-ended and transcode-completed handlers (2 of 4 plans)"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 37 of 41 (Event Schema Validation) — IN PROGRESS
-Plan: 3/4 complete (037-03-PLAN.md done)
-Status: Plan 03 complete — Zod validation at SQS boundaries for 3 downstream handlers
-Last activity: 2026-03-13 — Completed 037-03: CDK Tracing.ACTIVE deployed + X-Ray service map verified for all 5 pipeline Lambda functions; Phase 36 complete
+Plan: 2/4 complete (037-02-PLAN.md done)
+Status: Plan 02 complete — Zod validation implemented for recording-ended and transcode-completed handlers
+Last activity: 2026-03-13 — Completed 037-02: Recording-ended and transcode-completed handlers now validate events at SQS boundary with structured error logging
 
-Progress: [██████████] 100%
+Progress: [████████░░] 50%
 
 ## Performance Metrics
 

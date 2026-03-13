@@ -1,15 +1,17 @@
 /**
- * Lambda handler for EventBridge MediaConvert job completion events
+ * SQS-wrapped Lambda handler for EventBridge MediaConvert job completion events
  * Updates session recording metadata when MediaConvert encoding completes
  * Publishes an explicit EventBridge event to trigger Phase 19 transcription pipeline
+ * Receives EventBridge events via SQS queue for at-least-once delivery with DLQ support
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { getSessionById, updateSessionRecording } from '../repositories/session-repository';
+import { MediaConvertCompleteDetailSchema, type MediaConvertCompleteDetail } from './schemas/on-mediaconvert-complete.schema';
 
 const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 const logger = new Logger({
@@ -18,20 +20,13 @@ const logger = new Logger({
 });
 const eventBridgeClient = tracer.captureAWSv3Client(new EventBridgeClient({}));
 
-interface MediaConvertJobDetail {
-  jobName: string;
-  jobId: string;
-  status: 'SUBMITTED' | 'PROGRESSING' | 'COMPLETE' | 'CANCELED' | 'ERROR';
-  outputGroupDetails?: Array<{
-    playlistFile?: string; // e.g., "master.m3u8"
-  }>;
-}
+// MediaConvertCompleteDetail is imported from schema
 
-export const handler = async (
-  event: EventBridgeEvent<'MediaConvert Job State Change', MediaConvertJobDetail>
-): Promise<void> => {
+async function processEvent(
+  event: EventBridgeEvent<string, MediaConvertCompleteDetail>
+): Promise<void> {
   const segment = tracer.getSegment();
-  const subsegment = segment?.addNewSubsegment('## handler') as Subsegment | undefined;
+  const subsegment = segment?.addNewSubsegment('## processEvent') as Subsegment | undefined;
   if (subsegment) tracer.setSegment(subsegment);
 
   try {
@@ -108,10 +103,79 @@ export const handler = async (
     }
   } catch (error) {
     tracer.addErrorAsMetadata(error as Error);
-    console.error('on-mediaconvert-complete error:', error);
-    throw error; // Propagate to EventBridge for retry
+    logger.error('on-mediaconvert-complete error:', { error: error instanceof Error ? error.message : String(error) });
+    throw error; // Propagate for SQS retry
   } finally {
     subsegment?.close();
     if (segment) tracer.setSegment(segment);
   }
+}
+
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+  const failures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    const segment = tracer.getSegment();
+    const subsegment = segment?.addNewSubsegment(`## ${record.messageId}`) as Subsegment | undefined;
+    if (subsegment) tracer.setSegment(subsegment);
+
+    try {
+      // Parse JSON from SQS record body
+      let ebEvent: any;
+      try {
+        ebEvent = JSON.parse(record.body);
+      } catch (parseError: any) {
+        logger.error('Failed to parse SQS record body as JSON', {
+          messageId: record.messageId,
+          error: parseError.message,
+          handler: 'on-mediaconvert-complete',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate EventBridge envelope
+      if (!ebEvent.detail) {
+        logger.error('EventBridge event missing detail field', {
+          messageId: record.messageId,
+          handler: 'on-mediaconvert-complete',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate MediaConvertCompleteDetail schema
+      const parseResult = MediaConvertCompleteDetailSchema.safeParse(ebEvent.detail);
+      if (!parseResult.success) {
+        const fieldErrors = parseResult.error.flatten().fieldErrors;
+        logger.error('Invalid MediaConvert job detail', {
+          messageId: record.messageId,
+          handler: 'on-mediaconvert-complete',
+          fieldErrors,
+          detail: JSON.stringify(ebEvent.detail),
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validation passed — call processEvent with typed detail
+      const typedEvent: EventBridgeEvent<string, MediaConvertCompleteDetail> = {
+        ...ebEvent,
+        detail: parseResult.data,
+      };
+      await processEvent(typedEvent);
+    } catch (err: any) {
+      tracer.addErrorAsMetadata(err as Error);
+      logger.error('Failed to process SQS record', {
+        messageId: record.messageId,
+        error: err.message,
+      });
+      failures.push({ itemIdentifier: record.messageId });
+    } finally {
+      subsegment?.close();
+      if (segment) tracer.setSegment(segment);
+    }
+  }
+
+  return { batchItemFailures: failures };
 };

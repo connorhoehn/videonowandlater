@@ -13,6 +13,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { updateSessionAiSummary } from '../repositories/session-repository';
+import { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './schemas/store-summary.schema';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -25,13 +26,10 @@ const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient({
   region: process.env.BEDROCK_REGION || process.env.AWS_REGION,
 }));
 
-interface TranscriptStoreDetail {
-  sessionId: string;
-  transcriptS3Uri: string;
-}
+// TranscriptStoreDetail is imported from schema
 
 async function processEvent(
-  event: EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>,
+  event: EventBridgeEvent<string, TranscriptStoreDetail>,
   tracer: Tracer
 ): Promise<void> {
   const { sessionId, transcriptS3Uri } = event.detail;
@@ -191,8 +189,50 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
     if (subsegment) tracer.setSegment(subsegment);
 
     try {
-      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<'Transcript Stored', TranscriptStoreDetail>;
-      await processEvent(ebEvent, tracer);
+      // Parse JSON from SQS record body
+      let ebEvent: any;
+      try {
+        ebEvent = JSON.parse(record.body);
+      } catch (parseError: any) {
+        logger.error('Failed to parse SQS record body as JSON', {
+          messageId: record.messageId,
+          error: parseError.message,
+          handler: 'store-summary',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate EventBridge envelope
+      if (!ebEvent.detail) {
+        logger.error('EventBridge event missing detail field', {
+          messageId: record.messageId,
+          handler: 'store-summary',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate TranscriptStoreDetail schema
+      const parseResult = TranscriptStoreDetailSchema.safeParse(ebEvent.detail);
+      if (!parseResult.success) {
+        const fieldErrors = parseResult.error.flatten().fieldErrors;
+        logger.error('Invalid transcript store detail', {
+          messageId: record.messageId,
+          handler: 'store-summary',
+          fieldErrors,
+          detail: JSON.stringify(ebEvent.detail),
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validation passed — call processEvent with typed detail
+      const typedEvent: EventBridgeEvent<string, TranscriptStoreDetail> = {
+        ...ebEvent,
+        detail: parseResult.data,
+      };
+      await processEvent(typedEvent, tracer);
     } catch (err: any) {
       tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {

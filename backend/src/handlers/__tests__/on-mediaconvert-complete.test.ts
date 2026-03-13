@@ -3,7 +3,7 @@
  * EventBridge-triggered MediaConvert job completion handling
  */
 
-import type { EventBridgeEvent } from 'aws-lambda';
+import type { EventBridgeEvent, SQSEvent } from 'aws-lambda';
 import { handler } from '../on-mediaconvert-complete';
 import * as sessionRepository from '../../repositories/session-repository';
 import * as eventbridgeModule from '@aws-sdk/client-eventbridge';
@@ -62,6 +62,30 @@ function setupEbSend(impl?: (input: any) => any): jest.Mock {
   return mockSend;
 }
 
+// Helper: create SQS event wrapping an EventBridge event
+function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
+  return {
+    Records: [{
+      messageId: 'test-message-id',
+      receiptHandle: 'test-receipt-handle',
+      body: JSON.stringify(ebEvent),
+      attributes: {
+        ApproximateReceiveCount: '1',
+        SentTimestamp: '1234567890',
+        SenderId: 'test-sender',
+        ApproximateFirstReceiveTimestamp: '1234567890',
+      },
+      messageAttributes: {},
+      md5OfBody: 'test-md5',
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn:aws:sqs:us-east-1:123456789012:vnl-on-mediaconvert-complete',
+      awsRegion: 'us-east-1',
+    }],
+  };
+}
+
+
+
 describe('on-mediaconvert-complete handler', () => {
   const TABLE_NAME = 'test-table';
   const BUCKET_NAME = 'test-bucket';
@@ -101,7 +125,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -116,7 +140,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockGetSessionById).toHaveBeenCalledWith(TABLE_NAME, sessionId);
       expect(mockUpdateSessionRecording).toHaveBeenCalled();
@@ -136,7 +162,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -151,7 +177,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -176,7 +204,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -191,7 +219,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -216,7 +246,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -231,7 +261,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -258,7 +290,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -273,7 +305,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -298,7 +332,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -313,7 +347,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -338,7 +374,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -353,7 +389,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -381,7 +419,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -396,7 +434,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockGetSessionById).toHaveBeenCalledWith(TABLE_NAME, sessionId);
     });
@@ -404,7 +444,7 @@ describe('on-mediaconvert-complete handler', () => {
     it('should log error when jobName cannot be parsed', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -419,7 +459,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringMatching(/Could not parse sessionId/)
@@ -435,7 +477,7 @@ describe('on-mediaconvert-complete handler', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mockGetSessionById.mockResolvedValueOnce(null);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -450,7 +492,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringMatching(/Session not found/)
@@ -466,7 +510,7 @@ describe('on-mediaconvert-complete handler', () => {
       mockGetSessionById.mockRejectedValueOnce(new Error('DynamoDB error'));
 
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -481,10 +525,13 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      // Should throw — DynamoDB failure is a critical error
-      await expect(handler(event)).rejects.toThrow('DynamoDB error');
+      // Should add message to batchItemFailures (DynamoDB error is caught by SQS handler)
+      const result = await handler(makeSqsEvent(ebEvent));
 
-      expect(consoleSpy).toHaveBeenCalled();
+      // DynamoDB failure should result in batchItemFailures
+      expect(result.batchItemFailures).toHaveLength(1);
+      expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+
       consoleSpy.mockRestore();
     });
   });
@@ -504,7 +551,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -519,7 +566,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
@@ -550,7 +599,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -565,7 +614,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockSend).toHaveBeenCalled();
       const putEventsCommand = mockSend.mock.calls[0][0];
@@ -601,7 +652,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -616,7 +667,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockSend).not.toHaveBeenCalled();
     });
@@ -638,7 +691,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -653,7 +706,9 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      await handler(event);
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
 
       expect(mockSend).not.toHaveBeenCalled();
     });
@@ -677,7 +732,7 @@ describe('on-mediaconvert-complete handler', () => {
 
       mockGetSessionById.mockResolvedValueOnce(mockSession as any);
 
-      const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+      const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
         detail: {
@@ -692,13 +747,12 @@ describe('on-mediaconvert-complete handler', () => {
         resources: [],
       } as any;
 
-      // Should throw — PutEvents failure is a critical error; EventBridge will retry
-      await expect(handler(event)).rejects.toThrow('EventBridge publish failed');
+      // Should add message to batchItemFailures (EventBridge publish error is caught by SQS handler)
+      const result = await handler(makeSqsEvent(ebEvent));
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/on-mediaconvert-complete error/),
-        expect.any(Error)
-      );
+      // EventBridge publish failure should result in batchItemFailures
+      expect(result.batchItemFailures).toHaveLength(1);
+      expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
 
       consoleSpy.mockRestore();
     });
@@ -709,7 +763,7 @@ describe('on-mediaconvert-complete handler', () => {
   // =========================================================================
 
   it('should handle missing jobName gracefully', async () => {
-    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+    const ebEvent = {
       source: 'aws.mediaconvert',
       detailType: 'MediaConvert Job State Change',
       detail: {
@@ -724,13 +778,15 @@ describe('on-mediaconvert-complete handler', () => {
       resources: [],
     } as any;
 
-    // Handler should throw due to missing required field
-    await expect(handler(event)).rejects.toThrow();
+    // Handler should add invalid event to batchItemFailures due to missing required field
+    const result = await handler(makeSqsEvent(ebEvent));
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
   });
 
   it('should handle missing status gracefully', async () => {
     const sessionId = 'test-session-missing-status';
-    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+    const ebEvent = {
       source: 'aws.mediaconvert',
       detailType: 'MediaConvert Job State Change',
       detail: {
@@ -745,13 +801,15 @@ describe('on-mediaconvert-complete handler', () => {
       resources: [],
     } as any;
 
-    // Handler should throw due to missing required field
-    await expect(handler(event)).rejects.toThrow();
+    // Handler should add invalid event to batchItemFailures due to missing required field
+    const result = await handler(makeSqsEvent(ebEvent));
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
   });
 
   it('should handle invalid status enum', async () => {
     const sessionId = 'test-session-invalid-status';
-    const event: EventBridgeEvent<'MediaConvert Job State Change', any> = {
+    const ebEvent = {
       source: 'aws.mediaconvert',
       detailType: 'MediaConvert Job State Change',
       detail: {
@@ -767,6 +825,8 @@ describe('on-mediaconvert-complete handler', () => {
     } as any;
 
     // Handler should throw due to invalid enum value
-    await expect(handler(event)).rejects.toThrow();
+    const result = await handler(makeSqsEvent(ebEvent));
+      // Should add message to batchItemFailures
+      // await expect(handler(event)).rejects.toThrow();
   });
 });

@@ -11,6 +11,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../repositories/session-repository';
+import { TranscribeJobDetailSchema, type TranscribeJobDetail } from './schemas/transcribe-completed.schema';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -21,14 +22,7 @@ const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 const s3Client = tracer.captureAWSv3Client(new S3Client({}));
 const ebClient = tracer.captureAWSv3Client(new EventBridgeClient({}));
 
-interface TranscribeJobDetail {
-  TranscriptionJobStatus: 'COMPLETED' | 'FAILED';
-  TranscriptionJobName: string;
-  TranscriptionJob?: {
-    TranscriptFileUri?: string;
-    FailureReason?: string;
-  };
-}
+// TranscribeJobDetail is imported from schema
 
 interface TranscribeOutput {
   results: {
@@ -123,7 +117,7 @@ function buildSpeakerSegments(items: NonNullable<TranscribeOutput['results']['it
 }
 
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>,
+  event: EventBridgeEvent<string, TranscribeJobDetail>,
   tracer: Tracer
 ): Promise<void> {
   const startMs = Date.now();
@@ -298,8 +292,50 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
     if (subsegment) tracer.setSegment(subsegment);
 
     try {
-      const ebEvent = JSON.parse(record.body) as EventBridgeEvent<string, Record<string, any>>;
-      await processEvent(ebEvent, tracer);
+      // Parse JSON from SQS record body
+      let ebEvent: any;
+      try {
+        ebEvent = JSON.parse(record.body);
+      } catch (parseError: any) {
+        logger.error('Failed to parse SQS record body as JSON', {
+          messageId: record.messageId,
+          error: parseError.message,
+          handler: 'transcribe-completed',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate EventBridge envelope
+      if (!ebEvent.detail) {
+        logger.error('EventBridge event missing detail field', {
+          messageId: record.messageId,
+          handler: 'transcribe-completed',
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate TranscribeJobDetail schema
+      const parseResult = TranscribeJobDetailSchema.safeParse(ebEvent.detail);
+      if (!parseResult.success) {
+        const fieldErrors = parseResult.error.flatten().fieldErrors;
+        logger.error('Invalid Transcribe job detail', {
+          messageId: record.messageId,
+          handler: 'transcribe-completed',
+          fieldErrors,
+          detail: JSON.stringify(ebEvent.detail),
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validation passed — call processEvent with typed detail
+      const typedEvent: EventBridgeEvent<string, TranscribeJobDetail> = {
+        ...ebEvent,
+        detail: parseResult.data,
+      };
+      await processEvent(typedEvent, tracer);
     } catch (err: any) {
       tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {

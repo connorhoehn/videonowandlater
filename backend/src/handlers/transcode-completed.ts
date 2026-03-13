@@ -9,6 +9,7 @@ import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { TranscodeCompletedDetailSchema, type TranscodeCompletedDetail } from './schemas/transcode-completed.schema';
 import { updateTranscriptStatus } from '../repositories/session-repository';
 
 export const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
@@ -32,7 +33,7 @@ interface MediaConvertJobDetail {
 }
 
 async function processEvent(
-  event: EventBridgeEvent<string, Record<string, any>>,
+  event: EventBridgeEvent<string, TranscodeCompletedDetail>,
   tracer: Tracer,
   transcribeClient: TranscribeClient
 ): Promise<void> {
@@ -153,7 +154,30 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 
       tracer.putAnnotation('pipelineStage', 'transcode-completed');
 
-      await processEvent(ebEvent, tracer, transcribeClient);
+      // Validate EventBridge envelope
+      if (!ebEvent.detail) {
+        logger.error('Missing EventBridge detail field', { messageId: record.messageId });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      // Validate detail schema
+      const detailResult = TranscodeCompletedDetailSchema.safeParse(ebEvent.detail);
+      if (!detailResult.success) {
+        const fieldErrors = detailResult.error.flatten().fieldErrors;
+        logger.error('Event validation failed', {
+          messageId: record.messageId,
+          handler: 'transcode-completed',
+          validationErrors: Object.entries(fieldErrors).map(([field, messages]) => ({
+            field,
+            issues: messages,
+          })),
+        });
+        failures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      await processEvent(ebEvent as EventBridgeEvent<string, TranscodeCompletedDetail>, tracer, transcribeClient);
     } catch (err: any) {
       tracer.addErrorAsMetadata(err as Error);
       logger.error('Failed to process SQS record', {

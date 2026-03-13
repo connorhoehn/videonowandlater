@@ -399,16 +399,15 @@ describe('transcode-completed handler', () => {
       'region': 'us-east-1',
       'resources': [],
       'detail': {
-        // Missing required jobName field
-        jobId: 'test-job-id',
+        // Missing required jobId field
         status: 'COMPLETE',
       },
     }));
 
     expect(result.batchItemFailures).toHaveLength(1);
     expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
-    // Verify Transcribe SDK was NOT called
-    expect(TranscribeClient).not.toHaveBeenCalled();
+    // Verify Transcribe SDK send was NOT called (validation failed before processEvent)
+    expect(mockTranscribeSend).not.toHaveBeenCalled();
   });
 
   it('should handle multiple records with one invalid', async () => {
@@ -427,10 +426,14 @@ describe('transcode-completed handler', () => {
             'region': 'us-east-1',
             'resources': [],
             'detail': {
-              jobName: 'vnl-valid-session-123-12345',
               jobId: 'valid-job-id',
               status: 'COMPLETE',
               userMetadata: { sessionId: 'valid-session-123' },
+              outputGroupDetails: [{
+                outputDetails: [{
+                  outputFilePaths: ['s3://transcription-bucket/valid-session-123/recording.mp4'],
+                }],
+              }],
             },
           }),
           attributes: {
@@ -458,8 +461,7 @@ describe('transcode-completed handler', () => {
             'region': 'us-east-1',
             'resources': [],
             'detail': {
-              // Missing jobName
-              jobId: 'invalid-job-id',
+              // Missing required jobId field
               status: 'COMPLETE',
             },
           }),

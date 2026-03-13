@@ -90,8 +90,10 @@ describe('start-transcribe handler', () => {
       },
     }));
 
-    expect(result.batchItemFailures).toHaveLength(0);
-    // Verify no Transcribe job was started (handler returns early on missing fields)
+    // Validation failure — should be added to batchItemFailures for DLQ
+    expect(result.batchItemFailures).toHaveLength(1);
+    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+    // Verify no Transcribe job was started (validation failed, handler returns early)
     expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(0);
   });
 

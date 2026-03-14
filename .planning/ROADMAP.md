@@ -156,11 +156,10 @@ Plans:
   2. Developer can re-drive all messages from a named DLQ back to its source queue with one command, and verify the messages flow through the pipeline by watching X-Ray traces appear
   3. Developer can permanently delete a specific DLQ message by receipt handle after investigation
   4. Developer can run a health-check command that prints the approximate message count for all 5 DLQs in one output
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 39-01: TBD
-- [ ] 39-02: TBD
+- [ ] 039-01-PLAN.md — Four DLQ CLI commands: list, redrive, purge, health (Wave 1-2)
 
 ### Phase 40: UI Polish — Replay & Feed
 **Goal**: The replay viewer transcript panel is fully interactive, the AI summary panel has distinct visual states, and the activity feed cards are complete with thumbnail, duration, and accurate pipeline status

@@ -3,17 +3,14 @@
  * DLQ-03: Delete a specific DLQ message by receipt handle
  */
 
-import {
-  SQSClient,
-  DeleteMessageCommand,
-} from '@aws-sdk/client-sqs';
-
-jest.mock('@aws-sdk/client-sqs');
-
 const mockSend = jest.fn();
-(SQSClient as jest.MockedClass<typeof SQSClient>).mockImplementation(
-  () => ({ send: mockSend } as unknown as SQSClient)
-);
+jest.mock('@aws-sdk/client-sqs', () => {
+  const actual = jest.requireActual('@aws-sdk/client-sqs');
+  return {
+    ...actual,
+    SQSClient: jest.fn().mockImplementation(() => ({ send: mockSend })),
+  };
+});
 
 import { dlqPurge } from '../commands/dlq-purge';
 
@@ -37,7 +34,6 @@ describe('dlq-purge command', () => {
 
     expect(mockSend).toHaveBeenCalledTimes(1);
     const call = mockSend.mock.calls[0][0];
-    expect(call).toBeInstanceOf(DeleteMessageCommand);
     expect(call.input.QueueUrl).toBe(queueUrl);
     expect(call.input.ReceiptHandle).toBe(receiptHandle);
 

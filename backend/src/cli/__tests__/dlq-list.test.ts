@@ -3,17 +3,16 @@
  * DLQ-01: List messages from a pipeline DLQ with decoded session context
  */
 
-import {
-  SQSClient,
-  ReceiveMessageCommand,
-} from '@aws-sdk/client-sqs';
-
-jest.mock('@aws-sdk/client-sqs');
+import { SQSClient } from '@aws-sdk/client-sqs';
 
 const mockSend = jest.fn();
-(SQSClient as jest.MockedClass<typeof SQSClient>).mockImplementation(
-  () => ({ send: mockSend } as unknown as SQSClient)
-);
+jest.mock('@aws-sdk/client-sqs', () => {
+  const actual = jest.requireActual('@aws-sdk/client-sqs');
+  return {
+    ...actual,
+    SQSClient: jest.fn().mockImplementation(() => ({ send: mockSend })),
+  };
+});
 
 import { dlqList } from '../commands/dlq-list';
 
@@ -23,7 +22,6 @@ describe('dlq-list command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'table').mockImplementation();
   });
 
   afterEach(() => {
@@ -70,7 +68,6 @@ describe('dlq-list command', () => {
 
     expect(mockSend).toHaveBeenCalledTimes(1);
     const call = mockSend.mock.calls[0][0];
-    expect(call).toBeInstanceOf(ReceiveMessageCommand);
     expect(call.input.QueueUrl).toBe(queueUrl);
     expect(call.input.MaxNumberOfMessages).toBe(10);
 

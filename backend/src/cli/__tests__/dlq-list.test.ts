@@ -85,6 +85,7 @@ describe('dlq-list command', () => {
 
     const call = mockSend.mock.calls[0][0];
     expect(call.input.MaxNumberOfMessages).toBe(10);
+    expect(call.input.VisibilityTimeout).toBe(0);
     expect(call.input.MessageAttributeNames).toEqual(['All']);
     expect(call.input.AttributeNames).toEqual(['All']);
   });

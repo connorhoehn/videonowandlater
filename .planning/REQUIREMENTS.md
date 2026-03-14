@@ -27,10 +27,10 @@
 
 ### DLQ Tooling
 
-- [ ] **DLQ-01**: Developer can list all messages in any pipeline DLQ via CLI tool with decoded session context (sessionId, event type, error)
-- [ ] **DLQ-02**: Developer can re-drive individual messages or bulk re-drive all messages from a DLQ back to its source queue
-- [ ] **DLQ-03**: Developer can delete a permanently-invalid message from a DLQ after investigation
-- [ ] **DLQ-04**: CLI tool reports approximate message count per DLQ for quick health check across all 5 queues
+- [x] **DLQ-01**: Developer can list all messages in any pipeline DLQ via CLI tool with decoded session context (sessionId, event type, error)
+- [x] **DLQ-02**: Developer can re-drive individual messages or bulk re-drive all messages from a DLQ back to its source queue
+- [x] **DLQ-03**: Developer can delete a permanently-invalid message from a DLQ after investigation
+- [x] **DLQ-04**: CLI tool reports approximate message count per DLQ for quick health check across all 5 queues
 
 ### UI Polish
 
@@ -90,10 +90,10 @@
 | IDEM-01 | Phase 38 | Pending |
 | IDEM-02 | Phase 38 | Pending |
 | IDEM-03 | Phase 38 | Pending |
-| DLQ-01 | Phase 39 | Pending |
-| DLQ-02 | Phase 39 | Pending |
-| DLQ-03 | Phase 39 | Pending |
-| DLQ-04 | Phase 39 | Pending |
+| DLQ-01 | Phase 39 | Complete |
+| DLQ-02 | Phase 39 | Complete |
+| DLQ-03 | Phase 39 | Complete |
+| DLQ-04 | Phase 39 | Complete |
 | UI-01 | Phase 40 | Pending |
 | UI-02 | Phase 40 | Pending |
 | UI-03 | Phase 40 | Pending |

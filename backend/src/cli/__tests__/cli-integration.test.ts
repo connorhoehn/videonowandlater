@@ -11,7 +11,7 @@ describe('CLI integration', () => {
     expect(program.version()).toBe('1.1.0');
   });
 
-  it('should have all 6 commands registered', () => {
+  it('should have all 10 commands registered', () => {
     const commands = program.commands.map(cmd => cmd.name());
 
     expect(commands).toContain('stream-broadcast');
@@ -20,13 +20,17 @@ describe('CLI integration', () => {
     expect(commands).toContain('seed-chat');
     expect(commands).toContain('seed-reactions');
     expect(commands).toContain('simulate-presence');
-    expect(commands.length).toBe(6);
+    expect(commands).toContain('dlq-list');
+    expect(commands).toContain('dlq-redrive');
+    expect(commands).toContain('dlq-purge');
+    expect(commands).toContain('dlq-health');
+    expect(commands.length).toBe(10);
   });
 
   it('should include descriptions for all commands', () => {
     const commandsWithDescriptions = program.commands.filter(cmd => cmd.description());
 
-    expect(commandsWithDescriptions.length).toBe(6);
+    expect(commandsWithDescriptions.length).toBe(10);
 
     // Verify specific command descriptions
     const streamBroadcast = program.commands.find(cmd => cmd.name() === 'stream-broadcast');

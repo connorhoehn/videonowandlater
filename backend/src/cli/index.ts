@@ -11,6 +11,10 @@ import { seedSessions } from './commands/seed-sessions';
 import { seedChat } from './commands/seed-chat';
 import { seedReactions } from './commands/seed-reactions';
 import { simulatePresence } from './commands/simulate-presence';
+import { dlqList } from './commands/dlq-list';
+import { dlqRedrive } from './commands/dlq-redrive';
+import { dlqPurge } from './commands/dlq-purge';
+import { dlqHealth } from './commands/dlq-health';
 
 export const program = new Command();
 
@@ -62,6 +66,31 @@ program
   .argument('<session-id>', 'Session ID to send presence event')
   .option('-v, --viewers <number>', 'Number of viewers to simulate', '10')
   .action(simulatePresence);
+
+// DLQ management commands
+program
+  .command('dlq-list')
+  .description('List messages in a pipeline DLQ with decoded session context')
+  .argument('<queue-url>', 'Full SQS queue URL of the DLQ')
+  .action(dlqList);
+
+program
+  .command('dlq-redrive')
+  .description('Re-drive all messages from a DLQ back to its source queue')
+  .argument('<dlq-arn>', 'ARN of the DLQ to re-drive')
+  .action(dlqRedrive);
+
+program
+  .command('dlq-purge')
+  .description('Delete a specific DLQ message by receipt handle')
+  .argument('<queue-url>', 'Full SQS queue URL of the DLQ')
+  .argument('<receipt-handle>', 'ReceiptHandle from dlq-list output')
+  .action((queueUrl: string, receiptHandle: string) => dlqPurge(queueUrl, receiptHandle));
+
+program
+  .command('dlq-health')
+  .description('Report approximate message count for all 5 pipeline DLQs')
+  .action(dlqHealth);
 
 // Only parse if this is the main module (not imported for testing)
 if (require.main === module) {

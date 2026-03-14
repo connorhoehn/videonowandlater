@@ -114,7 +114,7 @@ Plans:
 - [x] 036-03-PLAN.md — Refactor transcribe-completed + store-summary + on-mediaconvert-complete with traced clients
 - [x] 036-04-PLAN.md — CDK active tracing config + deploy + X-Ray service map verification
 
-### Phase 37: Event Schema Validation
+### ✅ Phase 37: Event Schema Validation — completed 2026-03-13
 **Goal**: All 5 pipeline handlers reject malformed events at the boundary before executing any side effects, and the start-transcribe transient error swallowing bug is fixed
 **Depends on**: Phase 36 (tracing in place so validation failures are observable in X-Ray)
 **Requirements**: VALID-01, VALID-02, VALID-03, VALID-04
@@ -139,10 +139,13 @@ Plans:
   1. Re-driving a transcribe-completed message that already ran (transcript stored in S3) produces no second S3 write and no error — the message is acknowledged cleanly
   2. Re-driving a store-summary message that already ran (AI summary stored) produces no second Bedrock invocation and no error — the message is acknowledged cleanly
   3. Sending the same message twice concurrently (simulating SQS at-least-once delivery) to either handler results in exactly one execution completing and the duplicate being acknowledged without side effects
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 38-01: TBD
+- [ ] 038-01-PLAN.md — TDD: Write IDEM-01, IDEM-02, IDEM-03 test cases (Wave 1)
+- [ ] 038-02-PLAN.md — Implement idempotency guards in transcribe-completed + store-summary (Wave 2)
+- [ ] 038-03-PLAN.md — Verify IDEM-03 concurrent delivery test passes (Wave 2)
+- [ ] 038-04-PLAN.md — Add vnl-idempotency DynamoDB table to CDK (Wave 3, optional infrastructure)
 
 ### Phase 39: DLQ Re-drive Tooling
 **Goal**: Developer can inspect, re-drive, and purge messages from any of the 5 pipeline DLQs via CLI without touching the AWS console
@@ -196,7 +199,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 36. X-Ray Distributed Tracing | v1.7 | 4/4 | Complete | 2026-03-12 |
 | 37. Event Schema Validation | v1.7 | 4/4 | Complete | 2026-03-13 |
-| 38. Idempotency Gap Coverage | v1.7 | 0/TBD | Not started | - |
+| 38. Idempotency Gap Coverage | v1.7 | 0/4 | Planning | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
 | 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |
 | 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |

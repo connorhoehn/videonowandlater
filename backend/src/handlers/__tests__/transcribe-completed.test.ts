@@ -920,17 +920,7 @@ describe('transcribe-completed handler', () => {
         claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
         createdAt: '2026-03-06T00:00:00Z',
         version: 1,
-        transcriptStatus: 'processing', // First check by first invocation
-      } as any)
-      .mockResolvedValueOnce({
-        sessionId,
-        userId: 'test-user',
-        sessionType: 'BROADCAST',
-        status: 'ended',
-        claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
-        createdAt: '2026-03-06T00:00:00Z',
-        version: 1,
-        transcriptStatus: 'processing', // First check by second invocation (race)
+        transcriptStatus: 'processing', // First invocation: initial check sees processing
       } as any)
       .mockResolvedValueOnce({
         sessionId,
@@ -941,7 +931,7 @@ describe('transcribe-completed handler', () => {
         createdAt: '2026-03-06T00:00:00Z',
         version: 1,
         transcriptStatus: 'available',
-        transcript: 'Concurrent test transcript.', // Second check after first completes
+        transcript: 'Concurrent test transcript.', // Second invocation (50ms later): sees available after first completes
       } as any);
 
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);

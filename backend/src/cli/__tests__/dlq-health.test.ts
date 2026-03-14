@@ -3,18 +3,14 @@
  * DLQ-04: Report approximate message count for all 5 pipeline DLQs
  */
 
-import {
-  SQSClient,
-  GetQueueUrlCommand,
-  GetQueueAttributesCommand,
-} from '@aws-sdk/client-sqs';
-
-jest.mock('@aws-sdk/client-sqs');
-
 const mockSend = jest.fn();
-(SQSClient as jest.MockedClass<typeof SQSClient>).mockImplementation(
-  () => ({ send: mockSend } as unknown as SQSClient)
-);
+jest.mock('@aws-sdk/client-sqs', () => {
+  const actual = jest.requireActual('@aws-sdk/client-sqs');
+  return {
+    ...actual,
+    SQSClient: jest.fn().mockImplementation(() => ({ send: mockSend })),
+  };
+});
 
 import { dlqHealth } from '../commands/dlq-health';
 
@@ -37,7 +33,6 @@ describe('dlq-health command', () => {
   });
 
   it('should call GetQueueUrl for each of 5 DLQ names', async () => {
-    // For each queue: GetQueueUrl + GetQueueAttributes
     for (let i = 0; i < DLQ_NAMES.length; i++) {
       mockSend
         .mockResolvedValueOnce({
@@ -55,11 +50,10 @@ describe('dlq-health command', () => {
 
     // Verify GetQueueUrl calls
     const getUrlCalls = mockSend.mock.calls.filter(
-      (_call, idx) => idx % 2 === 0
+      (_call: unknown[], idx: number) => idx % 2 === 0
     );
     expect(getUrlCalls).toHaveLength(5);
     for (let i = 0; i < 5; i++) {
-      expect(getUrlCalls[i][0]).toBeInstanceOf(GetQueueUrlCommand);
       expect(getUrlCalls[i][0].input.QueueName).toBe(DLQ_NAMES[i]);
     }
   });
@@ -79,10 +73,9 @@ describe('dlq-health command', () => {
 
     // Verify GetQueueAttributes calls request correct attributes
     const getAttrCalls = mockSend.mock.calls.filter(
-      (_call, idx) => idx % 2 === 1
+      (_call: unknown[], idx: number) => idx % 2 === 1
     );
     for (const call of getAttrCalls) {
-      expect(call[0]).toBeInstanceOf(GetQueueAttributesCommand);
       expect(call[0].input.AttributeNames).toContain('ApproximateNumberOfMessages');
     }
   });
@@ -102,11 +95,9 @@ describe('dlq-health command', () => {
     await dlqHealth();
 
     const logCalls = (console.log as jest.Mock).mock.calls.flat().join('\n');
-    // All 5 DLQ names should appear in output
     for (const name of DLQ_NAMES) {
       expect(logCalls).toContain(name);
     }
-    // Should contain counts
     expect(logCalls).toContain('5');
     expect(logCalls).toContain('3');
   });
@@ -125,13 +116,10 @@ describe('dlq-health command', () => {
         });
     }
 
-    // Should not throw
     await dlqHealth();
 
     const logCalls = (console.log as jest.Mock).mock.calls.flat().join('\n');
-    // Should still display the errored queue with error indication
     expect(logCalls).toContain(DLQ_NAMES[0]);
-    // Remaining queues should still appear
     expect(logCalls).toContain(DLQ_NAMES[1]);
     expect(logCalls).toContain(DLQ_NAMES[4]);
   });

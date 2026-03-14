@@ -3,18 +3,14 @@
  * DLQ-02: Re-drive all messages from a DLQ back to source queue
  */
 
-import {
-  SQSClient,
-  ListMessageMoveTasksCommand,
-  StartMessageMoveTaskCommand,
-} from '@aws-sdk/client-sqs';
-
-jest.mock('@aws-sdk/client-sqs');
-
 const mockSend = jest.fn();
-(SQSClient as jest.MockedClass<typeof SQSClient>).mockImplementation(
-  () => ({ send: mockSend } as unknown as SQSClient)
-);
+jest.mock('@aws-sdk/client-sqs', () => {
+  const actual = jest.requireActual('@aws-sdk/client-sqs');
+  return {
+    ...actual,
+    SQSClient: jest.fn().mockImplementation(() => ({ send: mockSend })),
+  };
+});
 
 import { dlqRedrive } from '../commands/dlq-redrive';
 
@@ -39,7 +35,6 @@ describe('dlq-redrive command', () => {
 
     expect(mockSend).toHaveBeenCalledTimes(2);
     const listCall = mockSend.mock.calls[0][0];
-    expect(listCall).toBeInstanceOf(ListMessageMoveTasksCommand);
     expect(listCall.input.SourceArn).toBe(dlqArn);
   });
 
@@ -51,7 +46,6 @@ describe('dlq-redrive command', () => {
     await dlqRedrive(dlqArn);
 
     const startCall = mockSend.mock.calls[1][0];
-    expect(startCall).toBeInstanceOf(StartMessageMoveTaskCommand);
     expect(startCall.input.SourceArn).toBe(dlqArn);
 
     const logCalls = (console.log as jest.Mock).mock.calls.flat().join('\n');

@@ -123,6 +123,13 @@ export function ReplayViewer() {
   // IVS Player hook
   const { videoRef, syncTime } = useReplayPlayer(session?.recordingHlsUrl);
 
+  // Seek handler: TranscriptDisplay click-to-seek → video element
+  const handleSeek = (timeMs: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timeMs / 1000;
+    }
+  };
+
   // Fetch reactions on mount
   useEffect(() => {
     if (!sessionId || !authToken) return;
@@ -412,7 +419,7 @@ export function ReplayViewer() {
               {activeTab === 'chat' ? (
                 <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
               ) : (
-                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} />
+                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} onSeek={handleSeek} />
               )}
             </div>
           </div>

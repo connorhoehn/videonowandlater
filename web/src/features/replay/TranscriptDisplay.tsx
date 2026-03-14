@@ -23,9 +23,10 @@ interface TranscriptDisplayProps {
   currentTime: number; // in milliseconds
   authToken: string;
   diarizedTranscriptS3Path?: string;
+  onSeek?: (timeMs: number) => void;
 }
 
-export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedTranscriptS3Path }: TranscriptDisplayProps) {
+export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedTranscriptS3Path, onSeek }: TranscriptDisplayProps) {
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,7 +259,9 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
               <div
                 key={index}
                 ref={isActive ? activeSpeakerSegmentRef : null}
-                className={`flex ${isSpeaker1 ? 'justify-start' : 'justify-end'}`}
+                data-testid={`speaker-segment-${index}`}
+                className={`flex ${isSpeaker1 ? 'justify-start' : 'justify-end'} ${onSeek ? 'cursor-pointer' : ''}`}
+                onClick={() => onSeek?.(seg.startTime)}
               >
                 <div
                   className={`
@@ -300,15 +303,18 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
             <div
               key={index}
               ref={isActive ? activeSegmentRef : null}
+              data-testid={`segment-${index}`}
               className={`
                 p-3 rounded-lg transition-all duration-200
+                ${onSeek ? 'cursor-pointer' : ''}
                 ${isActive
                   ? 'bg-blue-50 border-l-4 border-blue-500 shadow-sm'
                   : isPast
                     ? 'text-gray-500 opacity-75'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    : `text-gray-700 ${onSeek ? 'hover:bg-blue-50' : 'hover:bg-gray-50'}`
                 }
               `}
+              onClick={() => onSeek?.(segment.startTime)}
             >
               <div className="text-xs text-gray-400 mb-1">
                 {formatTime(segment.startTime)}

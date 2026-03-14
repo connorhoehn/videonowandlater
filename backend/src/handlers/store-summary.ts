@@ -12,7 +12,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
-import { updateSessionAiSummary } from '../repositories/session-repository';
+import { getSessionById, updateSessionAiSummary } from '../repositories/session-repository';
 import { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './schemas/store-summary.schema';
 
 const logger = new Logger({
@@ -42,6 +42,22 @@ async function processEvent(
 
   tracer.putAnnotation('sessionId', sessionId);
   tracer.putAnnotation('pipelineStage', 'store-summary');
+
+  // IDEM-02: Check if summary already available (idempotent guard)
+  try {
+    const session = await getSessionById(tableName, sessionId);
+    if (session?.aiSummaryStatus === 'available' && session?.aiSummary) {
+      logger.info('AI summary already available (idempotent retry)', {
+        sessionId,
+        existingLength: session.aiSummary.length
+      });
+      // No-op: return success without Bedrock invocation
+      return;
+    }
+  } catch (error: any) {
+    logger.warn('Failed to check session state (non-blocking, continue):', { errorMessage: error.message });
+    // If we can't verify, proceed — better to re-invoke Bedrock than silently skip with stale data
+  }
 
   try {
     // Parse S3 URI and fetch transcript

@@ -10,7 +10,7 @@ import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
-import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../repositories/session-repository';
+import { getSessionById, updateTranscriptStatus, updateDiarizedTranscriptPath } from '../repositories/session-repository';
 import { TranscribeJobDetailSchema, type TranscribeJobDetail } from './schemas/transcribe-completed.schema';
 
 const logger = new Logger({
@@ -148,6 +148,19 @@ async function processEvent(
 
   logger.appendPersistentKeys({ sessionId });
   logger.info('Pipeline stage entered', { jobName, transcriptionJobStatus: detail.TranscriptionJobStatus });
+
+  // IDEM-01: Check if transcript already available (idempotent guard)
+  try {
+    const session = await getSessionById(tableName, sessionId);
+    if (session?.transcriptStatus === 'available' && session?.transcript) {
+      logger.info('Transcript already available (idempotent retry)', { sessionId });
+      // No-op: SQS message acknowledged below (batchItemFailures empty)
+      return;
+    }
+  } catch (error: any) {
+    logger.warn('Failed to check session state (non-blocking, continue):', { errorMessage: error.message });
+    // If we can't verify, proceed with normal flow — better to re-write than to silently skip
+  }
 
   if (detail.TranscriptionJobStatus === 'FAILED') {
     logger.warn('Transcribe job failed for session:', {

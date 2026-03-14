@@ -145,7 +145,7 @@ Plans:
 - [x] 038-01-PLAN.md — TDD: Write IDEM-01, IDEM-02, IDEM-03 test cases (Wave 1) — completed 2026-03-14
 - [x] 038-02-PLAN.md — Implement idempotency guards in transcribe-completed + store-summary (Wave 2) — completed 2026-03-14
 - [x] 038-03-PLAN.md — Verify IDEM-03 concurrent delivery test passes (Wave 2) — completed 2026-03-14
-- [ ] 038-04-PLAN.md — Add vnl-idempotency DynamoDB table to CDK (Wave 3, optional infrastructure)
+- [x] 038-04-PLAN.md — Add vnl-idempotency DynamoDB table to CDK (Wave 3, optional infrastructure) — completed 2026-03-14
 
 ### Phase 39: DLQ Re-drive Tooling
 **Goal**: Developer can inspect, re-drive, and purge messages from any of the 5 pipeline DLQs via CLI without touching the AWS console

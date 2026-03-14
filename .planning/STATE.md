@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: executing
-stopped_at: Completed 038-03-PLAN.md
-last_updated: "2026-03-14T04:15:00Z"
-last_activity: "2026-03-14 — Completed 038-03: concurrent delivery verification (all 483 tests passing)"
+stopped_at: Completed 038-04-PLAN.md
+last_updated: "2026-03-14T04:17:30Z"
+last_activity: "2026-03-14 — Completed 038-04: infrastructure (vnl-idempotency table added to CDK)"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 38 of 41 (Idempotency Gap Coverage) — IN PROGRESS
-Plan: 3/4 complete (038-01, 038-02, 038-03 done; 038-04 FINAL planned)
-Status: Idempotency implementation complete — all handlers protected against concurrent delivery
-Last activity: 2026-03-14 — Completed 038-03: concurrent delivery verification (IDEM-03 test fixed and passing)
+Plan: 4/4 complete (038-01, 038-02, 038-03, 038-04 FINAL done)
+Status: Phase 38 COMPLETE — idempotency gap coverage + infrastructure
+Last activity: 2026-03-14 — Completed 038-04: vnl-idempotency table added to CDK
 
-Progress: [████████████████████████████] 75%
+Progress: [████████████████████████████████████] 80%
 
 ## Performance Metrics
 

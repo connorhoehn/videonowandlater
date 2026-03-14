@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: executing
-stopped_at: Completed 037-04-PLAN.md
-last_updated: "2026-03-13T14:37:50Z"
-last_activity: "2026-03-13 — Completed 037-04: start-transcribe transient error handling and validation (4 of 4 plans)"
+stopped_at: Completed 038-01-PLAN.md
+last_updated: "2026-03-14T04:09:15Z"
+last_activity: "2026-03-14 — Completed 038-01: idempotency test contracts (TDD RED phase, 3 failing tests)"
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.7 Phase 37 — Event Schema Validation
+**Current focus:** v1.7 Phase 38 — Idempotency Gap Coverage (Wave 1 RED phase complete)
 
 ## Current Position
 
-Phase: 37 of 41 (Event Schema Validation) — COMPLETE
-Plan: 4/4 complete (037-04-PLAN.md done)
-Status: Phase 37 complete — All pipeline handlers implement validation + transient error handling
-Last activity: 2026-03-13 — Completed 037-04: start-transcribe transient error handling (plans 01-04 complete)
+Phase: 38 of 41 (Idempotency Gap Coverage) — IN PROGRESS
+Plan: 1/4 complete (038-01-PLAN.md done — RED phase tests)
+Status: TDD RED phase complete — 3 failing tests define idempotency contracts
+Last activity: 2026-03-14 — Completed 038-01: test contracts for IDEM-01, IDEM-02, IDEM-03 (all failing as expected)
 
 Progress: [████████████] 100%
 

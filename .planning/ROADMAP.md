@@ -142,7 +142,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 038-01-PLAN.md — TDD: Write IDEM-01, IDEM-02, IDEM-03 test cases (Wave 1)
+- [x] 038-01-PLAN.md — TDD: Write IDEM-01, IDEM-02, IDEM-03 test cases (Wave 1) — completed 2026-03-14
 - [ ] 038-02-PLAN.md — Implement idempotency guards in transcribe-completed + store-summary (Wave 2)
 - [ ] 038-03-PLAN.md — Verify IDEM-03 concurrent delivery test passes (Wave 2)
 - [ ] 038-04-PLAN.md — Add vnl-idempotency DynamoDB table to CDK (Wave 3, optional infrastructure)

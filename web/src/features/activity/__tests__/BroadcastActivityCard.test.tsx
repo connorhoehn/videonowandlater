@@ -33,6 +33,11 @@ vi.mock('../../replay/SummaryDisplay', () => ({
   ),
 }));
 
+// Mock PipelineStatusBadge as passthrough
+vi.mock('../PipelineStatusBadge', () => ({
+  PipelineStatusBadge: () => <div data-testid="pipeline-status-badge" />,
+}));
+
 const mockSession: ActivitySession = {
   sessionId: 'test-session-123',
   userId: 'testbroadcaster',
@@ -58,14 +63,31 @@ describe('BroadcastActivityCard', () => {
     expect(screen.getByText('testbroadcaster')).toBeDefined();
   });
 
-  it('renders formatted duration "2:00" for recordingDuration 120000', () => {
+  it('renders formatted duration "2 min" for recordingDuration 120000', () => {
     render(
       <BrowserRouter>
         <BroadcastActivityCard session={mockSession} />
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/2:00/)).toBeDefined();
+    expect(screen.getByText(/2 min/)).toBeDefined();
+  });
+
+  it('renders thumbnail img when session.thumbnailUrl is present', () => {
+    const session: ActivitySession = {
+      ...mockSession,
+      thumbnailUrl: 'https://example.com/thumb.jpg',
+    };
+
+    render(
+      <BrowserRouter>
+        <BroadcastActivityCard session={session} />
+      </BrowserRouter>
+    );
+
+    const img = screen.getByRole('img');
+    expect(img).toBeDefined();
+    expect(img.getAttribute('src')).toBe('https://example.com/thumb.jpg');
   });
 
   it('renders relative timestamp', () => {

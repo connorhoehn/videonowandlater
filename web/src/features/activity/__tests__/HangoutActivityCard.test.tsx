@@ -26,6 +26,11 @@ vi.mock('../../replay/SummaryDisplay', () => ({
   ),
 }));
 
+// Mock PipelineStatusBadge as passthrough
+vi.mock('../PipelineStatusBadge', () => ({
+  PipelineStatusBadge: () => <div data-testid="pipeline-status-badge" />,
+}));
+
 const mockSession: ActivitySession = {
   sessionId: 'test-session-123',
   userId: 'hangouthost',
@@ -109,7 +114,7 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/2:00/)).toBeDefined();
+    expect(screen.getByText(/2 min/)).toBeDefined();
     expect(screen.getByText(/1h/)).toBeDefined();
   });
 

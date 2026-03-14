@@ -143,8 +143,8 @@ Plans:
 
 Plans:
 - [x] 038-01-PLAN.md — TDD: Write IDEM-01, IDEM-02, IDEM-03 test cases (Wave 1) — completed 2026-03-14
-- [ ] 038-02-PLAN.md — Implement idempotency guards in transcribe-completed + store-summary (Wave 2)
-- [ ] 038-03-PLAN.md — Verify IDEM-03 concurrent delivery test passes (Wave 2)
+- [x] 038-02-PLAN.md — Implement idempotency guards in transcribe-completed + store-summary (Wave 2) — completed 2026-03-14
+- [x] 038-03-PLAN.md — Verify IDEM-03 concurrent delivery test passes (Wave 2) — completed 2026-03-14
 - [ ] 038-04-PLAN.md — Add vnl-idempotency DynamoDB table to CDK (Wave 3, optional infrastructure)
 
 ### Phase 39: DLQ Re-drive Tooling
@@ -199,7 +199,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 36. X-Ray Distributed Tracing | v1.7 | 4/4 | Complete | 2026-03-12 |
 | 37. Event Schema Validation | v1.7 | 4/4 | Complete | 2026-03-13 |
-| 38. Idempotency Gap Coverage | v1.7 | 0/4 | Planning | - |
+| 38. Idempotency Gap Coverage | v1.7 | 3/4 | In Progress | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
 | 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |
 | 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |

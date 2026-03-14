@@ -5,7 +5,7 @@
 
 import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../store-summary';
-import { updateSessionAiSummary } from '../../repositories/session-repository';
+import { updateSessionAiSummary, getSessionById } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
@@ -59,6 +59,7 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
 const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockBedrockClient = BedrockRuntimeClient as jest.Mocked<typeof BedrockRuntimeClient>;
 const mockUpdateSessionAiSummary = updateSessionAiSummary as jest.MockedFunction<typeof updateSessionAiSummary>;
+const mockGetSessionById = getSessionById as jest.MockedFunction<typeof getSessionById>;
 
 function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
   return {
@@ -109,6 +110,8 @@ describe('store-summary handler', () => {
     mockBedrockSend.mockReset();
     mockUpdateSessionAiSummary.mockReset();
     mockUpdateSessionAiSummary.mockResolvedValue(undefined);
+    mockGetSessionById.mockReset();
+    mockGetSessionById.mockResolvedValue(null);
     lastInvokeModelCommand = null;
 
     // Wire module-scope instance sends to test mock functions
@@ -1043,5 +1046,61 @@ describe('store-summary handler', () => {
 
     expect(result.batchItemFailures).toHaveLength(1);
     expect(result.batchItemFailures[0].itemIdentifier).toBe('malformed-json-id');
+  });
+
+  // =========================================================================
+  // Idempotency Tests (Phase 38)
+  // =========================================================================
+
+  it('IDEM-02: Second invocation with same sessionId skips Bedrock invocation (already available)', async () => {
+    const sessionId = 'session-idem-02';
+
+    // Mock scenario: session already has AI summary from first execution
+    mockGetSessionById.mockResolvedValueOnce({
+      sessionId,
+      userId: 'test-user',
+      sessionType: 'BROADCAST',
+      status: 'ended',
+      claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
+      createdAt: '2026-03-06T00:00:00Z',
+      version: 1,
+      aiSummaryStatus: 'available',
+      aiSummary: 'Existing summary from first execution.',
+    } as any);
+
+    // S3 fetch should not be called if already available
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: jest.fn().mockResolvedValueOnce('Some transcript text'),
+      },
+    });
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'duplicate-event-id',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId,
+        transcriptS3Uri: 's3://transcription-bucket/session-idem-02/transcript.json',
+      },
+    }));
+
+    // Key assertions:
+    // 1. Handler returns success (no batchItemFailures)
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // 2. bedrockClient.send NOT called (idempotent skip)
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+
+    // 3. updateSessionAiSummary NOT called (idempotent skip)
+    expect(mockUpdateSessionAiSummary).not.toHaveBeenCalled();
+
+    // 4. Logger shows idempotent path
+    // (In actual implementation, will log "AI summary already available (idempotent retry)")
   });
 });

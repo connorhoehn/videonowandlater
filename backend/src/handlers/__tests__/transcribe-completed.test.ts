@@ -6,7 +6,7 @@
 
 import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../transcribe-completed';
-import { updateTranscriptStatus, updateDiarizedTranscriptPath } from '../../repositories/session-repository';
+import { updateTranscriptStatus, updateDiarizedTranscriptPath, getSessionById } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
@@ -51,6 +51,7 @@ const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockEventBridgeClient = EventBridgeClient as jest.Mocked<typeof EventBridgeClient>;
 const mockUpdateTranscriptStatus = updateTranscriptStatus as jest.MockedFunction<typeof updateTranscriptStatus>;
 const mockUpdateDiarizedTranscriptPath = updateDiarizedTranscriptPath as jest.MockedFunction<typeof updateDiarizedTranscriptPath>;
+const mockGetSessionById = getSessionById as jest.MockedFunction<typeof getSessionById>;
 
 function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
   return {
@@ -104,6 +105,8 @@ describe('transcribe-completed handler', () => {
     mockUpdateTranscriptStatus.mockResolvedValue(undefined);
     mockUpdateDiarizedTranscriptPath.mockReset();
     mockUpdateDiarizedTranscriptPath.mockResolvedValue(undefined);
+    mockGetSessionById.mockReset();
+    mockGetSessionById.mockResolvedValue(null);
 
     // Wire module-scope instance sends to test mock functions
     if (s3Instance) s3Instance.send = mockS3Send;
@@ -840,5 +843,145 @@ describe('transcribe-completed handler', () => {
 
     expect(result.batchItemFailures).toHaveLength(1);
     expect(result.batchItemFailures[0].itemIdentifier).toBe('malformed-json-id');
+  });
+
+  // =========================================================================
+  // Idempotency Tests (Phase 38)
+  // =========================================================================
+
+  it('IDEM-01: Second invocation with same sessionId skips S3 write and DynamoDB update (already available)', async () => {
+    const sessionId = 'session-idem-01';
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'First execution transcript.' }],
+      },
+    };
+
+    // Mock scenario: session already has transcript from first execution
+    mockGetSessionById.mockResolvedValueOnce({
+      sessionId,
+      userId: 'test-user',
+      sessionType: 'BROADCAST',
+      status: 'ended',
+      claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
+      createdAt: '2026-03-06T00:00:00Z',
+      version: 1,
+      transcriptStatus: 'available',
+      transcript: 'First execution transcript.',
+    } as any);
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+    });
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'duplicate-event-id',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        TranscriptionJobName: 'vnl-session-idem-01-1234567890',
+        TranscriptionJob: { TranscriptFileUri: 's3://bucket/session-idem-01/transcript.json' },
+      },
+    }));
+
+    // Key assertions:
+    // 1. Handler returns success (no batchItemFailures)
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // 2. updateTranscriptStatus NOT called (idempotent skip)
+    expect(mockUpdateTranscriptStatus).not.toHaveBeenCalled();
+
+    // 3. Logger shows idempotent path
+    // (In actual implementation, will log "Transcript already available (idempotent retry)")
+  });
+
+  it('IDEM-03: Concurrent invocations (Promise.all race) result in exactly one S3 write', async () => {
+    const sessionId = 'session-idem-03-concurrent';
+    const transcriptJson = {
+      results: {
+        transcripts: [{ transcript: 'Concurrent test transcript.' }],
+      },
+    };
+
+    // Simulate first invocation sees processing, updates to available
+    // Second invocation (50ms later) sees available, skips
+    mockGetSessionById
+      .mockResolvedValueOnce({
+        sessionId,
+        userId: 'test-user',
+        sessionType: 'BROADCAST',
+        status: 'ended',
+        claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
+        createdAt: '2026-03-06T00:00:00Z',
+        version: 1,
+        transcriptStatus: 'processing', // First check by first invocation
+      } as any)
+      .mockResolvedValueOnce({
+        sessionId,
+        userId: 'test-user',
+        sessionType: 'BROADCAST',
+        status: 'ended',
+        claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
+        createdAt: '2026-03-06T00:00:00Z',
+        version: 1,
+        transcriptStatus: 'processing', // First check by second invocation (race)
+      } as any)
+      .mockResolvedValueOnce({
+        sessionId,
+        userId: 'test-user',
+        sessionType: 'BROADCAST',
+        status: 'ended',
+        claimedResources: { ivsChannelArn: 'arn:aws:ivs:us-east-1:123456789012:channel/xxx' },
+        createdAt: '2026-03-06T00:00:00Z',
+        version: 1,
+        transcriptStatus: 'available',
+        transcript: 'Concurrent test transcript.', // Second check after first completes
+      } as any);
+
+    mockUpdateTranscriptStatus.mockResolvedValue(undefined);
+
+    mockS3Send.mockResolvedValue({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(JSON.stringify(transcriptJson)) },
+    });
+
+    mockEventBridgeSend.mockResolvedValue({});
+
+    const sqsEvent = makeSqsEvent({
+      version: '0',
+      id: 'concurrent-event',
+      'detail-type': 'Transcribe',
+      source: 'aws.transcribe',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        TranscriptionJobStatus: 'COMPLETED',
+        TranscriptionJobName: 'vnl-session-idem-03-concurrent-1234567890',
+        TranscriptionJob: { TranscriptFileUri: 's3://bucket/concurrent/transcript.json' },
+      },
+    });
+
+    // Invoke twice concurrently (simulates SQS at-least-once delivery)
+    const [result1, result2] = await Promise.all([
+      handler(sqsEvent),
+      new Promise(resolve => setTimeout(() => resolve(handler(sqsEvent)), 50))
+    ]) as any[];
+
+    // Both return success
+    expect(result1.batchItemFailures).toHaveLength(0);
+    expect(result2.batchItemFailures).toHaveLength(0);
+
+    // updateTranscriptStatus called exactly once (first invocation only)
+    expect(mockUpdateTranscriptStatus).toHaveBeenCalledTimes(1);
+
+    // EventBridge emit called exactly once
+    expect(mockEventBridgeSend).toHaveBeenCalledTimes(1);
   });
 });

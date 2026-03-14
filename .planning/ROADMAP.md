@@ -171,11 +171,11 @@ Plans:
   3. Activity feed cards on the home page show a video thumbnail image when one is available for the session
   4. Activity feed cards display the recording duration in human-readable format (e.g., "12 min 34 sec")
   5. Activity feed cards show the current pipeline processing stage (transcribing, summarizing, complete, failed) as a status badge, and cards in non-terminal states refresh automatically without a full page reload
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 40-01: TBD
-- [ ] 40-02: TBD
+- [ ] 040-01-PLAN.md — Transcript click-to-seek + SummaryDisplay distinct visual states (Wave 1)
+- [ ] 040-02-PLAN.md — Activity card thumbnail, duration format, pipeline status badge, polling (Wave 1)
 
 ### Phase 41: UI Polish — Live Session & Upload
 **Goal**: Broadcast and hangout live pages are complete with confirmation dialogs, hangout has reaction parity with broadcast, and the upload video page is fully functional with accurate pipeline state and working comment/transcript panels
@@ -200,5 +200,5 @@ Plans:
 | 37. Event Schema Validation | v1.7 | 4/4 | Complete | 2026-03-13 |
 | 38. Idempotency Gap Coverage | v1.7 | 3/4 | In Progress | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
-| 40. UI Polish — Replay & Feed | v1.7 | 0/TBD | Not started | - |
+| 40. UI Polish — Replay & Feed | v1.7 | 0/2 | Not started | - |
 | 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |

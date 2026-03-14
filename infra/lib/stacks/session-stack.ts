@@ -91,6 +91,28 @@ export class SessionStack extends Stack {
     });
 
     // ============================================================
+    // Idempotency Table (Phase 38: Required for Powertools migration)
+    // ============================================================
+
+    // Create idempotency table for deduplicating concurrent Lambda executions
+    // Powertools expects exact attribute names and will auto-manage TTL
+    const idempotencyTable = new dynamodb.Table(this, 'IdempotencyTable', {
+      tableName: 'vnl-idempotency',
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // On-demand for variable pipeline load
+      partitionKey: {
+        name: 'id',
+        type: dynamodb.AttributeType.STRING,
+      },
+      timeToLiveAttribute: 'expiration', // Exact name — Powertools writes to this attribute
+      removalPolicy: RemovalPolicy.DESTROY, // Dev environment; change to RETAIN for prod
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    });
+
+    new CfnOutput(this, 'IdempotencyTableName', {
+      value: idempotencyTable.tableName,
+    });
+
+    // ============================================================
     // Recording Infrastructure
     // ============================================================
 

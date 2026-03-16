@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: completed
-stopped_at: Completed 039-01-PLAN.md
-last_updated: "2026-03-14T17:20:32.878Z"
-last_activity: "2026-03-14 — Completed 039-01: 4 DLQ CLI commands with 13 tests"
+stopped_at: Completed 040-01-PLAN.md
+last_updated: "2026-03-16T00:21:54.192Z"
+last_activity: "2026-03-15 — Completed 040-01: TranscriptDisplay click-to-seek + SummaryDisplay visual states"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 7
+  completed_plans: 6
+  percent: 96
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Users can go live instantly — either broadcasting to viewers or hanging out in small groups — and every session is automatically preserved with its full chat and reaction context for later replay.
-**Current focus:** v1.7 Phase 39 — DLQ Re-drive Tooling (Plan 01 complete)
+**Current focus:** v1.7 Phase 40 — UI Polish: Replay & Feed (Plan 01 complete, Plan 02 in progress)
 
 ## Current Position
 
-Phase: 39 of 41 (DLQ Re-drive Tooling) — IN PROGRESS
-Plan: 1/1 complete (039-01 done)
-Status: Phase 39 COMPLETE — DLQ CLI toolkit (list, redrive, purge, health)
-Last activity: 2026-03-14 — Completed 039-01: 4 DLQ CLI commands with 13 tests
+Phase: 40 of 41 (UI Polish: Replay & Feed) — IN PROGRESS
+Plan: 1/2 complete (040-01 done)
+Status: 040-01 COMPLETE — TranscriptDisplay click-to-seek + SummaryDisplay visual states (18 tests)
+Last activity: 2026-03-15 — Completed 040-01: TranscriptDisplay click-to-seek + SummaryDisplay visual states
 
 Progress: [████████████████████████████████████] 100%
 
@@ -79,6 +79,10 @@ Progress: [███████████████████████
 - Activity feed polling: exponential backoff 15s → 30s → 60s cap; stop polling on terminal states (available, failed)
 - Verify `HangoutPage.tsx` for existing partial `ReactionPicker` implementation before building from scratch
 
+**UI polish (Phase 40 — 040-01):**
+- Use `videoRef.current.currentTime = timeMs / 1000` for seek in ReplayViewer — avoids stale playerRef issue since `playerRef.current` is captured at render time but the IVS player initializes asynchronously; the IVS player attaches to the HTMLVideoElement so setting `currentTime` directly works
+- SummaryDisplay pending text changed from "Summary coming soon..." to "Generating summary..." — acceptable in UI polish phase
+
 ### Pending Todos
 
 None yet.
@@ -89,8 +93,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T17:16:12.742Z
-Stopped at: Completed 039-01-PLAN.md
+Last session: 2026-03-16T00:21:54.190Z
+Stopped at: Completed 040-01-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**

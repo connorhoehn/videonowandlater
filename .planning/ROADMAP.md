@@ -186,11 +186,12 @@ Plans:
   2. Hangout participants can open a reaction picker and send floating reactions during a live session, matching the reaction experience on the broadcast page
   3. The upload video page shows a pipeline progress indicator while the video is still transcribing or being summarized, and updates to the final state when processing completes
   4. Users can submit a timestamped comment on the upload video page, see it appear in the thread, and click it to seek the video to the correct position; the transcript panel displays all segments and supports click-to-seek
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 41-01: TBD
-- [ ] 41-02: TBD
+- [ ] 041-01-PLAN.md — Wave 0 TDD: failing test scaffolds for ConfirmDialog, HangoutPage, VideoPage, CommentThread (UI-06, UI-07, UI-08, UI-09)
+- [ ] 041-02-PLAN.md — ConfirmDialog component + BroadcastPage/HangoutPage confirmation guards + HangoutPage reactions (UI-06, UI-07)
+- [ ] 041-03-PLAN.md — VideoPage pipeline polling + seekVideo wiring through VideoInfoPanel and CommentThread (UI-08, UI-09)
 
 ## Progress
 
@@ -201,4 +202,4 @@ Plans:
 | 38. Idempotency Gap Coverage | v1.7 | 3/4 | In Progress | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
 | 40. UI Polish — Replay & Feed | v1.7 | 2/2 | Complete | 2026-03-15 |
-| 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |
+| 41. UI Polish — Live Session & Upload | v1.7 | 0/3 | Not started | - |

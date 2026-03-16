@@ -5,6 +5,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
+import { PipelineStatusBadge } from './PipelineStatusBadge';
 import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './RecordingSlider';
@@ -13,10 +14,13 @@ interface BroadcastActivityCardProps {
   session: ActivitySession;
 }
 
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+export function formatHumanDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds} sec`;
+  if (seconds === 0) return `${minutes} min`;
+  return `${minutes} min ${seconds} sec`;
 }
 
 function formatDate(dateString: string): string {
@@ -38,14 +42,23 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const navigate = useNavigate();
   const timestamp = formatDate(session.endedAt || session.createdAt);
   const duration = session.recordingDuration
-    ? formatDuration(session.recordingDuration)
+    ? formatHumanDuration(session.recordingDuration)
     : 'unknown';
 
   return (
     <div
       onClick={() => navigate(`/replay/${session.sessionId}`)}
-      className="p-4 bg-white rounded-lg border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
+      className="p-4 bg-white rounded-lg border border-gray-100 hover:border-gray-300 cursor-pointer transition-colors overflow-hidden"
     >
+      {session.thumbnailUrl && (
+        <img
+          src={session.thumbnailUrl}
+          alt=""
+          data-testid="thumbnail"
+          className="w-full h-32 object-cover rounded-t-lg -m-4 mb-2"
+          style={{ width: 'calc(100% + 2rem)' }}
+        />
+      )}
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -55,6 +68,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
                 Upload
               </span>
             )}
+            <PipelineStatusBadge session={session} />
           </div>
           <p className="text-xs text-gray-500 mt-1">
             {session.sourceFileName ? `${session.sourceFileName} • ` : ''}

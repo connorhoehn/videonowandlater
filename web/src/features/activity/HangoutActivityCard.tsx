@@ -4,18 +4,14 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { PipelineStatusBadge } from './PipelineStatusBadge';
+import { formatHumanDuration } from './BroadcastActivityCard';
 import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './RecordingSlider';
 
 interface HangoutActivityCardProps {
   session: ActivitySession;
-}
-
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function formatDate(dateString: string): string {
@@ -37,7 +33,7 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
   const navigate = useNavigate();
   const timestamp = formatDate(session.endedAt || session.createdAt);
   const duration = session.recordingDuration
-    ? formatDuration(session.recordingDuration)
+    ? formatHumanDuration(session.recordingDuration)
     : 'unknown';
   const participantCount = session.participantCount || 0;
   const messageCount = session.messageCount || 0;
@@ -49,7 +45,10 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900">{session.userId}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900">{session.userId}</h3>
+            <PipelineStatusBadge session={session} />
+          </div>
           <p className="text-xs text-gray-500 mt-1">
             {participantCount} participant{participantCount !== 1 ? 's' : ''} •{' '}
             {messageCount} message{messageCount !== 1 ? 's' : ''} • {duration} •{' '}

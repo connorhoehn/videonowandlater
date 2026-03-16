@@ -85,7 +85,7 @@ describe('BroadcastActivityCard', () => {
       </BrowserRouter>
     );
 
-    const img = screen.getByRole('img');
+    const img = screen.getByTestId('thumbnail');
     expect(img).toBeDefined();
     expect(img.getAttribute('src')).toBe('https://example.com/thumb.jpg');
   });

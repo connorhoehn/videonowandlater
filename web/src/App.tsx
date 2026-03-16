@@ -4,6 +4,8 @@ import { loadConfig } from './config/aws-config';
 import { configureAuth } from './auth/amplify';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
+import { isDemoMode, enableDemoMode } from './demo/demoMode';
+import { installMockFetch } from './demo/mockFetch';
 import { StackNotDeployed } from './components/StackNotDeployed';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
@@ -14,6 +16,7 @@ import { ReplayViewer } from './features/replay/ReplayViewer';
 import { HangoutPage } from './features/hangout/HangoutPage';
 import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
+import { DemoPage } from './demo/DemoPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -39,9 +42,12 @@ function App() {
   const [configState, setConfigState] = useState<'loading' | 'loaded' | 'missing'>('loading');
 
   useEffect(() => {
+    // Install mock fetch interceptor early if demo mode is already active
+    if (isDemoMode()) installMockFetch();
+
     loadConfig().then((config) => {
       if (config) {
-        configureAuth(config);
+        if (!isDemoMode()) configureAuth(config);
         setConfigState('loaded');
       } else {
         setConfigState('missing');
@@ -64,13 +70,18 @@ function App() {
   }
 
   if (configState === 'missing') {
-    return <StackNotDeployed />;
+    return <StackNotDeployed onTryDemo={() => {
+      enableDemoMode();
+      installMockFetch();
+      setConfigState('loaded');
+    }} />;
   }
 
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route path="/demo" element={<DemoPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route

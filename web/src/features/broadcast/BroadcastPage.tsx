@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { useBroadcast } from './useBroadcast';
@@ -456,12 +456,9 @@ export function BroadcastPage() {
   React.useEffect(() => {
     const getSession = async () => {
       try {
-        const session = await fetchAuthSession();
-        const username = session.tokens?.idToken?.payload?.['cognito:username'] as string;
-        if (username) {
-          setUserId(username);
-        }
-        setAuthToken(session.tokens?.idToken?.toString() || '');
+        const { token, username } = await fetchToken();
+        if (username) setUserId(username);
+        setAuthToken(token);
       } catch (error) {
         console.error('Failed to get user ID:', error);
       }

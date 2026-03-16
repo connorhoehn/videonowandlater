@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { useReplayPlayer } from './useReplayPlayer';
@@ -61,10 +61,9 @@ export function ReplayViewer() {
   const [activeTab, setActiveTab] = useState<'chat' | 'transcript'>('chat');
 
   useEffect(() => {
-    fetchAuthSession().then(session => {
-      const username = session.tokens?.idToken?.payload?.['cognito:username'] as string | undefined;
+    fetchToken().then(({ token, username }) => {
       if (username) setCurrentUserId(username);
-      setAuthToken(session.tokens?.idToken?.toString() || '');
+      setAuthToken(token);
     });
   }, []);
 

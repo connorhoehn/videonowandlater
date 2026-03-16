@@ -1,4 +1,4 @@
-export function StackNotDeployed() {
+export function StackNotDeployed({ onTryDemo }: { onTryDemo?: () => void }) {
   return (
     <div style={{
       display: 'flex',
@@ -58,6 +58,29 @@ export function StackNotDeployed() {
             <li>CDK bootstrapped in your AWS account: <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px' }}>npx cdk bootstrap</code></li>
           </ul>
         </div>
+
+        {onTryDemo && (
+          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '0.75rem' }}>
+              Don't have AWS set up? Explore the UI with mock data:
+            </p>
+            <button
+              onClick={onTryDemo}
+              style={{
+                padding: '0.6rem 1.5rem',
+                backgroundColor: '#111827',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Explore Demo Mode →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

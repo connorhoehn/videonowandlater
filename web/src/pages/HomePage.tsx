@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../auth/fetchToken';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
 import { RecordingSlider, type ActivitySession } from '../features/activity/RecordingSlider';
@@ -96,9 +96,8 @@ export function HomePage() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const session = await fetchAuthSession();
-        const token = session.tokens?.idToken?.toString() || null;
-        setAuthToken(token);
+        const { token } = await fetchToken();
+        setAuthToken(token || null);
       } catch (err) {
         console.error('Error fetching auth session:', err);
       }
@@ -117,8 +116,7 @@ export function HomePage() {
     setIsCreating(true);
     setError('');
     try {
-      const session = await fetchAuthSession();
-      const authToken = session.tokens?.idToken?.toString() || '';
+      const { token: authToken } = await fetchToken();
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -140,8 +138,7 @@ export function HomePage() {
     setIsCreatingHangout(true);
     setError('');
     try {
-      const session = await fetchAuthSession();
-      const authToken = session.tokens?.idToken?.toString() || '';
+      const { token: authToken } = await fetchToken();
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },

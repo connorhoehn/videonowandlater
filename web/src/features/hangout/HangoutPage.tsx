@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { useHangout } from './useHangout';
 import { useActiveSpeaker } from './useActiveSpeaker';
@@ -29,10 +29,9 @@ export function HangoutPage() {
   const [userId, setUserId] = useState<string>('');
 
   React.useEffect(() => {
-    fetchAuthSession().then(session => {
-      const username = session.tokens?.idToken?.payload?.['cognito:username'] as string | undefined;
+    fetchToken().then(({ token, username }) => {
       if (username) setUserId(username);
-      setAuthToken(session.tokens?.idToken?.toString() || '');
+      setAuthToken(token);
     }).catch(err => {
       console.error('Failed to get auth session:', err);
     });

@@ -8,6 +8,14 @@ export interface AwsConfig {
 let config: AwsConfig | null = null;
 
 export async function loadConfig(): Promise<AwsConfig | null> {
+  // Demo mode: skip AWS config fetch entirely
+  try {
+    if (localStorage.getItem('vnl_demo_mode') === 'true') {
+      config = { userPoolId: 'us-east-1_demo', userPoolClientId: 'demo-client-id', region: 'us-east-1', apiUrl: 'https://api.demo.local' };
+      return config;
+    }
+  } catch { /* ignore */ }
+
   try {
     const response = await fetch('/aws-config.json');
     if (!response.ok) {

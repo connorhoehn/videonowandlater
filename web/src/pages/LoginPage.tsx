@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { installMockFetch } from '../demo/mockFetch';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { signIn, enterDemoMode } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -87,6 +88,25 @@ export function LoginPage() {
               Sign up
             </Link>
           </p>
+        </div>
+
+        <div className="mt-4 text-center">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs text-gray-400">
+              <span className="bg-gray-50 px-3">or</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { installMockFetch(); enterDemoMode(); navigate('/'); }}
+            className="mt-4 w-full py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors"
+          >
+            Continue in Demo Mode
+          </button>
+          <p className="mt-2 text-xs text-gray-400">Explore the UI with mock data — no account needed</p>
         </div>
       </div>
     </div>

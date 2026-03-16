@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
 import { usePlayer } from './usePlayer';
@@ -25,10 +25,9 @@ export function ViewerPage() {
   const [userId, setUserId] = React.useState('');
 
   React.useEffect(() => {
-    fetchAuthSession().then(session => {
-      const username = session.tokens?.idToken?.payload?.['cognito:username'] as string | undefined;
+    fetchToken().then(({ token, username }) => {
       if (username) setUserId(username);
-      setAuthToken(session.tokens?.idToken?.toString() || '');
+      setAuthToken(token);
     }).catch(err => {
       console.error('Failed to get auth session:', err);
     });

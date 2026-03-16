@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchToken } from '../../auth/fetchToken';
 import { getConfig } from '../../config/aws-config';
 import { useHlsPlayer } from './useHlsPlayer';
 import { QualitySelector } from './QualitySelector';
@@ -74,8 +74,8 @@ export function VideoPage() {
 
   // Fetch auth token once on mount
   useEffect(() => {
-    fetchAuthSession().then(s => {
-      setAuthToken(s.tokens?.idToken?.toString() || '');
+    fetchToken().then(({ token }) => {
+      setAuthToken(token);
     });
   }, []);
 

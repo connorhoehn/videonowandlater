@@ -2,7 +2,7 @@
  * VideoPage - Dedicated player page for uploaded videos at /video/:sessionId
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { getConfig } from '../../config/aws-config';
@@ -54,6 +54,12 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function isUploadTerminal(session: UploadSession): boolean {
+  const anyFailed = [session.convertStatus, session.transcriptStatus, session.aiSummaryStatus, session.recordingStatus]
+    .some(s => s === 'failed');
+  return anyFailed || session.aiSummaryStatus === 'available';
+}
+
 export function VideoPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -63,6 +69,8 @@ export function VideoPage() {
   const [authToken, setAuthToken] = useState('');
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [allReactions, setAllReactions] = useState<Array<{ emojiType: string }>>([]);
+  const [pollInterval, setPollInterval] = useState(15000);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch auth token once on mount
   useEffect(() => {
@@ -127,8 +135,45 @@ export function VideoPage() {
     fetchSession();
   }, [sessionId, authToken, navigate]);
 
+  // Polling useEffect — re-fetch session when pipeline is non-terminal
+  useEffect(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (!session || isUploadTerminal(session) || !authToken || !sessionId) return;
+    const config = getConfig();
+    const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
+    const intervalId = setInterval(async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (response.ok) {
+          const data: UploadSession = await response.json();
+          setSession(data);
+        }
+      } catch {
+        // silent — polling errors should not surface as errors
+      }
+      setPollInterval(prev => Math.min(prev * 2, 60000));
+    }, pollInterval);
+    pollIntervalRef.current = intervalId;
+    return () => {
+      clearInterval(intervalId);
+      pollIntervalRef.current = null;
+    };
+  }, [session, pollInterval, sessionId, authToken]);
+
   // HLS player hook
   const { videoRef, qualities, currentQuality, setQuality, isSafari, syncTime } = useHlsPlayer(session?.recordingHlsUrl);
+
+  // seekVideo callback — seeks the HLS video element to the given time
+  const seekVideo = (timeMs: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timeMs / 1000;
+    }
+  };
 
   // Reaction sender
   const { sendReaction } = useReactionSender(sessionId || '', authToken);
@@ -292,6 +337,7 @@ export function VideoPage() {
             sessionId={sessionId!}
             authToken={authToken}
             syncTime={syncTime}
+            onSeek={seekVideo}
           />
         </div>
 
@@ -313,6 +359,7 @@ export function VideoPage() {
                 aiSummary={session.aiSummary}
                 aiSummaryStatus={session.aiSummaryStatus}
                 diarizedTranscriptS3Path={session.diarizedTranscriptS3Path}
+                onSeek={seekVideo}
               />
             </div>
           )}

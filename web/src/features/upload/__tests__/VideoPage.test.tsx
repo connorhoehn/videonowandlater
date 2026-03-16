@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { VideoPage } from '../VideoPage';
@@ -117,13 +117,11 @@ describe('VideoPage — Polling starts for non-terminal sessions (UI-08)', () =>
   let setIntervalSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: false });
     setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     setIntervalSpy.mockRestore();
   });
 
@@ -136,20 +134,12 @@ describe('VideoPage — Polling starts for non-terminal sessions (UI-08)', () =>
       </MemoryRouter>
     );
 
-    // Flush microtasks (auth + initial session fetch complete in fake-timer land)
-    await vi.runAllTicks();
-    // Flush the pending fetch promises
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // Now advance timers to allow any polling useEffect to fire
-    vi.advanceTimersByTime(100);
-
-    const pollingCalls = setIntervalSpy.mock.calls.filter(
-      ([, delay]) => typeof delay === 'number' && (delay as number) >= 5000
-    );
-    expect(pollingCalls.length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const pollingCalls = setIntervalSpy.mock.calls.filter(
+        ([, delay]) => typeof delay === 'number' && (delay as number) >= 5000
+      );
+      expect(pollingCalls.length).toBeGreaterThan(0);
+    });
   });
 
   it('starts polling when session transcriptStatus is "processing"', async () => {
@@ -163,16 +153,12 @@ describe('VideoPage — Polling starts for non-terminal sessions (UI-08)', () =>
       </MemoryRouter>
     );
 
-    await vi.runAllTicks();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    vi.advanceTimersByTime(100);
-
-    const pollingCalls = setIntervalSpy.mock.calls.filter(
-      ([, delay]) => typeof delay === 'number' && (delay as number) >= 5000
-    );
-    expect(pollingCalls.length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const pollingCalls = setIntervalSpy.mock.calls.filter(
+        ([, delay]) => typeof delay === 'number' && (delay as number) >= 5000
+      );
+      expect(pollingCalls.length).toBeGreaterThan(0);
+    });
   });
 });
 

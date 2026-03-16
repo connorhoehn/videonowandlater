@@ -88,13 +88,13 @@ describe('RecordingSlider', () => {
     expect(screen.queryByText('charlie')).toBeNull();
   });
 
-  it('renders "Recent Broadcasts" heading', () => {
+  it('renders "Recent Videos" heading', () => {
     render(
       <BrowserRouter>
         <RecordingSlider sessions={[broadcastSession1]} />
       </BrowserRouter>
     );
-    expect(screen.getByText('Recent Broadcasts')).toBeDefined();
+    expect(screen.getByText('Recent Videos')).toBeDefined();
   });
 
   it('renders userId and formatted duration for each broadcast card', () => {

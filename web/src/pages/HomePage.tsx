@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { useAuth } from '../auth/useAuth';
@@ -7,6 +7,17 @@ import { RecordingSlider, type ActivitySession } from '../features/activity/Reco
 import { LiveBroadcastsSlider } from '../features/activity/LiveBroadcastsSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
+
+function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
+  return sessions.some(
+    (s) =>
+      s.transcriptStatus === 'processing' ||
+      s.transcriptStatus === 'pending' ||
+      s.aiSummaryStatus === 'pending' ||
+      s.convertStatus === 'processing' ||
+      s.convertStatus === 'pending',
+  );
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -18,6 +29,9 @@ export function HomePage() {
   const [sessions, setSessions] = useState<ActivitySession[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [pollInterval, setPollInterval] = useState(15000);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevHasNonTerminalRef = useRef(false);
 
   useEffect(() => {
     const fetchActivity = async () => {
@@ -39,6 +53,45 @@ export function HomePage() {
     };
     fetchActivity();
   }, []);
+
+  useEffect(() => {
+    const nonTerminal = hasNonTerminalSessions(sessions);
+
+    // Reset poll interval when transitioning from all-terminal to having non-terminal sessions
+    if (nonTerminal && !prevHasNonTerminalRef.current) {
+      setPollInterval(15000);
+    }
+    prevHasNonTerminalRef.current = nonTerminal;
+
+    if (!nonTerminal) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const intervalId = setInterval(async () => {
+      const config = getConfig();
+      if (!config?.apiUrl) return;
+      try {
+        const response = await fetch(`${config.apiUrl}/activity`);
+        if (!response.ok) throw new Error(`${response.status}`);
+        const data = await response.json();
+        setSessions(data.sessions || []);
+      } catch (err) {
+        console.error('Error polling activity:', err);
+      }
+      setPollInterval(prev => Math.min(prev * 2, 60000));
+    }, pollInterval);
+
+    pollIntervalRef.current = intervalId;
+
+    return () => {
+      clearInterval(intervalId);
+      pollIntervalRef.current = null;
+    };
+  }, [sessions, pollInterval]);
 
   useEffect(() => {
     const initAuth = async () => {

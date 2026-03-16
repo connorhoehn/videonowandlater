@@ -49,7 +49,7 @@ describe('BroadcastActivityCard', () => {
     expect(screen.getByText('This is a test summary for the broadcast session.')).toBeDefined();
   });
 
-  it('should show "Summary coming soon" placeholder when status is pending', () => {
+  it('should show "Generating summary..." placeholder when status is pending', () => {
     const session: ActivitySession = {
       ...mockSession,
       aiSummaryStatus: 'pending',
@@ -61,7 +61,7 @@ describe('BroadcastActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText('Summary coming soon...')).toBeDefined();
+    expect(screen.getByText('Generating summary...')).toBeDefined();
   });
 
   it('should treat undefined aiSummaryStatus as pending (backward compatibility)', () => {
@@ -78,7 +78,7 @@ describe('BroadcastActivityCard', () => {
     );
 
     // Should show pending message, not the summary
-    expect(screen.getByText('Summary coming soon...')).toBeDefined();
+    expect(screen.getByText('Generating summary...')).toBeDefined();
     expect(screen.queryByText('Test summary')).toBeNull();
   });
 
@@ -154,7 +154,7 @@ describe('BroadcastActivityCard', () => {
     );
 
     expect(screen.getByText('testuser')).toBeDefined();
-    // Duration in MM:SS format
-    expect(screen.getByText(/2:00/)).toBeDefined();
+    // Duration in human-readable format
+    expect(screen.getByText(/2 min/)).toBeDefined();
   });
 });

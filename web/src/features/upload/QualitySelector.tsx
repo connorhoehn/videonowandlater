@@ -1,4 +1,4 @@
-import { Quality } from './useHlsPlayer';
+import type { Quality } from './useHlsPlayer';
 
 interface QualitySelectorProps {
   qualities: Quality[];

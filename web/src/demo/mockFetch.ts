@@ -1,10 +1,9 @@
 /**
  * Mock fetch interceptor for demo mode.
- * Intercepts calls to the demo API URL and returns static fixture data.
- * Non-API calls (HLS, CDN, etc.) pass through to the real fetch.
+ * Intercepts any API call that touches /sessions (regardless of host/base URL),
+ * so it works whether demo mode was activated before or after config was loaded.
+ * Non-API calls (HLS, CDN, aws-config.json, etc.) pass through.
  */
-
-const DEMO_API_HOST = 'https://api.demo.local';
 
 const MOCK_SESSIONS = [
   {
@@ -112,50 +111,59 @@ export function installMockFetch(): void {
         ? input.href
         : (input as Request).url;
 
-    if (!url.startsWith(DEMO_API_HOST)) {
+    // Extract the path portion (works for both relative and absolute URLs)
+    let path: string;
+    try {
+      path = new URL(url, window.location.origin).pathname;
+    } catch {
+      path = url;
+    }
+
+    // Only intercept API-shaped paths — let everything else through
+    // (aws-config.json, HLS segments, Cognito endpoints, etc.)
+    if (!path.includes('/sessions') && !path.match(/\/(live-sessions|upload)/)) {
       return original(input, init);
     }
 
-    const path = url.slice(DEMO_API_HOST.length).split('?')[0];
+    // Strip any /api prefix to normalise paths from different base URLs
+    const normalised = path.replace(/^\/api/, '').split('?')[0];
 
-    // POST /sessions — create session (return demo upload session)
-    if (path === '/sessions' && init?.method === 'POST') {
+    // POST /sessions — create session
+    if (normalised === '/sessions' && init?.method === 'POST') {
       return mockJson(MOCK_SESSIONS[0]);
     }
 
     // GET /sessions — list
-    if (path === '/sessions') {
+    if (normalised === '/sessions') {
       return mockJson({ sessions: MOCK_SESSIONS });
     }
 
     // GET /sessions/:id/reactions
-    const reactionsMatch = path.match(/^\/sessions\/([^/]+)\/reactions$/);
-    if (reactionsMatch) {
+    if (normalised.match(/^\/sessions\/[^/]+\/reactions$/)) {
       return mockJson({ reactions: MOCK_REACTIONS });
     }
 
     // GET/POST /sessions/:id/comments
-    const commentsMatch = path.match(/^\/sessions\/([^/]+)\/comments$/);
+    const commentsMatch = normalised.match(/^\/sessions\/[^/]+\/comments$/);
     if (commentsMatch) {
       if (init?.method === 'POST') return mockJson({ success: true });
       return mockJson({ comments: MOCK_COMMENTS });
     }
 
-    // GET /sessions/:id/transcript (presigned URL or direct)
-    const transcriptMatch = path.match(/^\/sessions\/([^/]+)\/transcript/);
-    if (transcriptMatch) {
+    // GET /sessions/:id/transcript
+    if (normalised.match(/^\/sessions\/[^/]+\/transcript/)) {
       return mockJson(MOCK_TRANSCRIPT);
     }
 
     // GET /sessions/:id
-    const sessionMatch = path.match(/^\/sessions\/([^/]+)$/);
+    const sessionMatch = normalised.match(/^\/sessions\/([^/]+)$/);
     if (sessionMatch) {
       const id = sessionMatch[1];
       const session = MOCK_SESSIONS.find(s => s.sessionId === id) ?? MOCK_SESSIONS[0];
       return mockJson(session);
     }
 
-    // Any other API call — 200 empty
+    // Any other matched path — 200 empty
     return mockJson({});
   };
 }

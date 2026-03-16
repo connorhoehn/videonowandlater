@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: completed
-stopped_at: Completed 040-02-PLAN.md
-last_updated: "2026-03-16T00:24:39.210Z"
-last_activity: "2026-03-15 — Completed 040-01: TranscriptDisplay click-to-seek + SummaryDisplay visual states"
+stopped_at: Completed 041-01-PLAN.md
+last_updated: "2026-03-16T01:49:14.394Z"
+last_activity: "2026-03-16 — Completed 041-01: Wave 0 test scaffolds for Phase 41 UI Polish"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
   percent: 100
 ---
 
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 40 of 41 (UI Polish: Replay & Feed) — IN PROGRESS
-Plan: 2/2 complete (040-02 done)
-Status: 040-02 COMPLETE — PipelineStatusBadge, thumbnail, formatHumanDuration, HomePage polling
-Last activity: 2026-03-15 — Completed 040-02: Activity feed cards with thumbnails, status badges, and polling
+Phase: 41 of 41 (UI Polish: Live Session & Upload) — IN PROGRESS
+Plan: 1/3 complete (041-01 done)
+Status: 041-01 COMPLETE — Wave 0 test scaffolds: ConfirmDialog, HangoutPage, VideoPage polling, CommentThread seek
+Last activity: 2026-03-16 — Completed 041-01: Four failing test files defining UI-06/07/08/09 contracts
 
-Progress: [████████████████████████████████████] 100%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -88,6 +88,11 @@ Progress: [███████████████████████
 - HomePage polling: `useRef` for interval ID + `pollInterval` state for exponential backoff 15s->30s->60s; `prevHasNonTerminalRef` detects terminal->non-terminal transition to reset interval
 - formatHumanDuration exported from BroadcastActivityCard, imported by HangoutActivityCard (single source of truth for "X min Y sec" format)
 
+**UI polish (Phase 41 — 041-01 test scaffolds):**
+- Split VideoPage polling describe blocks: `vi.useFakeTimers()` for "starts polling" tests, real timers for "does NOT poll" tests — combining fake timers with `waitFor` in same test causes deadlock (waitFor polls via setTimeout which fake timers intercept)
+- HangoutPage test mocks ConfirmDialog inline (not importing from non-existent `../../components/ConfirmDialog`) so leave-guard wiring test fails on HangoutPage side, not module resolution
+- CommentThread `onSeek` prop not yet in interface — only the click-to-seek test is RED; render and submission guard tests pass since those behaviors already exist
+
 ### Pending Todos
 
 None yet.
@@ -98,8 +103,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-16T00:24:39.208Z
-Stopped at: Completed 040-02-PLAN.md
+Last session: 2026-03-16T01:49:14.392Z
+Stopped at: Completed 041-01-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**

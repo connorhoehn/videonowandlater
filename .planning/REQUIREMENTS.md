@@ -39,10 +39,10 @@
 - [x] **UI-03**: Activity feed cards display a video thumbnail when one is available for the session
 - [x] **UI-04**: Activity feed cards display the recording duration in a human-readable format
 - [x] **UI-05**: Activity feed cards accurately reflect the current pipeline processing state (transcribing, summarizing, complete, failed)
-- [ ] **UI-06**: Stopping a broadcast or leaving a hangout requires confirmation to prevent accidental session termination
-- [ ] **UI-07**: Hangout page has a reaction picker and floating reactions (parity with broadcast page)
-- [ ] **UI-08**: Upload video page shows accurate pipeline stage progression while the video is still processing
-- [ ] **UI-09**: Upload video page comment thread and transcript panel are fully functional (submit, display, timestamp correlation)
+- [x] **UI-06**: Stopping a broadcast or leaving a hangout requires confirmation to prevent accidental session termination
+- [x] **UI-07**: Hangout page has a reaction picker and floating reactions (parity with broadcast page)
+- [x] **UI-08**: Upload video page shows accurate pipeline stage progression while the video is still processing
+- [x] **UI-09**: Upload video page comment thread and transcript panel are fully functional (submit, display, timestamp correlation)
 
 ## v2 Requirements
 
@@ -99,10 +99,10 @@
 | UI-03 | Phase 40 | Complete |
 | UI-04 | Phase 40 | Complete |
 | UI-05 | Phase 40 | Complete |
-| UI-06 | Phase 41 | Pending |
-| UI-07 | Phase 41 | Pending |
-| UI-08 | Phase 41 | Pending |
-| UI-09 | Phase 41 | Pending |
+| UI-06 | Phase 41 | Complete |
+| UI-07 | Phase 41 | Complete |
+| UI-08 | Phase 41 | Complete |
+| UI-09 | Phase 41 | Complete |
 
 **Coverage:**
 - v1.7 requirements: 17 total

@@ -23,25 +23,31 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
   if (displayStatus === 'pending') {
     return (
-      <p className={`text-gray-500 text-sm ${className}`}>
-        Summary coming soon...
-      </p>
+      <div className={`flex items-center gap-2 ${className}`}>
+        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-blue-600 flex-shrink-0" />
+        <span className="text-gray-500 text-sm">Generating summary...</span>
+      </div>
     );
   }
 
   if (displayStatus === 'available' && summary) {
     return (
-      <p className={`text-sm ${truncate ? 'line-clamp-2' : ''} ${className}`}>
-        {summary}
-      </p>
+      <div className={`bg-blue-50 border border-blue-100 rounded-lg p-3 ${className}`}>
+        <p className={`text-sm ${truncate ? 'line-clamp-2' : ''}`}>
+          {summary}
+        </p>
+      </div>
     );
   }
 
   if (displayStatus === 'failed') {
     return (
-      <p className={`text-gray-400 text-sm italic ${className}`}>
-        Summary unavailable
-      </p>
+      <div className={`flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg p-3 ${className}`}>
+        <svg className="h-4 w-4 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <span className="text-gray-500 text-sm">Summary unavailable</span>
+      </div>
     );
   }
 

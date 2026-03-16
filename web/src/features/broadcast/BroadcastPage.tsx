@@ -22,6 +22,7 @@ import { useStreamMetrics } from './useStreamMetrics';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { SpotlightModal } from '../spotlight/SpotlightModal';
 import { useSpotlight } from '../spotlight/useSpotlight';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -107,6 +108,7 @@ function BroadcastContent({
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   const [floatingReactions, setFloatingReactions] = React.useState<FloatingEmoji[]>([]);
   const [linkCopied, setLinkCopied] = React.useState(false);
+  const [showStopConfirm, setShowStopConfirm] = React.useState(false);
 
   const viewerUrl = `${window.location.origin}/viewer/${sessionId}`;
 
@@ -358,7 +360,7 @@ function BroadcastContent({
                     </button>
                   ) : (
                     <button
-                      onClick={stopBroadcast}
+                      onClick={() => setShowStopConfirm(true)}
                       className="px-5 py-2 bg-gray-800 text-white rounded-lg font-semibold hover:bg-gray-900 text-sm"
                     >
                       Stop Broadcast
@@ -429,6 +431,15 @@ function BroadcastContent({
           isLoading={isLoadingLive}
           onSelect={selectCreator}
           onRefresh={refreshLiveSessions}
+        />
+
+        <ConfirmDialog
+          isOpen={showStopConfirm}
+          title="Stop broadcast?"
+          message="Your stream will end and viewers will be disconnected."
+          confirmLabel="Stop"
+          onConfirm={() => { stopBroadcast(); setShowStopConfirm(false); }}
+          onCancel={() => setShowStopConfirm(false)}
         />
       </div>
     </ChatRoomProvider>

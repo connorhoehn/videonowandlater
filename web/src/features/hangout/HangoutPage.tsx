@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { v4 as uuidv4 } from 'uuid';
 import { useHangout } from './useHangout';
 import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
@@ -13,6 +14,11 @@ import { ChatPanel } from '../chat/ChatPanel';
 import { ChatRoomProvider } from '../chat/ChatRoomProvider';
 import { useChatRoom } from '../chat/useChatRoom';
 import { getConfig } from '../../config/aws-config';
+import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
+import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
+import { useReactionSender } from '../reactions/useReactionSender';
+import { useReactionListener } from '../reactions/useReactionListener';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -36,6 +42,8 @@ export function HangoutPage() {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
 
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
@@ -55,6 +63,12 @@ export function HangoutPage() {
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
   const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId: sessionId || '', authToken });
+  const { sendReaction } = useReactionSender(sessionId || '', authToken);
+
+  useReactionListener(room, (reaction) => {
+    const emoji = EMOJI_MAP[reaction.emojiType as EmojiType];
+    setFloatingReactions(prev => [...prev, { id: uuidv4(), emoji, timestamp: Date.now() }]);
+  });
 
   // Merge activeSpeakerId into participants array
   const participantsWithSpeaking = useMemo(
@@ -81,6 +95,11 @@ export function HangoutPage() {
   const handleCameraToggle = () => {
     toggleCamera(!isCameraOn);
     setIsCameraOn(!isCameraOn);
+  };
+
+  const handleReaction = async (emoji: EmojiType) => {
+    await sendReaction(emoji);
+    setFloatingReactions(prev => [...prev, { id: uuidv4(), emoji: EMOJI_MAP[emoji], timestamp: Date.now() }]);
   };
 
   // End session via API — only when this user is the last participant
@@ -139,7 +158,7 @@ export function HangoutPage() {
             </button>
           )}
           <button
-            onClick={handleLeave}
+            onClick={() => setShowLeaveConfirm(true)}
             className="px-3 py-1 text-white hover:text-gray-300 text-sm"
           >
             ← Leave
@@ -162,10 +181,14 @@ export function HangoutPage() {
       {isJoined && (
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Video section */}
-          <div className="w-full md:w-2/3 flex flex-col">
+          <div className="w-full md:w-2/3 flex flex-col relative">
             <div className="flex-1 overflow-hidden">
               <VideoGrid participants={participantsWithSpeaking} />
             </div>
+            <FloatingReactions
+              reactions={floatingReactions}
+              onExpire={(id) => setFloatingReactions(prev => prev.filter(r => r.id !== id))}
+            />
 
             {/* Controls */}
             <div className="p-4 bg-gray-100 border-t flex justify-center gap-4 shrink-0">
@@ -189,8 +212,11 @@ export function HangoutPage() {
               >
                 {isCameraOn ? '📷 Camera Off' : '📷 Camera On'}
               </button>
+              {isJoined && (
+                <ReactionPicker onReaction={handleReaction} />
+              )}
               <button
-                onClick={handleLeave}
+                onClick={() => setShowLeaveConfirm(true)}
                 className="px-6 py-3 rounded-lg font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300"
               >
                 Leave
@@ -234,6 +260,15 @@ export function HangoutPage() {
       {/* Local video preview (hidden - used by useHangout) */}
       <video ref={localVideoRef} style={{ display: 'none' }} autoPlay muted playsInline />
     </div>
+
+    <ConfirmDialog
+      isOpen={showLeaveConfirm}
+      title="Leave hangout?"
+      message="You will be disconnected from the session."
+      confirmLabel="Leave"
+      onConfirm={() => { handleLeave(); setShowLeaveConfirm(false); }}
+      onCancel={() => setShowLeaveConfirm(false)}
+    />
     </ChatRoomProvider>
   );
 }

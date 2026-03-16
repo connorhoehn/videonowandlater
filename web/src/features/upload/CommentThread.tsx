@@ -19,9 +19,10 @@ interface CommentThreadProps {
   sessionId: string;
   authToken: string;
   syncTime: number; // ms from useHlsPlayer
+  onSeek?: (timeMs: number) => void;
 }
 
-export function CommentThread({ sessionId, authToken, syncTime }: CommentThreadProps) {
+export function CommentThread({ sessionId, authToken, syncTime, onSeek }: CommentThreadProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [text, setText] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'position'>('newest');
@@ -133,11 +134,12 @@ export function CommentThread({ sessionId, authToken, syncTime }: CommentThreadP
             return (
               <div
                 key={comment.commentId}
-                className={`px-4 py-3 border transition-colors ${
+                className={`px-4 py-3 border transition-colors cursor-pointer ${
                   isHighlighted
                     ? 'bg-yellow-100 border-yellow-300'
                     : 'border-transparent hover:bg-gray-50'
                 }`}
+                onClick={() => onSeek?.(comment.videoPositionMs)}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-gray-700">{comment.userId}</span>

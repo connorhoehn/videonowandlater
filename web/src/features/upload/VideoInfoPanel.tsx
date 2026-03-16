@@ -12,6 +12,7 @@ interface VideoInfoPanelProps {
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
   diarizedTranscriptS3Path?: string;
+  onSeek?: (timeMs: number) => void;
 }
 
 export function VideoInfoPanel({
@@ -21,6 +22,7 @@ export function VideoInfoPanel({
   aiSummary,
   aiSummaryStatus,
   diarizedTranscriptS3Path,
+  onSeek,
 }: VideoInfoPanelProps) {
   return (
     <div className="p-4 space-y-4">
@@ -31,6 +33,7 @@ export function VideoInfoPanel({
           currentTime={syncTime}
           authToken={authToken}
           diarizedTranscriptS3Path={diarizedTranscriptS3Path}
+          onSeek={onSeek}
         />
       </div>
     </div>

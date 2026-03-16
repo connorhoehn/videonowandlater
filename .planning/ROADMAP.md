@@ -174,8 +174,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 040-01-PLAN.md — Transcript click-to-seek + SummaryDisplay distinct visual states (Wave 1)
-- [ ] 040-02-PLAN.md — Activity card thumbnail, duration format, pipeline status badge, polling (Wave 1)
+- [x] 040-01-PLAN.md — Transcript click-to-seek + SummaryDisplay distinct visual states (Wave 1)
+- [x] 040-02-PLAN.md — Activity card thumbnail, duration format, pipeline status badge, polling (Wave 1)
 
 ### Phase 41: UI Polish — Live Session & Upload
 **Goal**: Broadcast and hangout live pages are complete with confirmation dialogs, hangout has reaction parity with broadcast, and the upload video page is fully functional with accurate pipeline state and working comment/transcript panels
@@ -200,5 +200,5 @@ Plans:
 | 37. Event Schema Validation | v1.7 | 4/4 | Complete | 2026-03-13 |
 | 38. Idempotency Gap Coverage | v1.7 | 3/4 | In Progress | - |
 | 39. DLQ Re-drive Tooling | v1.7 | 0/TBD | Not started | - |
-| 40. UI Polish — Replay & Feed | v1.7 | 0/2 | Not started | - |
+| 40. UI Polish — Replay & Feed | v1.7 | 2/2 | Complete | 2026-03-15 |
 | 41. UI Polish — Live Session & Upload | v1.7 | 0/TBD | Not started | - |

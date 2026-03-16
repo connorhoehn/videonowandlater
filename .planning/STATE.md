@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: completed
-stopped_at: Completed 041-01-PLAN.md
-last_updated: "2026-03-16T01:49:14.394Z"
-last_activity: "2026-03-16 — Completed 041-01: Wave 0 test scaffolds for Phase 41 UI Polish"
+stopped_at: Completed 041-02-PLAN.md
+last_updated: "2026-03-16T14:40:04.503Z"
+last_activity: "2026-03-16 — Completed 041-01: Four failing test files defining UI-06/07/08/09 contracts"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 10
-  completed_plans: 8
-  percent: 100
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 41 of 41 (UI Polish: Live Session & Upload) — IN PROGRESS
-Plan: 1/3 complete (041-01 done)
-Status: 041-01 COMPLETE — Wave 0 test scaffolds: ConfirmDialog, HangoutPage, VideoPage polling, CommentThread seek
-Last activity: 2026-03-16 — Completed 041-01: Four failing test files defining UI-06/07/08/09 contracts
+Plan: 2/3 complete (041-01, 041-02 done)
+Status: 041-02 COMPLETE — ConfirmDialog + BroadcastPage stop guard + HangoutPage leave guard + reaction parity
+Last activity: 2026-03-16 — Completed 041-02: ConfirmDialog, BroadcastPage/HangoutPage UI-06/07 implementation
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -93,6 +93,11 @@ Progress: [████████░░] 80%
 - HangoutPage test mocks ConfirmDialog inline (not importing from non-existent `../../components/ConfirmDialog`) so leave-guard wiring test fails on HangoutPage side, not module resolution
 - CommentThread `onSeek` prop not yet in interface — only the click-to-seek test is RED; render and submission guard tests pass since those behaviors already exist
 
+**UI polish (Phase 41 — 041-02 ConfirmDialog + HangoutPage reactions):**
+- Vitest vi.mock path resolution: mocks in `__tests__/` subdirectory resolve `../../components/ConfirmDialog` to `web/src/features/components/ConfirmDialog` (different absolute path than HangoutPage's `web/src/components/ConfirmDialog`). Fix: add data-testid attributes to the real ConfirmDialog component so tests work with the real component rendering
+- ConfirmDialog placed outside the `isJoined && (...)` conditional so header "← Leave" button works before joining
+- ReactionPicker rendered inside `{isJoined && (...)}` within controls bar — consistent with BroadcastPage pattern where ReactionPicker is only shown when live
+
 ### Pending Todos
 
 None yet.
@@ -103,8 +108,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-16T01:49:14.392Z
-Stopped at: Completed 041-01-PLAN.md
+Last session: 2026-03-16T14:40:04.501Z
+Stopped at: Completed 041-02-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**

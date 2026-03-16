@@ -189,8 +189,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 041-01-PLAN.md — Wave 0 TDD: failing test scaffolds for ConfirmDialog, HangoutPage, VideoPage, CommentThread (UI-06, UI-07, UI-08, UI-09)
-- [ ] 041-02-PLAN.md — ConfirmDialog component + BroadcastPage/HangoutPage confirmation guards + HangoutPage reactions (UI-06, UI-07)
+- [x] 041-01-PLAN.md — Wave 0 TDD: failing test scaffolds for ConfirmDialog, HangoutPage, VideoPage, CommentThread (UI-06, UI-07, UI-08, UI-09)
+- [x] 041-02-PLAN.md — ConfirmDialog component + BroadcastPage/HangoutPage confirmation guards + HangoutPage reactions (UI-06, UI-07)
 - [ ] 041-03-PLAN.md — VideoPage pipeline polling + seekVideo wiring through VideoInfoPanel and CommentThread (UI-08, UI-09)
 
 ## Progress

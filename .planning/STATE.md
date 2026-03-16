@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Event Hardening & UI Polish
 status: completed
-stopped_at: Completed 040-01-PLAN.md
-last_updated: "2026-03-16T00:21:54.192Z"
+stopped_at: Completed 040-02-PLAN.md
+last_updated: "2026-03-16T00:24:39.210Z"
 last_activity: "2026-03-15 — Completed 040-01: TranscriptDisplay click-to-seek + SummaryDisplay visual states"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
-  percent: 96
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 40 of 41 (UI Polish: Replay & Feed) — IN PROGRESS
-Plan: 1/2 complete (040-01 done)
-Status: 040-01 COMPLETE — TranscriptDisplay click-to-seek + SummaryDisplay visual states (18 tests)
-Last activity: 2026-03-15 — Completed 040-01: TranscriptDisplay click-to-seek + SummaryDisplay visual states
+Plan: 2/2 complete (040-02 done)
+Status: 040-02 COMPLETE — PipelineStatusBadge, thumbnail, formatHumanDuration, HomePage polling
+Last activity: 2026-03-15 — Completed 040-02: Activity feed cards with thumbnails, status badges, and polling
 
 Progress: [████████████████████████████████████] 100%
 
@@ -83,6 +83,11 @@ Progress: [███████████████████████
 - Use `videoRef.current.currentTime = timeMs / 1000` for seek in ReplayViewer — avoids stale playerRef issue since `playerRef.current` is captured at render time but the IVS player initializes asynchronously; the IVS player attaches to the HTMLVideoElement so setting `currentTime` directly works
 - SummaryDisplay pending text changed from "Summary coming soon..." to "Generating summary..." — acceptable in UI polish phase
 
+**UI polish (Phase 40 — 040-02):**
+- `data-testid="thumbnail"` required for decorative images: `alt=""` creates `role="presentation"` not `role="img"` in ARIA accessibility tree, so `getByRole('img')` fails — use `getByTestId`
+- HomePage polling: `useRef` for interval ID + `pollInterval` state for exponential backoff 15s->30s->60s; `prevHasNonTerminalRef` detects terminal->non-terminal transition to reset interval
+- formatHumanDuration exported from BroadcastActivityCard, imported by HangoutActivityCard (single source of truth for "X min Y sec" format)
+
 ### Pending Todos
 
 None yet.
@@ -93,8 +98,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-16T00:21:54.190Z
-Stopped at: Completed 040-01-PLAN.md
+Last session: 2026-03-16T00:24:39.208Z
+Stopped at: Completed 040-02-PLAN.md
 Resume file: None
 
 **Key decisions from 036-02:**

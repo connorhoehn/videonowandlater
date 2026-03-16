@@ -34,11 +34,11 @@
 
 ### UI Polish
 
-- [ ] **UI-01**: User can click a transcript segment to seek the video player to that timestamp
-- [ ] **UI-02**: AI summary panel displays distinct visual states for processing / available / failed (not the same plain text style for all)
-- [ ] **UI-03**: Activity feed cards display a video thumbnail when one is available for the session
-- [ ] **UI-04**: Activity feed cards display the recording duration in a human-readable format
-- [ ] **UI-05**: Activity feed cards accurately reflect the current pipeline processing state (transcribing, summarizing, complete, failed)
+- [x] **UI-01**: User can click a transcript segment to seek the video player to that timestamp
+- [x] **UI-02**: AI summary panel displays distinct visual states for processing / available / failed (not the same plain text style for all)
+- [x] **UI-03**: Activity feed cards display a video thumbnail when one is available for the session
+- [x] **UI-04**: Activity feed cards display the recording duration in a human-readable format
+- [x] **UI-05**: Activity feed cards accurately reflect the current pipeline processing state (transcribing, summarizing, complete, failed)
 - [ ] **UI-06**: Stopping a broadcast or leaving a hangout requires confirmation to prevent accidental session termination
 - [ ] **UI-07**: Hangout page has a reaction picker and floating reactions (parity with broadcast page)
 - [ ] **UI-08**: Upload video page shows accurate pipeline stage progression while the video is still processing
@@ -94,11 +94,11 @@
 | DLQ-02 | Phase 39 | Complete |
 | DLQ-03 | Phase 39 | Complete |
 | DLQ-04 | Phase 39 | Complete |
-| UI-01 | Phase 40 | Pending |
-| UI-02 | Phase 40 | Pending |
-| UI-03 | Phase 40 | Pending |
-| UI-04 | Phase 40 | Pending |
-| UI-05 | Phase 40 | Pending |
+| UI-01 | Phase 40 | Complete |
+| UI-02 | Phase 40 | Complete |
+| UI-03 | Phase 40 | Complete |
+| UI-04 | Phase 40 | Complete |
+| UI-05 | Phase 40 | Complete |
 | UI-06 | Phase 41 | Pending |
 | UI-07 | Phase 41 | Pending |
 | UI-08 | Phase 41 | Pending |

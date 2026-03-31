@@ -936,6 +936,9 @@ export class SessionStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
 
+    // Set CloudFront domain for thumbnail/poster URL generation
+    onMediaConvertCompleteFunction.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
+
     // Grant DynamoDB access to on-mediaconvert-complete
     this.table.grantReadWriteData(onMediaConvertCompleteFunction);
 

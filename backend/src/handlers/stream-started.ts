@@ -5,9 +5,15 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { updateSessionStatus } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
+
+const logger = new Logger({
+  serviceName: 'vnl-events',
+  persistentKeys: { handler: 'stream-started' },
+});
 
 interface StreamStartDetail {
   event_name: 'Stream Start';
@@ -24,9 +30,13 @@ export const handler = async (
   // IVS Stream State Change: channel ARN is in event.resources[0]
   // detail.channel_arn does not exist for stream state change events
   const channelArn = event.resources?.[0];
-  console.log('Raw event:', JSON.stringify({ resources: event.resources, detail: event.detail }));
 
-  console.log('Stream Start event received for channel:', channelArn);
+  if (!channelArn || !channelArn.startsWith('arn:aws:ivs:')) {
+    logger.warn('Invalid or missing channel ARN in event', { resources: event.resources });
+    return;
+  }
+
+  logger.info('Stream Start event received', { channelArn });
 
   const docClient = getDocumentClient();
 
@@ -45,20 +55,27 @@ export const handler = async (
   }));
 
   if (!scanResult.Items || scanResult.Items.length === 0) {
-    console.warn('No session found for channel:', channelArn);
+    logger.warn('No session found for channel', { channelArn });
     return;
   }
 
   const session = scanResult.Items[0];
   const sessionId = session.sessionId;
+  logger.appendPersistentKeys({ sessionId });
 
-  console.log('Found session:', sessionId, 'transitioning to LIVE');
+  logger.info('Transitioning session to LIVE');
 
   try {
     await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
-    console.log('Session transitioned to LIVE:', sessionId);
+    logger.info('Session transitioned to LIVE');
   } catch (error: any) {
-    console.error('Failed to update session status:', error.message);
-    // Don't throw - EventBridge will retry on error
+    // Gracefully handle concurrent transitions (e.g., session already LIVE)
+    if (error.name === 'ConditionalCheckFailedException' || error.message?.includes('Invalid transition')) {
+      logger.warn('Session already transitioned (concurrent update)', {
+        errorMessage: error.message,
+      });
+    } else {
+      logger.error('Failed to update session status', { errorMessage: error.message });
+    }
   }
 };

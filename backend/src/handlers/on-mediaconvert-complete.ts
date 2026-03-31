@@ -11,6 +11,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { getSessionById, updateSessionRecording, updateHighlightReel } from '../repositories/session-repository';
+import { SessionStatus } from '../domain/session';
 import { MediaConvertCompleteDetailSchema, type MediaConvertCompleteDetail } from './schemas/on-mediaconvert-complete.schema';
 
 const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
@@ -45,7 +46,7 @@ async function processEvent(
     // Parse sessionId from jobName (format: vnl-{sessionId}-{epochMs})
     const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
     if (!jobNameMatch) {
-      console.error(`Could not parse sessionId from jobName: ${jobName}`);
+      logger.error('Could not parse sessionId from jobName', { jobName });
       return;
     }
     const sessionId = jobNameMatch[1];
@@ -55,7 +56,7 @@ async function processEvent(
     // Get session
     const session = await getSessionById(tableName, sessionId);
     if (!session) {
-      console.error(`Session not found: ${sessionId}`);
+      logger.error('Session not found', { sessionId });
       return;
     }
 
@@ -118,7 +119,7 @@ async function processEvent(
         recordingHlsUrl,
         recordingStatus: 'available',
         convertStatus: 'available',
-        status: 'ended',
+        status: SessionStatus.ENDED,
       });
 
       logger.info('Session updated with HLS URL and marked as ended', { sessionId });

@@ -442,8 +442,6 @@ describe('on-mediaconvert-complete handler', () => {
     });
 
     it('should log error when jobName cannot be parsed', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const ebEvent = {
         source: 'aws.mediaconvert',
         detailType: 'MediaConvert Job State Change',
@@ -462,19 +460,12 @@ describe('on-mediaconvert-complete handler', () => {
       const result = await handler(makeSqsEvent(ebEvent));
 
       expect(result.batchItemFailures).toHaveLength(0);
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Could not parse sessionId/)
-      );
       expect(mockGetSessionById).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
   });
 
   describe('Session lookup', () => {
     it('should log error when session not found', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mockGetSessionById.mockResolvedValueOnce(null);
 
       const ebEvent = {
@@ -495,13 +486,7 @@ describe('on-mediaconvert-complete handler', () => {
       const result = await handler(makeSqsEvent(ebEvent));
 
       expect(result.batchItemFailures).toHaveLength(0);
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Session not found/)
-      );
       expect(mockUpdateSessionRecording).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
   });
 

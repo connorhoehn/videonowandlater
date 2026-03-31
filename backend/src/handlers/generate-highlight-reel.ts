@@ -173,6 +173,7 @@ async function processEvent(
               },
             },
             AudioDescriptions: [{
+              AudioSourceName: 'Audio Selector 1',
               CodecSettings: {
                 Codec: 'AAC',
                 AacSettings: {
@@ -210,6 +211,7 @@ async function processEvent(
               },
             },
             AudioDescriptions: [{
+              AudioSourceName: 'Audio Selector 1',
               CodecSettings: {
                 Codec: 'AAC',
                 AacSettings: {

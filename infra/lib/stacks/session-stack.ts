@@ -704,6 +704,15 @@ export class SessionStack extends Stack {
     // Grant S3 read+write access to transcription bucket (reads transcript.json, writes speaker-segments.json)
     transcriptionBucket.grantReadWrite(transcribeCompletedFn);
 
+    // Grant EventBridge PutEvents permission (publishes "Transcript Stored" event)
+    transcribeCompletedFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
     // Add EventBridge target — migrated to SQS queue
     transcribeCompletedRule.addTarget(new targets.SqsQueue(transcribeCompletedQueue));
 
@@ -726,6 +735,7 @@ export class SessionStack extends Stack {
         TABLE_NAME: this.table.tableName,
         BEDROCK_REGION: this.region,
         BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0',
+        EVENT_BUS_NAME: 'default',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
       logGroup: new logs.LogGroup(this, 'StoreSummaryLogGroup', {
@@ -750,6 +760,18 @@ export class SessionStack extends Stack {
       })
     );
 
+    // Grant EventBridge PutEvents permission (publishes "Chapters Stored" event)
+    storeSummaryFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // S3 read access for fetching transcripts
+    transcriptionBucket.grantRead(storeSummaryFn);
+
     // EventBridge rule triggered on transcript storage completion (Phase 19)
     // Target migrated from LambdaFunction to SqsQueue (Phase 31)
     const transcriptStoreRule = new events.Rule(this, 'TranscriptStoreRule', {
@@ -760,6 +782,94 @@ export class SessionStack extends Stack {
       description: 'Trigger AI summary generation when transcript is stored',
     });
     transcriptStoreRule.addTarget(new targets.SqsQueue(storeSummaryQueue));
+
+    // ============================================================
+    // Highlight Reel Pipeline
+    // Triggered when chapters are stored, submits MediaConvert job to create
+    // landscape + vertical highlight reel clips from best chapter moments
+    // ============================================================
+
+    // generate-highlight-reel queue (120s Lambda timeout → 720s visibility)
+    const generateHighlightReelDlq = new sqs.Queue(this, 'GenerateHighlightReelDlq', {
+      queueName: 'vnl-generate-highlight-reel-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const generateHighlightReelQueue = new sqs.Queue(this, 'GenerateHighlightReelQueue', {
+      queueName: 'vnl-generate-highlight-reel',
+      visibilityTimeout: Duration.seconds(720), // 6× Lambda timeout (120s)
+      deadLetterQueue: { queue: generateHighlightReelDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // EventBridge rule for "Chapters Stored" events from store-summary handler
+    const chaptersStoredRule = new events.Rule(this, 'ChaptersStoredRule', {
+      eventPattern: {
+        source: ['custom.vnl'],
+        detailType: ['Chapters Stored'],
+      },
+      description: 'Trigger highlight reel generation when chapters are stored',
+    });
+    chaptersStoredRule.addTarget(new targets.SqsQueue(generateHighlightReelQueue));
+
+    // Lambda function for generate-highlight-reel (MediaConvert job submission)
+    const generateHighlightReelFn = new nodejs.NodejsFunction(this, 'GenerateHighlightReel', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/generate-highlight-reel.ts'),
+      timeout: Duration.seconds(120),
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
+        MEDIACONVERT_ROLE_ARN: mediaConvertRole.roleArn,
+        AWS_ACCOUNT_ID: this.account,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'GenerateHighlightReelLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    // Grant DynamoDB access
+    this.table.grantReadWriteData(generateHighlightReelFn);
+
+    // Grant S3 read access to transcription bucket (reads recording.mp4)
+    transcriptionBucket.grantRead(generateHighlightReelFn);
+
+    // Grant MediaConvert permissions
+    generateHighlightReelFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'mediaconvert:CreateJob',
+          'mediaconvert:DescribeEndpoints',
+          'mediaconvert:TagResource',
+        ],
+        resources: ['*'],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Grant IAM PassRole for MediaConvert
+    generateHighlightReelFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [mediaConvertRole.roleArn],
+        conditions: {
+          StringEquals: {
+            'iam:PassedToService': 'mediaconvert.amazonaws.com',
+          },
+        },
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Wire SQS event source
+    generateHighlightReelFn.addEventSource(new SqsEventSource(generateHighlightReelQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
 
     // ============================================================
     // Upload MediaConvert Pipeline (Phase 21)
@@ -1010,6 +1120,7 @@ export class SessionStack extends Stack {
       { id: 'TranscribeCompleted', fn: transcribeCompletedFn, dlq: transcribeCompletedDlq, label: 'transcribe-completed' },
       { id: 'StoreSummary', fn: storeSummaryFn, dlq: storeSummaryDlq, label: 'store-summary' },
       { id: 'StartTranscribe', fn: startTranscribeFn, dlq: startTranscribeDlq, label: 'start-transcribe' },
+      { id: 'GenerateHighlightReel', fn: generateHighlightReelFn, dlq: generateHighlightReelDlq, label: 'generate-highlight-reel' },
     ];
 
     for (const { id, fn, dlq, label } of pipelineHandlers) {

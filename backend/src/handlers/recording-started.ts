@@ -5,8 +5,14 @@
 
 import type { EventBridgeEvent } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { updateRecordingMetadata } from '../repositories/session-repository';
+
+const logger = new Logger({
+  serviceName: 'vnl-events',
+  persistentKeys: { handler: 'recording-started' },
+});
 
 interface RecordingStartDetail {
   channel_arn?: string;
@@ -22,11 +28,16 @@ export const handler = async (
   const resourceArn = event.detail.channel_arn || event.detail.stage_arn;
 
   if (!resourceArn) {
-    console.warn('Recording Start event missing both channel_arn and stage_arn');
+    logger.warn('Recording Start event missing both channel_arn and stage_arn');
     return;
   }
 
-  console.log('Recording Start event received for resource:', resourceArn);
+  if (!resourceArn.startsWith('arn:aws:ivs')) {
+    logger.warn('Invalid resource ARN format', { resourceArn });
+    return;
+  }
+
+  logger.info('Recording Start event received', { resourceArn });
 
   const docClient = getDocumentClient();
 
@@ -46,14 +57,15 @@ export const handler = async (
     }));
 
     if (!scanResult.Items || scanResult.Items.length === 0) {
-      console.warn('No session found for resource:', resourceArn);
+      logger.warn('No session found for resource', { resourceArn });
       return;
     }
 
     const session = scanResult.Items[0];
     const sessionId = session.sessionId;
+    logger.appendPersistentKeys({ sessionId });
 
-    console.log('Found session:', sessionId, 'updating recording status to PROCESSING');
+    logger.info('Updating recording status to processing');
 
     // Update recording metadata
     await updateRecordingMetadata(tableName, sessionId, {
@@ -61,9 +73,9 @@ export const handler = async (
       recordingS3Path: event.detail.recording_s3_key_prefix,
     });
 
-    console.log('Recording metadata updated for session:', sessionId);
+    logger.info('Recording metadata updated');
   } catch (error: any) {
-    console.error('Failed to update recording metadata:', error.message);
+    logger.error('Failed to update recording metadata', { errorMessage: error.message });
     // Don't throw - EventBridge will retry on error
   }
 };

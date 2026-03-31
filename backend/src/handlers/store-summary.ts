@@ -150,14 +150,21 @@ async function processEvent(
     const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody);
 
-    // Extract summary based on model response format
+    // Extract summary based on model response format (with null-safety)
     let summary: string;
     if (isClaudeModel) {
-      // Claude response format
-      summary = responseBody.content[0].text;
+      summary = responseBody?.content?.[0]?.text;
     } else {
-      // Nova Lite response format
-      summary = responseBody.output.message.content[0].text;
+      summary = responseBody?.output?.message?.content?.[0]?.text;
+    }
+
+    if (!summary) {
+      logger.error('Bedrock response missing expected text content', {
+        sessionId,
+        modelId,
+        responseKeys: Object.keys(responseBody || {}),
+      });
+      throw new Error(`Bedrock response did not contain expected text field (model: ${modelId})`);
     }
 
     // Log token usage for cost tracking (COST-03)
@@ -232,11 +239,16 @@ ${speakerSegmentsJson}`;
             const chapterDecoded = new TextDecoder().decode(chapterApiResponse.body);
             const chapterBody = JSON.parse(chapterDecoded);
 
-            let chapterText: string;
+            let chapterText: string | undefined;
             if (isClaudeModel) {
-              chapterText = chapterBody.content[0].text;
+              chapterText = chapterBody?.content?.[0]?.text;
             } else {
-              chapterText = chapterBody.output.message.content[0].text;
+              chapterText = chapterBody?.output?.message?.content?.[0]?.text;
+            }
+
+            if (!chapterText) {
+              logger.warn('Bedrock chapter response missing text content', { sessionId, modelId });
+              return;
             }
 
             // Extract JSON array from response (may be wrapped in markdown code fences)

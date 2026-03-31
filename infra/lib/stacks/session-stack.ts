@@ -86,6 +86,36 @@ export class SessionStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // GSI3 for channel ARN lookups (sparse — only broadcast sessions)
+    // Replaces full-table scans in stream-started, stream-ended, recording-ended
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI3',
+      partitionKey: {
+        name: 'channelArn',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'SK',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // GSI4 for stage ARN lookups (sparse — only hangout sessions)
+    // Replaces full-table scan in findSessionByStageArn
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI4',
+      partitionKey: {
+        name: 'stageArn',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'SK',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     new CfnOutput(this, 'SessionTableName', {
       value: this.table.tableName,
     });

@@ -333,10 +333,11 @@ describe('session-repository', () => {
         expect.objectContaining({
           input: expect.objectContaining({
             TableName: tableName,
-            FilterExpression: 'begins_with(PK, :pkPrefix) AND claimedResources.stage = :stageArn',
+            IndexName: 'GSI4',
+            KeyConditionExpression: 'stageArn = :stageArn AND SK = :metadata',
             ExpressionAttributeValues: {
-              ':pkPrefix': 'SESSION#',
               ':stageArn': STAGE_ARN,
+              ':metadata': 'METADATA',
             },
           }),
         })
@@ -353,26 +354,17 @@ describe('session-repository', () => {
       expect(result).toBeNull();
     });
 
-    it('uses Scan with FilterExpression (no GSI for Stage ARN lookup)', async () => {
+    it('uses Query on GSI4 for stage ARN lookup', async () => {
       mockSend.mockResolvedValueOnce({
         Items: [],
       });
 
       await findSessionByStageArn(tableName, STAGE_ARN);
 
-      // Verify Scan is used (not Query)
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            TableName: tableName,
-            FilterExpression: expect.any(String),
-          }),
-        })
-      );
-
-      // Verify no KeyConditionExpression (which would indicate Query)
+      // Verify Query is used with GSI4
       const call = mockSend.mock.calls[0][0];
-      expect(call.input.KeyConditionExpression).toBeUndefined();
+      expect(call.input.IndexName).toBe('GSI4');
+      expect(call.input.KeyConditionExpression).toBeDefined();
     });
   });
 

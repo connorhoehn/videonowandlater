@@ -6,7 +6,7 @@
 
 import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../recording-ended';
-import { updateRecordingMetadata, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount } from '../../repositories/session-repository';
+import { updateRecordingMetadata, findSessionByChannelArn, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount } from '../../repositories/session-repository';
 
 // ---------------------------------------------------------------------------
 // TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
@@ -74,6 +74,7 @@ jest.mock('@aws-sdk/client-mediaconvert', () => ({
 jest.mock('../../repositories/session-repository', () => ({
   updateSessionStatus: jest.fn().mockResolvedValue(undefined),
   updateRecordingMetadata: jest.fn().mockResolvedValue(undefined),
+  findSessionByChannelArn: jest.fn().mockResolvedValue(null),
   findSessionByStageArn: jest.fn().mockResolvedValue(null),
   computeAndStoreReactionSummary: jest.fn().mockResolvedValue({}),
   getHangoutParticipants: jest.fn().mockResolvedValue([]),
@@ -85,6 +86,7 @@ jest.mock('../../repositories/resource-pool-repository', () => ({
 }));
 
 const mockUpdateRecordingMetadata = updateRecordingMetadata as jest.MockedFunction<typeof updateRecordingMetadata>;
+const mockFindSessionByChannelArn = findSessionByChannelArn as jest.MockedFunction<typeof findSessionByChannelArn>;
 const mockFindSessionByStageArn = findSessionByStageArn as jest.MockedFunction<typeof findSessionByStageArn>;
 const mockComputeAndStoreReactionSummary = computeAndStoreReactionSummary as jest.MockedFunction<typeof computeAndStoreReactionSummary>;
 const mockGetHangoutParticipants = getHangoutParticipants as jest.MockedFunction<typeof getHangoutParticipants>;
@@ -122,7 +124,8 @@ describe('recording-ended handler', () => {
     jest.clearAllMocks();
     mockCaptureAWSv3Client.mockClear();
     mockPutAnnotation.mockClear();
-    // Default: no session found (channel lookups go through DynamoDB scan mock returning empty)
+    // Default: no session found
+    mockFindSessionByChannelArn.mockResolvedValue(null);
     mockFindSessionByStageArn.mockResolvedValue(null);
   });
 

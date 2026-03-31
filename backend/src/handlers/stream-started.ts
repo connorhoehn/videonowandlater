@@ -4,10 +4,8 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { getDocumentClient } from '../lib/dynamodb-client';
-import { updateSessionStatus } from '../repositories/session-repository';
+import { updateSessionStatus, findSessionByChannelArn } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
 
 const logger = new Logger({
@@ -38,28 +36,14 @@ export const handler = async (
 
   logger.info('Stream Start event received', { channelArn });
 
-  const docClient = getDocumentClient();
+  // Query GSI3 for session by channel ARN (O(1) vs full-table scan)
+  const session = await findSessionByChannelArn(tableName, channelArn);
 
-  // Find session by channel ARN
-  // Using scan for v1 (inefficient but works; can optimize with GSI in v2)
-  const scanResult = await docClient.send(new ScanCommand({
-    TableName: tableName,
-    FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn',
-    ExpressionAttributeNames: {
-      '#channel': 'channel',
-    },
-    ExpressionAttributeValues: {
-      ':session': 'SESSION#',
-      ':channelArn': channelArn,
-    },
-  }));
-
-  if (!scanResult.Items || scanResult.Items.length === 0) {
+  if (!session) {
     logger.warn('No session found for channel', { channelArn });
     return;
   }
 
-  const session = scanResult.Items[0];
   const sessionId = session.sessionId;
   logger.appendPersistentKeys({ sessionId });
 

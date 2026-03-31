@@ -69,6 +69,9 @@ export interface Session {
   startedAt?: string;
   endedAt?: string;
   version: number;
+  // Denormalized resource ARNs for GSI-based lookups (populated at session creation)
+  channelArn?: string;
+  stageArn?: string;
   // Recording metadata fields (populated when recording lifecycle events occur)
   recordingS3Path?: string;
   recordingDuration?: number;

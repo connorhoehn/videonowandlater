@@ -340,7 +340,56 @@ export async function getRecentRecordings(
 }
 
 /**
- * Find session by Stage ARN (used for hangout/RealTime recordings)
+ * Find session by Channel ARN using GSI3
+ * O(1) lookup replacing full-table scan
+ *
+ * @param tableName DynamoDB table name
+ * @param channelArn Channel ARN to search for
+ * @param statusFilter Optional status to filter by (e.g., 'ending' for recording-ended)
+ * @returns Session object if found, null otherwise
+ */
+export async function findSessionByChannelArn(
+  tableName: string,
+  channelArn: string,
+  statusFilter?: SessionStatus
+): Promise<Session | null> {
+  const docClient = getDocumentClient();
+
+  const expressionAttributeValues: Record<string, any> = {
+    ':channelArn': channelArn,
+    ':metadata': 'METADATA',
+  };
+
+  let filterExpression: string | undefined;
+  if (statusFilter) {
+    filterExpression = '#status = :status';
+    expressionAttributeValues[':status'] = statusFilter;
+  }
+
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: 'GSI3',
+    KeyConditionExpression: 'channelArn = :channelArn AND SK = :metadata',
+    ...(filterExpression && {
+      FilterExpression: filterExpression,
+      ExpressionAttributeNames: { '#status': 'status' },
+    }),
+    ExpressionAttributeValues: expressionAttributeValues,
+    Limit: 1,
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return null;
+  }
+
+  const item = result.Items[0];
+  const { PK, SK, GSI1PK, GSI1SK, entityType, ...session } = item;
+  return session as Session;
+}
+
+/**
+ * Find session by Stage ARN using GSI4
+ * O(1) lookup replacing full-table scan
  *
  * @param tableName DynamoDB table name
  * @param stageArn Stage ARN to search for
@@ -352,13 +401,15 @@ export async function findSessionByStageArn(
 ): Promise<Session | null> {
   const docClient = getDocumentClient();
 
-  const result = await docClient.send(new ScanCommand({
+  const result = await docClient.send(new QueryCommand({
     TableName: tableName,
-    FilterExpression: 'begins_with(PK, :pkPrefix) AND claimedResources.stage = :stageArn',
+    IndexName: 'GSI4',
+    KeyConditionExpression: 'stageArn = :stageArn AND SK = :metadata',
     ExpressionAttributeValues: {
-      ':pkPrefix': 'SESSION#',
       ':stageArn': stageArn,
+      ':metadata': 'METADATA',
     },
+    Limit: 1,
   }));
 
   if (!result.Items || result.Items.length === 0) {

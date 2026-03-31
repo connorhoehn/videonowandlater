@@ -11,11 +11,12 @@ import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand as UpdateCommandDirect, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand as UpdateCommandDirect } from '@aws-sdk/lib-dynamodb';
 import { RecordingEndedDetailSchema, type RecordingEndedDetail } from './schemas/recording-ended.schema';
 import {
   updateSessionStatus,
   updateRecordingMetadata,
+  findSessionByChannelArn,
   findSessionByStageArn,
   computeAndStoreReactionSummary,
   getHangoutParticipants,
@@ -203,27 +204,9 @@ async function processEvent(
   if (resourceType === 'channel') {
     logger.info('Detected Channel ARN, finding session by channel');
 
-    // Find session by channel ARN — filter to ENDING only to avoid matching
-    // previously-ended sessions that used the same pooled channel
-    const scanResult = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: 'begins_with(PK, :session) AND claimedResources.#channel = :channelArn AND #status = :ending',
-      ExpressionAttributeNames: {
-        '#channel': 'channel',
-        '#status': 'status',
-      },
-      ExpressionAttributeValues: {
-        ':session': 'SESSION#',
-        ':channelArn': resourceArn,
-        ':ending': 'ending',
-      },
-    }));
-
-    if (scanResult.Items && scanResult.Items.length > 0) {
-      const item = scanResult.Items[0];
-      const { PK, SK, GSI1PK, GSI1SK, entityType, ...sessionData } = item;
-      session = sessionData as Session;
-    }
+    // Query GSI3 for session by channel ARN, filter to ENDING status
+    // to avoid matching previously-ended sessions that used the same pooled channel
+    session = await findSessionByChannelArn(tableName, resourceArn, SessionStatus.ENDING);
   } else if (resourceType === 'stage') {
     logger.info('Detected Stage ARN, finding session by stage');
     session = await findSessionByStageArn(tableName, resourceArn);

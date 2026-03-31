@@ -4,10 +4,8 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { getDocumentClient } from '../lib/dynamodb-client';
-import { updateRecordingMetadata } from '../repositories/session-repository';
+import { updateRecordingMetadata, findSessionByChannelArn, findSessionByStageArn } from '../repositories/session-repository';
 
 const logger = new Logger({
   serviceName: 'vnl-events',
@@ -39,29 +37,18 @@ export const handler = async (
 
   logger.info('Recording Start event received', { resourceArn });
 
-  const docClient = getDocumentClient();
-
   try {
-    // Find session by resource ARN (check both channel and stage)
-    const scanResult = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: 'begins_with(PK, :session) AND (claimedResources.#channel = :arn OR claimedResources.#stage = :arn)',
-      ExpressionAttributeNames: {
-        '#channel': 'channel',
-        '#stage': 'stage',
-      },
-      ExpressionAttributeValues: {
-        ':session': 'SESSION#',
-        ':arn': resourceArn,
-      },
-    }));
+    // Query GSI3/GSI4 for session by resource ARN (O(1) vs full-table scan)
+    const isChannel = resourceArn.includes(':channel/');
+    const session = isChannel
+      ? await findSessionByChannelArn(tableName, resourceArn)
+      : await findSessionByStageArn(tableName, resourceArn);
 
-    if (!scanResult.Items || scanResult.Items.length === 0) {
+    if (!session) {
       logger.warn('No session found for resource', { resourceArn });
       return;
     }
 
-    const session = scanResult.Items[0];
     const sessionId = session.sessionId;
     logger.appendPersistentKeys({ sessionId });
 

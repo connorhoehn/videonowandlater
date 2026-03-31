@@ -110,6 +110,9 @@ export async function createNewSession(
       stage: stageArn,
       chatRoom: chatRoomArn,
     },
+    // Denormalized for GSI-based lookups (avoids full-table scans)
+    channelArn,
+    stageArn,
     createdAt: new Date().toISOString(),
     version: 1,
   };

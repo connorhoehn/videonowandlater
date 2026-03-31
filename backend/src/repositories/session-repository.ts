@@ -626,6 +626,41 @@ export async function updateSessionAiSummary(
 }
 
 /**
+ * Update session with AI-generated chapters
+ * Non-blocking pattern: chapter storage failure should not affect summary pipeline
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param chapters Array of Chapter objects to store
+ */
+export async function updateSessionChapters(
+  tableName: string,
+  sessionId: string,
+  chapters: import('../domain/session').Chapter[]
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #chapters = :chapters, #version = #version + :inc',
+    ExpressionAttributeNames: {
+      '#chapters': 'chapters',
+      '#version': 'version',
+    },
+    ExpressionAttributeValues: {
+      ':chapters': chapters,
+      ':inc': 1,
+    },
+  }));
+
+  console.log('Chapters updated:', { sessionId, chapterCount: chapters.length });
+}
+
+/**
  * Get all sessions sorted by creation time for activity feed
  * Returns sessions of all types (BROADCAST, HANGOUT, UPLOAD) with all activity metadata
  * Used by GET /activity endpoint to populate activity feed
@@ -811,6 +846,9 @@ export async function updateSessionRecording(
     convertStatus?: string;
     uploadStatus?: string;
     status?: string;
+    posterFrameUrl?: string;
+    thumbnailBaseUrl?: string;
+    thumbnailCount?: number;
   }
 ): Promise<void> {
   const docClient = getDocumentClient();
@@ -852,12 +890,92 @@ export async function updateSessionRecording(
     names['#status'] = 'status';
     values[':status'] = updates.status;
   }
+  if (updates.posterFrameUrl !== undefined) {
+    fields.push('#posterFrameUrl = :posterFrameUrl');
+    names['#posterFrameUrl'] = 'posterFrameUrl';
+    values[':posterFrameUrl'] = updates.posterFrameUrl;
+  }
+  if (updates.thumbnailBaseUrl !== undefined) {
+    fields.push('#thumbnailBaseUrl = :thumbnailBaseUrl');
+    names['#thumbnailBaseUrl'] = 'thumbnailBaseUrl';
+    values[':thumbnailBaseUrl'] = updates.thumbnailBaseUrl;
+  }
+  if (updates.thumbnailCount !== undefined) {
+    fields.push('#thumbnailCount = :thumbnailCount');
+    names['#thumbnailCount'] = 'thumbnailCount';
+    values[':thumbnailCount'] = updates.thumbnailCount;
+  }
 
   if (fields.length === 0) {
     return; // No updates provided
   }
 
   // Always increment version
+  fields.push('#version = #version + :inc');
+  values[':inc'] = 1;
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: `SET ${fields.join(', ')}`,
+    ExpressionAttributeNames: names,
+    ExpressionAttributeValues: values,
+  }));
+}
+
+/**
+ * Update highlight reel fields on a session
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to update
+ * @param updates Partial update object with highlight reel fields
+ */
+export async function updateHighlightReel(
+  tableName: string,
+  sessionId: string,
+  updates: {
+    highlightReelUrl?: string;
+    highlightReelVerticalUrl?: string;
+    highlightReelStatus?: 'pending' | 'processing' | 'available' | 'failed';
+    musicTrackKey?: string;
+  }
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  const fields: string[] = [];
+  const values: Record<string, any> = {};
+  const names: Record<string, string> = {
+    '#version': 'version',
+  };
+
+  if (updates.highlightReelUrl !== undefined) {
+    fields.push('#highlightReelUrl = :highlightReelUrl');
+    names['#highlightReelUrl'] = 'highlightReelUrl';
+    values[':highlightReelUrl'] = updates.highlightReelUrl;
+  }
+  if (updates.highlightReelVerticalUrl !== undefined) {
+    fields.push('#highlightReelVerticalUrl = :highlightReelVerticalUrl');
+    names['#highlightReelVerticalUrl'] = 'highlightReelVerticalUrl';
+    values[':highlightReelVerticalUrl'] = updates.highlightReelVerticalUrl;
+  }
+  if (updates.highlightReelStatus !== undefined) {
+    fields.push('#highlightReelStatus = :highlightReelStatus');
+    names['#highlightReelStatus'] = 'highlightReelStatus';
+    values[':highlightReelStatus'] = updates.highlightReelStatus;
+  }
+  if (updates.musicTrackKey !== undefined) {
+    fields.push('#musicTrackKey = :musicTrackKey');
+    names['#musicTrackKey'] = 'musicTrackKey';
+    values[':musicTrackKey'] = updates.musicTrackKey;
+  }
+
+  if (fields.length === 0) {
+    return;
+  }
+
   fields.push('#version = #version + :inc');
   values[':inc'] = 1;
 

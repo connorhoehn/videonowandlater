@@ -759,6 +759,225 @@ describe('on-mediaconvert-complete handler', () => {
   });
 
   // =========================================================================
+  // Thumbnail metadata parsing tests
+  // =========================================================================
+
+  describe('Thumbnail metadata parsing on COMPLETE', () => {
+    beforeEach(() => {
+      // Ensure EventBridge send mock is set up (COMPLETE path publishes to EventBridge)
+      setupEbSend();
+    });
+
+    it('should parse thumbnail output group and store posterFrameUrl, thumbnailBaseUrl, thumbnailCount', async () => {
+      process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+      const sessionId = 'thumb-parse-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const ebEvent = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-thumb',
+          status: 'COMPLETE',
+          outputGroupDetails: [
+            {
+              // First output group: MP4 (no .jpg files)
+              outputDetails: [{
+                outputFilePaths: [`s3://${BUCKET_NAME}/${sessionId}/recording.mp4`],
+              }],
+            },
+            {
+              // Second output group: Thumbnails
+              outputDetails: [{
+                outputFilePaths: [
+                  `s3://${BUCKET_NAME}/${sessionId}/thumbnails/recording-thumb.0000036.jpg`,
+                ],
+              }],
+            },
+          ],
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-thumb',
+        resources: [],
+      } as any;
+
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
+
+      // First call: main recording update; Second call: thumbnail metadata
+      expect(mockUpdateSessionRecording).toHaveBeenCalledTimes(2);
+
+      expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
+        TABLE_NAME,
+        sessionId,
+        expect.objectContaining({
+          posterFrameUrl: `https://d1234567890.cloudfront.net/${sessionId}/thumbnails/recording-thumb.0000001.jpg`,
+          thumbnailBaseUrl: `https://d1234567890.cloudfront.net/${sessionId}/thumbnails/recording-thumb`,
+          thumbnailCount: 37,
+        })
+      );
+    });
+
+    it('should use index 0 for poster when only one thumbnail exists', async () => {
+      process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+      const sessionId = 'thumb-single-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const ebEvent = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-thumb-single',
+          status: 'COMPLETE',
+          outputGroupDetails: [
+            {
+              outputDetails: [{
+                outputFilePaths: [
+                  `s3://${BUCKET_NAME}/${sessionId}/thumbnails/recording-thumb.0000000.jpg`,
+                ],
+              }],
+            },
+          ],
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-thumb-single',
+        resources: [],
+      } as any;
+
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
+
+      // Should use index 0 since there's only 1 thumbnail
+      expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
+        TABLE_NAME,
+        sessionId,
+        expect.objectContaining({
+          posterFrameUrl: `https://d1234567890.cloudfront.net/${sessionId}/thumbnails/recording-thumb.0000000.jpg`,
+          thumbnailCount: 1,
+        })
+      );
+    });
+
+    it('should skip thumbnail parsing when CLOUDFRONT_DOMAIN is not set', async () => {
+      delete process.env.CLOUDFRONT_DOMAIN;
+
+      const sessionId = 'thumb-no-cf-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const ebEvent = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-no-cf',
+          status: 'COMPLETE',
+          outputGroupDetails: [
+            {
+              outputDetails: [{
+                outputFilePaths: [
+                  `s3://${BUCKET_NAME}/${sessionId}/thumbnails/recording-thumb.0000036.jpg`,
+                ],
+              }],
+            },
+          ],
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-no-cf',
+        resources: [],
+      } as any;
+
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
+
+      // Should only be called once (main recording update), not for thumbnails
+      expect(mockUpdateSessionRecording).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip thumbnail parsing when no outputGroupDetails present', async () => {
+      process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+
+      const sessionId = 'thumb-no-details-session';
+      const mockSession = {
+        sessionId,
+        userId: 'user-123',
+        sessionType: 'UPLOAD',
+        status: 'creating',
+        claimedResources: { chatRoom: '' },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+
+      mockGetSessionById.mockResolvedValueOnce(mockSession as any);
+
+      const ebEvent = {
+        source: 'aws.mediaconvert',
+        detailType: 'MediaConvert Job State Change',
+        detail: {
+          jobName: `vnl-${sessionId}-1234567890`,
+          jobId: 'job-no-details',
+          status: 'COMPLETE',
+          // No outputGroupDetails
+        },
+        time: new Date().toISOString(),
+        region: 'us-east-1',
+        account: '123456789012',
+        id: 'event-no-details',
+        resources: [],
+      } as any;
+
+      const result = await handler(makeSqsEvent(ebEvent));
+
+      expect(result.batchItemFailures).toHaveLength(0);
+
+      // Should only be called once (main recording update)
+      expect(mockUpdateSessionRecording).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // =========================================================================
   // Validation Failure Tests (Plan 01)
   // =========================================================================
 

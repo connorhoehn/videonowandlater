@@ -5,7 +5,7 @@
 
 import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../store-summary';
-import { updateSessionAiSummary, getSessionById } from '../../repositories/session-repository';
+import { updateSessionAiSummary, getSessionById, updateSessionChapters } from '../../repositories/session-repository';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
@@ -60,6 +60,7 @@ const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockBedrockClient = BedrockRuntimeClient as jest.Mocked<typeof BedrockRuntimeClient>;
 const mockUpdateSessionAiSummary = updateSessionAiSummary as jest.MockedFunction<typeof updateSessionAiSummary>;
 const mockGetSessionById = getSessionById as jest.MockedFunction<typeof getSessionById>;
+const mockUpdateSessionChapters = updateSessionChapters as jest.MockedFunction<typeof updateSessionChapters>;
 
 function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
   return {
@@ -112,6 +113,8 @@ describe('store-summary handler', () => {
     mockUpdateSessionAiSummary.mockResolvedValue(undefined);
     mockGetSessionById.mockReset();
     mockGetSessionById.mockResolvedValue(null);
+    mockUpdateSessionChapters.mockReset();
+    mockUpdateSessionChapters.mockResolvedValue(undefined);
     lastInvokeModelCommand = null;
 
     // Wire module-scope instance sends to test mock functions
@@ -1102,5 +1105,258 @@ describe('store-summary handler', () => {
 
     // 4. Logger shows idempotent path
     // (In actual implementation, will log "AI summary already available (idempotent retry)")
+  });
+
+  // =========================================================================
+  // Chapter Generation Tests
+  // =========================================================================
+
+  it('should generate chapters from diarized transcript after summary', async () => {
+    const testTranscript = 'User A: Hello everyone. User B: Hi there.';
+    const testSummary = 'A brief greeting session.';
+    const testSpeakerSegments = JSON.stringify([
+      { speaker: 'A', startTimeMs: 0, endTimeMs: 30000, text: 'Hello everyone' },
+      { speaker: 'B', startTimeMs: 30000, endTimeMs: 60000, text: 'Hi there' },
+    ]);
+    const chaptersResponse = JSON.stringify([
+      { title: 'Introductions', startTimeMs: 0, endTimeMs: 30000 },
+      { title: 'Greetings', startTimeMs: 30000, endTimeMs: 60000 },
+    ]);
+
+    // Mock S3 fetch for transcript
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testTranscript) },
+    });
+
+    // Mock Bedrock for summary
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: testSummary }] } },
+      })),
+    });
+
+    // After summary stored, getSessionById is called again for chapters
+    mockGetSessionById
+      .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({
+        sessionId: 'session-chapters',
+        diarizedTranscriptS3Path: 's3://transcription-bucket/session-chapters/diarized.json',
+      } as any);
+
+    // Mock S3 fetch for diarized transcript
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testSpeakerSegments) },
+    });
+
+    // Mock Bedrock for chapters
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: chaptersResponse }] } },
+      })),
+    });
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-chapters-1',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-chapters',
+        transcriptS3Uri: 's3://transcription-bucket/session-chapters/transcript.json',
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // Verify chapters were stored with thumbnailIndex computed
+    expect(mockUpdateSessionChapters).toHaveBeenCalledWith(
+      'test-table',
+      'session-chapters',
+      [
+        { title: 'Introductions', startTimeMs: 0, endTimeMs: 30000, thumbnailIndex: 0 },
+        { title: 'Greetings', startTimeMs: 30000, endTimeMs: 60000, thumbnailIndex: 6 },
+      ]
+    );
+  });
+
+  it('should skip chapter generation when no diarized transcript', async () => {
+    const testTranscript = 'Simple transcript text.';
+    const testSummary = 'A brief session.';
+
+    // Mock S3 fetch for transcript
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testTranscript) },
+    });
+
+    // Mock Bedrock for summary
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: testSummary }] } },
+      })),
+    });
+
+    // Session has no diarizedTranscriptS3Path
+    mockGetSessionById
+      .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({
+        sessionId: 'session-no-diarized',
+        // no diarizedTranscriptS3Path
+      } as any);
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-no-diarized',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-no-diarized',
+        transcriptS3Uri: 's3://transcription-bucket/session-no-diarized/transcript.json',
+      },
+    }));
+
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // Bedrock called only once (for summary, not chapters)
+    expect(mockBedrockSend).toHaveBeenCalledTimes(1);
+
+    // Chapters NOT stored
+    expect(mockUpdateSessionChapters).not.toHaveBeenCalled();
+  });
+
+  it('should not fail handler when chapter generation fails', async () => {
+    const testTranscript = 'Transcript for chapter failure test.';
+    const testSummary = 'Summary still works.';
+
+    // Mock S3 fetch for transcript
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testTranscript) },
+    });
+
+    // Mock Bedrock for summary
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: testSummary }] } },
+      })),
+    });
+
+    // Session has diarized transcript
+    mockGetSessionById
+      .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({
+        sessionId: 'session-chapter-fail',
+        diarizedTranscriptS3Path: 's3://transcription-bucket/session-chapter-fail/diarized.json',
+      } as any);
+
+    // Mock S3 fetch for diarized transcript — fails
+    mockS3Send.mockRejectedValueOnce(new Error('S3 access denied for diarized transcript'));
+
+    const result = await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-chapter-fail',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-chapter-fail',
+        transcriptS3Uri: 's3://transcription-bucket/session-chapter-fail/transcript.json',
+      },
+    }));
+
+    // Handler should NOT fail
+    expect(result.batchItemFailures).toHaveLength(0);
+
+    // Summary was still stored successfully
+    expect(mockUpdateSessionAiSummary).toHaveBeenCalledWith(
+      'test-table',
+      'session-chapter-fail',
+      expect.objectContaining({
+        aiSummary: testSummary,
+        aiSummaryStatus: 'available',
+      })
+    );
+
+    // Chapters NOT stored due to failure
+    expect(mockUpdateSessionChapters).not.toHaveBeenCalled();
+  });
+
+  it('should compute thumbnailIndex correctly (every 5s = 1 thumbnail)', async () => {
+    const testTranscript = 'Long transcript.';
+    const testSummary = 'Summary.';
+    const testSpeakerSegments = JSON.stringify([
+      { speaker: 'A', startTimeMs: 0, endTimeMs: 120000, text: 'Long talk' },
+    ]);
+    // Chapters at various timestamps to test thumbnailIndex rounding
+    const chaptersResponse = JSON.stringify([
+      { title: 'Start', startTimeMs: 0, endTimeMs: 15000 },
+      { title: 'Middle', startTimeMs: 15000, endTimeMs: 72500 },
+      { title: 'End', startTimeMs: 72500, endTimeMs: 120000 },
+    ]);
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testTranscript) },
+    });
+
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: testSummary }] } },
+      })),
+    });
+
+    mockGetSessionById
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        sessionId: 'session-thumb-calc',
+        diarizedTranscriptS3Path: 's3://transcription-bucket/session-thumb-calc/diarized.json',
+      } as any);
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: { transformToString: jest.fn().mockResolvedValueOnce(testSpeakerSegments) },
+    });
+
+    mockBedrockSend.mockResolvedValueOnce({
+      body: new TextEncoder().encode(JSON.stringify({
+        output: { message: { content: [{ text: chaptersResponse }] } },
+      })),
+    });
+
+    await handler(makeSqsEvent({
+      version: '0',
+      id: 'test-thumb-calc',
+      'detail-type': 'Transcript Stored',
+      source: 'custom.vnl',
+      account: '123456789012',
+      time: '2026-03-06T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        sessionId: 'session-thumb-calc',
+        transcriptS3Uri: 's3://transcription-bucket/session-thumb-calc/transcript.json',
+      },
+    }));
+
+    // thumbnailIndex = Math.round(startTimeMs / 5000)
+    // 0 / 5000 = 0
+    // 15000 / 5000 = 3
+    // 72500 / 5000 = 14.5 → Math.round → 15
+    expect(mockUpdateSessionChapters).toHaveBeenCalledWith(
+      'test-table',
+      'session-thumb-calc',
+      [
+        { title: 'Start', startTimeMs: 0, endTimeMs: 15000, thumbnailIndex: 0 },
+        { title: 'Middle', startTimeMs: 15000, endTimeMs: 72500, thumbnailIndex: 3 },
+        { title: 'End', startTimeMs: 72500, endTimeMs: 120000, thumbnailIndex: 15 },
+      ]
+    );
   });
 });

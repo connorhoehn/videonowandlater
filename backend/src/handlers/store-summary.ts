@@ -9,10 +9,12 @@
 import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import type { Subsegment } from 'aws-xray-sdk-core';
-import { getSessionById, updateSessionAiSummary } from '../repositories/session-repository';
+import { getSessionById, updateSessionAiSummary, updateSessionChapters } from '../repositories/session-repository';
+import type { Chapter } from '../domain/session';
 import { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './schemas/store-summary.schema';
 
 const logger = new Logger({
@@ -25,6 +27,7 @@ const s3Client = tracer.captureAWSv3Client(new S3Client({}));
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient({
   region: process.env.BEDROCK_REGION || process.env.AWS_REGION,
 }));
+const eventBridgeClient = tracer.captureAWSv3Client(new EventBridgeClient({}));
 
 // TranscriptStoreDetail is imported from schema
 
@@ -177,6 +180,112 @@ async function processEvent(
     } catch (storeError: any) {
       logger.error('Failed to store AI summary (non-blocking):', { errorMessage: storeError.message });
       // Don't throw — summarization succeeded but storage failed; this is logged for manual recovery
+    }
+
+    // --- Chapter generation (non-blocking) ---
+    try {
+      const session = await getSessionById(tableName, sessionId);
+      if (session?.diarizedTranscriptS3Path) {
+        const diarizedMatch = session.diarizedTranscriptS3Path.match(/^s3:\/\/([^/]+)\/(.+)$/);
+        if (diarizedMatch) {
+          const [, diarizedBucket, diarizedKey] = diarizedMatch;
+          const diarizedResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: diarizedBucket,
+            Key: diarizedKey,
+          }));
+          const speakerSegmentsJson = await diarizedResponse.Body?.transformToString();
+
+          if (speakerSegmentsJson && speakerSegmentsJson.trim().length > 0) {
+            const chapterPrompt = `Given the following video transcript with speaker segments, divide it into 3-8 logical chapters. Each chapter should represent a distinct topic or segment of the conversation.
+
+Return ONLY a JSON array with this exact format:
+[{"title": "Chapter Title", "startTimeMs": 0, "endTimeMs": 60000}]
+
+Speaker segments:
+${speakerSegmentsJson}`;
+
+            let chapterPayload: any;
+            if (isClaudeModel) {
+              chapterPayload = {
+                anthropic_version: 'bedrock-2023-05-31',
+                max_tokens: 1000,
+                messages: [
+                  { role: 'user', content: [{ type: 'text', text: chapterPrompt }] },
+                ],
+              };
+            } else {
+              chapterPayload = {
+                messages: [
+                  { role: 'user', content: [{ text: chapterPrompt }] },
+                ],
+                inferenceConfig: { maxTokens: 1000, temperature: 0.3 },
+              };
+            }
+
+            const chapterCommand = new InvokeModelCommand({
+              contentType: 'application/json',
+              body: JSON.stringify(chapterPayload),
+              modelId,
+            });
+
+            const chapterApiResponse = await bedrockClient.send(chapterCommand);
+            const chapterDecoded = new TextDecoder().decode(chapterApiResponse.body);
+            const chapterBody = JSON.parse(chapterDecoded);
+
+            let chapterText: string;
+            if (isClaudeModel) {
+              chapterText = chapterBody.content[0].text;
+            } else {
+              chapterText = chapterBody.output.message.content[0].text;
+            }
+
+            // Extract JSON array from response (may be wrapped in markdown code fences)
+            const jsonMatch = chapterText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              const rawChapters = JSON.parse(jsonMatch[0]) as any[];
+              const chapters: Chapter[] = rawChapters
+                .filter((c: any) => c.title && typeof c.startTimeMs === 'number' && typeof c.endTimeMs === 'number')
+                .map((c: any) => ({
+                  title: c.title,
+                  startTimeMs: c.startTimeMs,
+                  endTimeMs: c.endTimeMs,
+                  thumbnailIndex: Math.round(c.startTimeMs / 5000),
+                }));
+
+              if (chapters.length > 0) {
+                await updateSessionChapters(tableName, sessionId, chapters);
+                logger.info('Chapters generated and stored', { sessionId, chapterCount: chapters.length });
+
+                // Publish event to trigger highlight reel generation
+                const eventBusName = process.env.EVENT_BUS_NAME;
+                if (eventBusName) {
+                  try {
+                    await eventBridgeClient.send(new PutEventsCommand({
+                      Entries: [{
+                        Source: 'custom.vnl',
+                        DetailType: 'Chapters Stored',
+                        Detail: JSON.stringify({ sessionId }),
+                        EventBusName: eventBusName,
+                      }],
+                    }));
+                    logger.info('Highlight reel pipeline triggered', { sessionId });
+                  } catch (ebError: any) {
+                    logger.warn('Failed to publish Chapters Stored event (non-blocking)', {
+                      sessionId,
+                      error: ebError.message,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        logger.info('No diarized transcript available, skipping chapter generation', { sessionId });
+      }
+    } catch (chapterError: any) {
+      logger.warn('Chapter generation failed (non-blocking):', { sessionId, errorMessage: chapterError.message });
+      // Non-blocking: chapter failure should NOT fail the overall handler
     }
   } catch (error: any) {
     logger.error('Bedrock summarization failed:', { errorMessage: error.message });

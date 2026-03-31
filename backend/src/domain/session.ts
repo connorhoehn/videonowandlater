@@ -6,6 +6,17 @@
 import type { StreamMetrics } from './metrics';
 
 /**
+ * AI-generated chapter representing a logical section of a video
+ * Derived from speaker-diarized transcript via Bedrock
+ */
+export interface Chapter {
+  title: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  thumbnailIndex?: number;
+}
+
+/**
  * Session status enum - represents the lifecycle states
  * State machine: creating -> live -> ending -> ended
  */
@@ -103,6 +114,10 @@ export interface Session {
   featuredCreatorId?: string;
   /** Display name of the featured creator (username) */
   featuredCreatorName?: string;
+  // Frame capture / thumbnail metadata (populated after MediaConvert completion)
+  posterFrameUrl?: string;
+  thumbnailBaseUrl?: string;
+  thumbnailCount?: number;
   // Stream quality metrics (Phase 23+)
   /**
    * Optional stream quality metrics captured during live streaming
@@ -115,6 +130,18 @@ export interface Session {
    * Used to track freshness of streamMetrics data
    */
   lastMetricsUpdate?: number;
+  // AI-generated chapters (derived from speaker-diarized transcript)
+  /** Logical sections of the video with titles and timestamps */
+  chapters?: Chapter[];
+  // Highlight reel pipeline (auto-generated from chapters)
+  /** CloudFront URL for landscape (16:9) highlight reel MP4 */
+  highlightReelUrl?: string;
+  /** CloudFront URL for vertical (9:16) highlight reel MP4 */
+  highlightReelVerticalUrl?: string;
+  /** Status of highlight reel generation pipeline */
+  highlightReelStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  /** S3 key of selected background music track (in assets bucket) */
+  musicTrackKey?: string;
 }
 
 /**

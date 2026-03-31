@@ -11,8 +11,15 @@ export const MediaConvertCompleteDetailSchema = z.object({
   outputGroupDetails: z.array(
     z.object({
       playlistFile: z.string().optional(),
+      outputDetails: z.array(
+        z.object({
+          outputFilePaths: z.array(z.string()).optional(),
+        })
+      ).optional(),
+      type: z.string().optional(),
     })
   ).optional(),
+  userMetadata: z.record(z.string()).optional(),
 });
 
 export type MediaConvertCompleteDetail = z.infer<typeof MediaConvertCompleteDetailSchema>;

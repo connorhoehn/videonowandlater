@@ -408,6 +408,34 @@ async function processEvent(
                   },
                 ],
               },
+              {
+                Name: 'Thumbnails',
+                OutputGroupSettings: {
+                  Type: 'FILE_GROUP_SETTINGS',
+                  FileGroupSettings: {
+                    Destination: `s3://${transcriptionBucket}/${sessionId}/thumbnails/`,
+                  },
+                },
+                Outputs: [{
+                  ContainerSettings: { Container: 'RAW' },
+                  VideoDescription: {
+                    Width: 640,
+                    Height: 360,
+                    ScalingBehavior: 'DEFAULT',
+                    CodecSettings: {
+                      Codec: 'FRAME_CAPTURE',
+                      FrameCaptureSettings: {
+                        FramerateNumerator: 1,
+                        FramerateDenominator: 5,
+                        MaxCaptures: 500,
+                        Quality: 80,
+                      },
+                    },
+                  },
+                  Extension: 'jpg',
+                  NameModifier: '-thumb',
+                }],
+              },
             ],
           },
           Tags: {

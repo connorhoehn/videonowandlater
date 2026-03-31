@@ -830,6 +830,83 @@ describe('recording-ended handler', () => {
     expect(result.batchItemFailures[0].itemIdentifier).toBe('invalid-message-id');
   });
 
+  // =========================================================================
+  // MediaConvert Thumbnails output group tests
+  // =========================================================================
+
+  it('includes Thumbnails output group in MediaConvert job with FRAME_CAPTURE codec', async () => {
+    const { CreateJobCommand } = require('@aws-sdk/client-mediaconvert');
+
+    mockFindSessionByStageArn.mockResolvedValue({
+      sessionId: 'thumb-test-session',
+      sessionType: 'HANGOUT',
+      status: 'ENDING',
+      userId: 'user-abc',
+      claimedResources: { stage: 'arn:aws:ivs:us-east-1:123456789012:stage/hangout-thumb', chatRoom: 'arn:aws:ivschat:room-thumb' },
+      createdAt: '2024-01-01T00:00:00Z',
+    } as any);
+
+    process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
+    process.env.MEDIACONVERT_ROLE_ARN = 'arn:aws:iam::role/test';
+    process.env.TRANSCRIPTION_BUCKET = 'test-transcription-bucket';
+    process.env.AWS_REGION = 'us-east-1';
+    process.env.AWS_ACCOUNT_ID = '123456789012';
+
+    await handler(makeSqsEvent({
+      version: '0',
+      id: 'thumb-event',
+      'detail-type': 'IVS Participant Recording State Change',
+      source: 'aws.ivs',
+      account: '123456789012',
+      time: '2024-01-01T00:05:00Z',
+      region: 'us-east-1',
+      resources: ['arn:aws:ivs:us-east-1:123456789012:stage/hangout-thumb'],
+      detail: {
+        session_id: 'st-test-stream',
+        event_name: 'Recording End',
+        participant_id: 'participant-abc',
+        recording_s3_bucket_name: 'my-recordings',
+        recording_s3_key_prefix: 'prefix/path',
+        recording_duration_ms: 300000,
+      },
+    }));
+
+    // Verify CreateJobCommand was called with two output groups
+    expect(CreateJobCommand).toHaveBeenCalled();
+    const jobInput = (CreateJobCommand as jest.Mock).mock.calls[0][0];
+    const outputGroups = jobInput.Settings.OutputGroups;
+
+    expect(outputGroups).toHaveLength(2);
+
+    // First output group: MP4
+    expect(outputGroups[0].Name).toBe('File Group');
+    expect(outputGroups[0].Outputs[0].ContainerSettings.Container).toBe('MP4');
+
+    // Second output group: Thumbnails
+    const thumbGroup = outputGroups[1];
+    expect(thumbGroup.Name).toBe('Thumbnails');
+    expect(thumbGroup.OutputGroupSettings.Type).toBe('FILE_GROUP_SETTINGS');
+    expect(thumbGroup.OutputGroupSettings.FileGroupSettings.Destination).toContain('thumbnails/');
+    expect(thumbGroup.Outputs).toHaveLength(1);
+
+    const thumbOutput = thumbGroup.Outputs[0];
+    expect(thumbOutput.ContainerSettings.Container).toBe('RAW');
+    expect(thumbOutput.VideoDescription.CodecSettings.Codec).toBe('FRAME_CAPTURE');
+    expect(thumbOutput.VideoDescription.CodecSettings.FrameCaptureSettings).toEqual({
+      FramerateNumerator: 1,
+      FramerateDenominator: 5,
+      MaxCaptures: 500,
+      Quality: 80,
+    });
+    expect(thumbOutput.VideoDescription.Width).toBe(640);
+    expect(thumbOutput.VideoDescription.Height).toBe(360);
+    expect(thumbOutput.Extension).toBe('jpg');
+    expect(thumbOutput.NameModifier).toBe('-thumb');
+
+    // IMPORTANT: Frame capture output must NOT have AudioDescriptions
+    expect(thumbOutput.AudioDescriptions).toBeUndefined();
+  });
+
   it('should handle invalid JSON in record body', async () => {
     const result = await handler({
       Records: [{

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>VideoNowAndLater</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UILaunchStoryboardName</key>
+	<string></string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.videonowandlater.ios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>videonowandlater</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>VideoNowAndLater needs camera access for broadcasting and hangouts.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VideoNowAndLater needs microphone access for broadcasting and hangouts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>VideoNowAndLater needs photo library access for uploads.</string>
+	<key>API_URL</key>
+	<string>$(API_URL)</string>
+	<key>COGNITO_DOMAIN</key>
+	<string>$(COGNITO_DOMAIN)</string>
+	<key>COGNITO_CLIENT_ID</key>
+	<string>$(COGNITO_CLIENT_ID)</string>
+	<key>USER_POOL_ID</key>
+	<string>$(USER_POOL_ID)</string>
+	<key>AWS_REGION</key>
+	<string>$(AWS_REGION)</string>
+</dict>
+</plist>

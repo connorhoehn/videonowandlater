@@ -200,11 +200,11 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
 
   if (loading) {
     return (
-      <div className="h-full bg-white rounded-lg shadow-lg p-4">
+      <div className="h-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 animate-fade-in">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Transcript</h3>
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-200 border-t-blue-600 mx-auto mb-3"></div>
             <p className="text-sm text-gray-500">Loading transcript...</p>
           </div>
         </div>
@@ -214,13 +214,15 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
 
   if (error) {
     return (
-      <div className="h-full bg-white rounded-lg shadow-lg p-4">
+      <div className="h-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 animate-fade-in">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Transcript</h3>
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
-            <div className="text-gray-400 text-3xl mb-2">📝</div>
+            <svg className="h-8 w-8 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
             <p className="text-sm text-gray-600">{error}</p>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Transcript will be available once processing completes
             </p>
           </div>
@@ -231,7 +233,7 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
 
   if (segments.length === 0) {
     return (
-      <div className="h-full bg-white rounded-lg shadow-lg p-4">
+      <div className="h-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 animate-fade-in">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Transcript</h3>
         <div className="flex items-center justify-center h-96">
           <p className="text-sm text-gray-500">No transcript available</p>
@@ -243,39 +245,46 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
   // Bubble mode — shown when speaker segments are available
   if (speakerSegments.length > 0) {
     return (
-      <div className="h-full bg-white rounded-lg shadow-lg flex flex-col">
+      <div className="h-full bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700">Transcript</h3>
         </div>
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-3"
+          className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth-container"
         >
           {speakerSegments.map((seg, index) => {
             const isSpeaker1 = seg.speaker === 'Speaker 1';
             const isActive = index === currentSpeakerSegmentIndex;
+            const isPast = currentTime > seg.endTime;
 
             return (
               <div
                 key={index}
                 ref={isActive ? activeSpeakerSegmentRef : null}
                 data-testid={`speaker-segment-${index}`}
-                className={`flex ${isSpeaker1 ? 'justify-start' : 'justify-end'} ${onSeek ? 'cursor-pointer' : ''}`}
+                className={`flex ${isSpeaker1 ? 'justify-start' : 'justify-end'} ${onSeek ? 'cursor-pointer group' : ''} transition-opacity duration-200 ${isPast && !isActive ? 'opacity-60' : 'opacity-100'}`}
                 onClick={() => onSeek?.(seg.startTime)}
               >
                 <div
                   className={`
-                    max-w-[80%] rounded-2xl px-4 py-3 border transition-all
+                    max-w-[80%] rounded-2xl px-4 py-3 border transition-all duration-300 ease-out
+                    ${onSeek ? 'group-hover:shadow-md group-hover:scale-[1.01]' : ''}
                     ${isSpeaker1
-                      ? `bg-blue-50 border-blue-200 rounded-tl-sm ${isActive ? 'ring-2 ring-blue-400' : ''}`
-                      : `bg-gray-100 border-gray-200 rounded-tr-sm ${isActive ? 'ring-2 ring-gray-400' : ''}`
+                      ? `bg-blue-50 border-blue-200 rounded-tl-sm ${isActive ? 'ring-2 ring-blue-400 animate-pulse-glow shadow-sm' : ''} ${onSeek ? 'group-hover:border-blue-300 group-hover:bg-blue-100/70' : ''}`
+                      : `bg-gray-100 border-gray-200 rounded-tr-sm ${isActive ? 'ring-2 ring-gray-400 shadow-sm' : ''} ${onSeek ? 'group-hover:border-gray-300 group-hover:bg-gray-200/70' : ''}`
                     }
                   `}
                 >
-                  <div className={`text-xs font-semibold mb-1 ${isSpeaker1 ? 'text-blue-600' : 'text-gray-500 text-right'}`}>
-                    {seg.speaker} · {formatTime(seg.startTime)}
+                  <div className={`flex items-center gap-1.5 mb-1 ${isSpeaker1 ? '' : 'justify-end'}`}>
+                    <span className={`text-xs font-semibold ${isSpeaker1 ? 'text-blue-600' : 'text-gray-500'}`}>
+                      {seg.speaker}
+                    </span>
+                    <span className={`text-[10px] tabular-nums ${isActive ? (isSpeaker1 ? 'text-blue-500' : 'text-gray-500') : 'text-gray-400'} ${onSeek ? 'group-hover:text-blue-500' : ''} transition-colors`}>
+                      {formatTime(seg.startTime)}
+                    </span>
                   </div>
-                  <div className="text-sm text-gray-800">{seg.text}</div>
+                  <div className={`text-sm leading-relaxed ${isActive ? 'text-gray-900 font-medium' : 'text-gray-800'} transition-colors duration-200`}>{seg.text}</div>
                 </div>
               </div>
             );
@@ -287,13 +296,13 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
 
   // Plain segment mode — shown when no speaker segments (backward compatible)
   return (
-    <div className="h-full bg-white rounded-lg shadow-lg flex flex-col">
+    <div className="h-full bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
       <div className="p-4 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-700">Transcript</h3>
       </div>
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 overflow-y-auto p-4 space-y-1 scroll-smooth-container"
       >
         {segments.map((segment, index) => {
           const isActive = index === currentSegmentIndex;
@@ -305,21 +314,21 @@ export function TranscriptDisplay({ sessionId, currentTime, authToken, diarizedT
               ref={isActive ? activeSegmentRef : null}
               data-testid={`segment-${index}`}
               className={`
-                p-3 rounded-lg transition-all duration-200
+                p-3 rounded-lg transition-all duration-300 ease-out
                 ${onSeek ? 'cursor-pointer' : ''}
                 ${isActive
-                  ? 'bg-blue-50 border-l-4 border-blue-500 shadow-sm'
+                  ? 'bg-blue-50 border-l-4 border-blue-500 shadow-sm animate-pulse-glow'
                   : isPast
-                    ? 'text-gray-500 opacity-75'
-                    : `text-gray-700 ${onSeek ? 'hover:bg-blue-50' : 'hover:bg-gray-50'}`
+                    ? 'text-gray-500 opacity-60 border-l-4 border-transparent'
+                    : `text-gray-700 border-l-4 border-transparent ${onSeek ? 'hover:bg-blue-50/60 hover:border-blue-300 hover:shadow-sm' : 'hover:bg-gray-50'}`
                 }
               `}
               onClick={() => onSeek?.(segment.startTime)}
             >
-              <div className="text-xs text-gray-400 mb-1">
+              <div className={`text-xs tabular-nums mb-1 transition-colors duration-200 ${isActive ? 'text-blue-500 font-medium' : 'text-gray-400'} ${onSeek && !isActive ? 'group-hover:text-blue-400' : ''}`}>
                 {formatTime(segment.startTime)}
               </div>
-              <div className={`text-sm ${isActive ? 'font-medium' : ''}`}>
+              <div className={`text-sm leading-relaxed transition-colors duration-200 ${isActive ? 'font-medium text-gray-900' : ''}`}>
                 {segment.text}
               </div>
             </div>

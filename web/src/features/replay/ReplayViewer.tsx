@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../../config/aws-config';
@@ -19,6 +19,9 @@ import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
 import { SessionAuditLog } from '../activity/SessionAuditLog';
 import { SummaryDisplay } from './SummaryDisplay';
 import { TranscriptDisplay } from './TranscriptDisplay';
+import { ChapterList } from './ChapterList';
+import { HighlightReelPlayer } from './HighlightReelPlayer';
+import type { Chapter } from './ChapterList';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
 
 interface Session {
@@ -37,6 +40,13 @@ interface Session {
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   mediaConvertJobName?: string;
   diarizedTranscriptS3Path?: string;
+  chapters?: Chapter[];
+  posterFrameUrl?: string;
+  thumbnailBaseUrl?: string;
+  thumbnailCount?: number;
+  highlightReelStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  highlightReelLandscapeUrl?: string;
+  highlightReelVerticalUrl?: string;
 }
 
 /**
@@ -51,6 +61,7 @@ function formatDuration(ms: number): string {
 export function ReplayViewer() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +70,9 @@ export function ReplayViewer() {
   const [authToken, setAuthToken] = useState('');
   const [currentUserId, setCurrentUserId] = useState('');
   const [activeTab, setActiveTab] = useState<'chat' | 'transcript'>('chat');
+  const [viewMode, setViewMode] = useState<'replay' | 'highlights'>(
+    searchParams.get('view') === 'highlights' ? 'highlights' : 'replay'
+  );
 
   useEffect(() => {
     fetchToken().then(({ token, username }) => {
@@ -264,26 +278,65 @@ export function ReplayViewer() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-gray-900">Replay</h1>
+      <div className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+          <h1 className="text-lg font-semibold text-gray-900">Replay</h1>
           <button
             onClick={() => navigate('/')}
-            className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
           >
-            ← Back to Home
+            ← Back
           </button>
         </div>
       </div>
 
+      {/* View mode tabs (Replay / Highlights) */}
+      {session?.highlightReelStatus && (
+        <div className="max-w-6xl mx-auto px-4 pt-4">
+          <div className="flex bg-gray-100 rounded-lg p-0.5 w-fit">
+            <button
+              onClick={() => setViewMode('replay')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                viewMode === 'replay'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Replay
+            </button>
+            <button
+              onClick={() => setViewMode('highlights')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                viewMode === 'highlights'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Highlights
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Highlights view */}
+      {viewMode === 'highlights' && session?.highlightReelStatus && (
+        <div className="max-w-4xl mx-auto p-4">
+          <HighlightReelPlayer
+            landscapeUrl={session.highlightReelLandscapeUrl}
+            verticalUrl={session.highlightReelVerticalUrl}
+            status={session.highlightReelStatus}
+          />
+        </div>
+      )}
+
       {/* Main content */}
-      <div className="max-w-6xl mx-auto p-4">
+      <div className="max-w-6xl mx-auto p-4" style={{ display: viewMode === 'replay' ? undefined : 'none' }}>
         {/* Responsive grid layout: video + metadata on left, chat on right */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Video column (takes 2/3 width on desktop) */}
           <div className="lg:col-span-2">
             {/* Video container with floating reactions */}
-            <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-xl">
               <video
                 ref={videoRef}
                 controls
@@ -313,8 +366,18 @@ export function ReplayViewer() {
               />
             </div>
 
+            {/* Chapter navigation */}
+            {session.chapters && session.chapters.length > 0 && (
+              <ChapterList
+                chapters={session.chapters}
+                currentTimeMs={syncTime}
+                thumbnailBaseUrl={session.thumbnailBaseUrl}
+                onSeek={handleSeek}
+              />
+            )}
+
             {/* Metadata panel */}
-            <div className="mt-4 bg-white rounded-lg shadow p-6">
+            <div className="mt-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
               <div className="space-y-3">
                 <div>
                   <span className="text-sm font-medium text-gray-500">Broadcaster</span>
@@ -377,10 +440,10 @@ export function ReplayViewer() {
             </div>
           </div>
 
-          {/* Chat/Transcript column (takes 1/3 width on desktop, fixed height) */}
-          <div className="lg:col-span-1 h-[600px] flex flex-col">
+          {/* Chat/Transcript column (takes 1/3 width on desktop) */}
+          <div className="lg:col-span-1 h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col">
             {/* Tab buttons */}
-            <div className="flex bg-white rounded-t-lg shadow-lg border-b border-gray-200">
+            <div className="flex bg-white rounded-t-2xl shadow-sm border border-gray-100 border-b-gray-200">
               <button
                 onClick={() => setActiveTab('chat')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
@@ -414,12 +477,13 @@ export function ReplayViewer() {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-hidden">
-              {activeTab === 'chat' ? (
+            <div className="flex-1 overflow-hidden relative">
+              <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'chat' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 pointer-events-none'}`}>
                 <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
-              ) : (
+              </div>
+              <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'transcript' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'}`}>
                 <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} onSeek={handleSeek} />
-              )}
+              </div>
             </div>
           </div>
         </div>

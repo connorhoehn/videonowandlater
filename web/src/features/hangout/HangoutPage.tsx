@@ -138,11 +138,12 @@ export function HangoutPage() {
     <ChatRoomProvider value={room}>
     <div className="h-screen flex flex-col">
       {/* Header */}
-      <div className="bg-gray-800 text-white p-4 flex justify-between items-center shrink-0">
+      <div className="bg-gray-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">Hangout</h1>
+          <h1 className="text-lg font-bold">Hangout</h1>
           {isJoined && (
-            <span className="text-xs text-green-400 font-medium">
+            <span className="inline-flex items-center text-xs bg-green-500/15 text-green-400 font-semibold px-2.5 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5 animate-pulse"></span>
               {participants.length} {participants.length === 1 ? 'participant' : 'participants'}
             </span>
           )}
@@ -151,14 +152,14 @@ export function HangoutPage() {
           {isMobile && (
             <button
               onClick={() => setIsChatOpen(!isChatOpen)}
-              className="px-3 py-1 bg-blue-600 rounded text-sm"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg text-sm font-medium transition-colors duration-150"
             >
               Chat
             </button>
           )}
           <button
             onClick={() => setShowLeaveConfirm(true)}
-            className="px-3 py-1 text-white hover:text-gray-300 text-sm"
+            className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
           >
             ← Leave
           </button>
@@ -190,35 +191,54 @@ export function HangoutPage() {
             />
 
             {/* Controls */}
-            <div className="p-4 bg-gray-100 border-t flex justify-center gap-4 shrink-0">
+            <div className="px-4 py-3 sm:py-4 bg-gray-900/95 backdrop-blur-md border-t border-gray-700/50 flex justify-center gap-2 sm:gap-3 shrink-0 animate-slide-up">
               <button
                 onClick={handleMuteToggle}
-                className={`px-6 py-3 rounded-lg font-semibold ${
+                title={isMuted ? 'Unmute' : 'Mute'}
+                className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
                   isMuted
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-gray-800 text-white hover:bg-gray-900'
+                    ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
+                    : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
                 }`}
               >
-                {isMuted ? '🔇 Unmute' : '🎙 Mute'}
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  {isMuted ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 19L5 5m14 0l-3.5 3.5M12 18.75a6 6 0 01-6-6v-1.5m6 7.5a6 6 0 006-6v-1.5M12 18.75V21m-4.5 0h9M9.75 3.104A4.5 4.5 0 0112 2.25a4.5 4.5 0 014.5 4.5v4.5" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                  )}
+                </svg>
+                <span className="hidden sm:inline">{isMuted ? 'Unmute' : 'Mute'}</span>
               </button>
               <button
                 onClick={handleCameraToggle}
-                className={`px-6 py-3 rounded-lg font-semibold ${
+                title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+                className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
                   !isCameraOn
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-gray-800 text-white hover:bg-gray-900'
+                    ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
+                    : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
                 }`}
               >
-                {isCameraOn ? '📷 Camera Off' : '📷 Camera On'}
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  {!isCameraOn ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                  )}
+                </svg>
+                <span className="hidden sm:inline">{isCameraOn ? 'Camera' : 'Cam Off'}</span>
               </button>
               {isJoined && (
                 <ReactionPicker onReaction={handleReaction} />
               )}
               <button
                 onClick={() => setShowLeaveConfirm(true)}
-                className="px-6 py-3 rounded-lg font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300"
+                className="inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm bg-white/10 text-red-400 hover:bg-red-600 hover:text-white active:bg-red-700 transition-all duration-200"
               >
-                Leave
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                <span className="hidden sm:inline">Leave</span>
               </button>
             </div>
           </div>

@@ -25,22 +25,25 @@ export function LiveBroadcastsSlider({ sessions }: LiveBroadcastsSliderProps) {
 
   return (
     <div className="border-b border-gray-100 bg-red-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
           Live Now
         </h2>
-        <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth">
+        <div className="overflow-x-auto snap-x snap-mandatory scroll-smooth scroll-snap-slider">
           <div className="flex gap-4 pb-2">
           {liveBroadcasts.map((session) => (
             <div
               key={session.sessionId}
-              className="snap-center flex-shrink-0 w-56 bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow cursor-pointer relative"
+              className="snap-center flex-shrink-0 w-64 bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer relative"
               onClick={() => navigate(`/viewer/${session.sessionId}`)}
             >
               {/* LIVE Badge */}
-              <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-red-600 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+              <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-red-600 text-white px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wider shadow-lg animate-pulse-glow">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                </span>
                 LIVE
               </div>
 

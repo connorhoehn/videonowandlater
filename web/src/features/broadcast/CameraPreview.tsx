@@ -10,7 +10,7 @@ interface CameraPreviewProps {
 
 export function CameraPreview({ videoRef }: CameraPreviewProps) {
   return (
-    <div className="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-lg">
+    <div className="relative w-full aspect-video bg-gray-900 rounded-2xl overflow-hidden shadow-xl ring-1 ring-gray-800/50">
       {/* The IVS Broadcast SDK writes into this canvas element.
           Canvas does not support object-fit, so we size it absolutely to fill
           the container and let the SDK handle scaling internally. */}

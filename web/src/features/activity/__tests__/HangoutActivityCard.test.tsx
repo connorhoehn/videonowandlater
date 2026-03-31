@@ -64,7 +64,7 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/3 participants/)).toBeDefined();
+    expect(screen.getByText('3 participants')).toBeDefined();
   });
 
   it('renders participantCount singular: "1 participant"', () => {
@@ -79,20 +79,20 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/1 participant[^s]/)).toBeDefined();
+    expect(screen.getByText('1 participant')).toBeDefined();
   });
 
-  it('renders messageCount with plural: "5 messages"', () => {
+  it('renders messageCount with plural: "5 msgs"', () => {
     render(
       <BrowserRouter>
         <HangoutActivityCard session={mockSession} />
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/5 messages/)).toBeDefined();
+    expect(screen.getByText('5 msgs')).toBeDefined();
   });
 
-  it('renders messageCount singular: "1 message"', () => {
+  it('renders messageCount singular: "1 msg"', () => {
     const session: ActivitySession = {
       ...mockSession,
       messageCount: 1,
@@ -104,7 +104,7 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/1 message[^s]/)).toBeDefined();
+    expect(screen.getByText('1 msg')).toBeDefined();
   });
 
   it('renders formatted duration and relative timestamp', () => {
@@ -114,8 +114,8 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/2 min/)).toBeDefined();
-    expect(screen.getByText(/1h/)).toBeDefined();
+    expect(screen.getByText('2 min')).toBeDefined();
+    expect(screen.getByText('1h ago')).toBeDefined();
   });
 
   it('defaults participantCount and messageCount to 0 when undefined', () => {
@@ -131,8 +131,8 @@ describe('HangoutActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/0 participants/)).toBeDefined();
-    expect(screen.getByText(/0 messages/)).toBeDefined();
+    expect(screen.getByText('0 participants')).toBeDefined();
+    expect(screen.getByText('0 msgs')).toBeDefined();
   });
 
   it('calls navigate to replay page on click', () => {

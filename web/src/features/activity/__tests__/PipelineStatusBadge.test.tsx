@@ -16,29 +16,29 @@ const baseSession: ActivitySession = {
 };
 
 describe('PipelineStatusBadge', () => {
-  it('renders "Converting" with yellow badge when convertStatus is processing', () => {
+  it('renders "Converting" with amber badge when convertStatus is processing', () => {
     render(
       <PipelineStatusBadge session={{ ...baseSession, convertStatus: 'processing' }} />
     );
 
     const badge = screen.getByText('Converting');
     expect(badge).toBeDefined();
-    expect(badge.className).toContain('bg-yellow-100');
-    expect(badge.className).toContain('text-yellow-700');
+    expect(badge.className).toContain('bg-amber-50');
+    expect(badge.className).toContain('text-amber-700');
   });
 
-  it('renders "Transcribing" with yellow badge when transcriptStatus is processing', () => {
+  it('renders "Transcribing" with sky badge when transcriptStatus is processing', () => {
     render(
       <PipelineStatusBadge session={{ ...baseSession, transcriptStatus: 'processing' }} />
     );
 
     const badge = screen.getByText('Transcribing');
     expect(badge).toBeDefined();
-    expect(badge.className).toContain('bg-yellow-100');
-    expect(badge.className).toContain('text-yellow-700');
+    expect(badge.className).toContain('bg-sky-50');
+    expect(badge.className).toContain('text-sky-700');
   });
 
-  it('renders "Summarizing" with purple badge when aiSummaryStatus is pending and transcriptStatus is available', () => {
+  it('renders "Summarizing" with violet badge when aiSummaryStatus is pending and transcriptStatus is available', () => {
     render(
       <PipelineStatusBadge
         session={{ ...baseSession, aiSummaryStatus: 'pending', transcriptStatus: 'available' }}
@@ -47,19 +47,19 @@ describe('PipelineStatusBadge', () => {
 
     const badge = screen.getByText('Summarizing');
     expect(badge).toBeDefined();
-    expect(badge.className).toContain('bg-purple-100');
-    expect(badge.className).toContain('text-purple-700');
+    expect(badge.className).toContain('bg-violet-50');
+    expect(badge.className).toContain('text-violet-700');
   });
 
-  it('renders "Complete" with green badge when aiSummaryStatus is available', () => {
+  it('renders "Summary ready" with emerald badge when aiSummaryStatus is available', () => {
     render(
       <PipelineStatusBadge session={{ ...baseSession, aiSummaryStatus: 'available' }} />
     );
 
-    const badge = screen.getByText('Complete');
+    const badge = screen.getByText('Summary ready');
     expect(badge).toBeDefined();
-    expect(badge.className).toContain('bg-green-100');
-    expect(badge.className).toContain('text-green-700');
+    expect(badge.className).toContain('bg-emerald-50');
+    expect(badge.className).toContain('text-emerald-700');
   });
 
   it('renders "Failed" with red badge when any status is failed', () => {
@@ -69,8 +69,8 @@ describe('PipelineStatusBadge', () => {
 
     const badge = screen.getByText('Failed');
     expect(badge).toBeDefined();
-    expect(badge.className).toContain('bg-red-100');
-    expect(badge.className).toContain('text-red-700');
+    expect(badge.className).toContain('bg-red-50');
+    expect(badge.className).toContain('text-red-600');
   });
 
   it('returns null when no pipeline fields are set', () => {

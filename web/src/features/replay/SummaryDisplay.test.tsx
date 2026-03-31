@@ -34,7 +34,7 @@ describe('SummaryDisplay', () => {
     const { container } = render(
       <SummaryDisplay status="available" summary="This is a test summary." />
     );
-    const card = container.querySelector('.bg-blue-50');
+    const card = container.querySelector('.from-blue-50');
     expect(card).not.toBeNull();
   });
 

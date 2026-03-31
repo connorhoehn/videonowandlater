@@ -159,8 +159,8 @@ export function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sticky header */}
-      <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
-        <div className="max-w-5xl mx-auto flex items-center justify-between px-4 sm:px-6 h-14">
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-2xl mx-auto flex items-center justify-between px-4 sm:px-6 h-14">
           {/* Brand */}
           <span className="font-semibold text-gray-900 tracking-tight text-sm select-none">
             videonow
@@ -217,9 +217,27 @@ export function HomePage() {
       {/* Feed */}
       <main>
         {loadingActivity ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
-          </div>
+          <>
+            {/* Skeleton for recording slider */}
+            <div className="border-b border-gray-100">
+              <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+                <div className="animate-shimmer h-4 w-28 rounded mb-4" />
+                <div className="flex gap-4 overflow-hidden">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex-shrink-0 w-56 rounded-xl overflow-hidden">
+                      <div className="animate-shimmer aspect-video rounded-t-xl" />
+                      <div className="p-3 bg-white">
+                        <div className="animate-shimmer h-3 w-24 rounded mb-2" />
+                        <div className="animate-shimmer h-3 w-16 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Skeleton for activity feed */}
+            <ActivityFeed sessions={[]} loading={true} />
+          </>
         ) : (
           <>
             <LiveBroadcastsSlider sessions={sessions} />
@@ -231,8 +249,8 @@ export function HomePage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 animate-backdrop-in">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full sm:mx-4 animate-dialog-in">
             <VideoUploadForm
               authToken={authToken}
               onClose={() => setShowUploadModal(false)}

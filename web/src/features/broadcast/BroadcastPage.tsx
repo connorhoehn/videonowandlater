@@ -71,7 +71,7 @@ function ParticipantsPanel({
             </div>
           </div>
           {isLive && (
-            <span className="ml-auto flex items-center text-xs text-red-600 font-semibold">
+            <span className="ml-auto inline-flex items-center text-xs bg-red-600/10 text-red-600 font-bold px-2 py-0.5 rounded-full">
               <span className="w-1.5 h-1.5 bg-red-600 rounded-full mr-1.5 animate-pulse"></span>
               LIVE
             </span>
@@ -212,12 +212,12 @@ function BroadcastContent({
     <ChatRoomProvider value={room}>
       <div className="h-screen flex flex-col bg-gray-100">
         {/* Header */}
-        <div className="bg-gray-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+        <div className="bg-gray-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold">Broadcasting</h1>
             {isLive && (
-              <span className="flex items-center text-xs bg-red-600 text-white px-2 py-0.5 rounded font-semibold">
-                <span className="w-1.5 h-1.5 bg-white rounded-full mr-1.5 animate-pulse"></span>
+              <span className="inline-flex items-center text-xs bg-red-600 text-white px-2.5 py-1 rounded-full font-bold tracking-wide shadow-lg shadow-red-600/30 animate-live-pulse">
+                <span className="w-2 h-2 bg-white rounded-full mr-1.5"></span>
                 LIVE
               </span>
             )}
@@ -225,10 +225,10 @@ function BroadcastContent({
           <div className="flex items-center gap-2">
             <button
               onClick={copyViewerLink}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                 linkCopied
-                  ? 'bg-green-600 text-white'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-green-500 text-white scale-105'
+                  : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
               }`}
               title={viewerUrl}
             >
@@ -237,14 +237,14 @@ function BroadcastContent({
             {isMobile && (
               <button
                 onClick={() => setIsChatOpen(!isChatOpen)}
-                className="px-3 py-1 bg-blue-600 rounded text-sm"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg text-sm font-medium transition-colors duration-150"
               >
                 Chat
               </button>
             )}
             <button
               onClick={() => navigate('/')}
-              className="px-3 py-1 text-white hover:text-gray-300 text-sm"
+              className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
             >
               ← Back
             </button>
@@ -294,44 +294,61 @@ function BroadcastContent({
               </div>
 
               {/* Controls bar */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap animate-slide-up">
                 {/* Live controls — only shown when broadcasting */}
                 {isLive && (
                   <>
                     <button
                       onClick={toggleMute}
                       title={isMuted ? 'Unmute' : 'Mute'}
-                      className={`px-3 py-2 rounded-lg font-semibold text-sm ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
                         isMuted
-                          ? 'bg-red-600 text-white hover:bg-red-700'
-                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-600/25'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400'
                       }`}
                     >
-                      {isMuted ? '🔇 Unmute' : '🎙 Mute'}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                        {isMuted ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 19L5 5m14 0l-3.5 3.5M12 18.75a6 6 0 01-6-6v-1.5m6 7.5a6 6 0 006-6v-1.5M12 18.75V21m-4.5 0h9M9.75 3.104A4.5 4.5 0 0112 2.25a4.5 4.5 0 014.5 4.5v4.5" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                        )}
+                      </svg>
+                      {isMuted ? 'Unmute' : 'Mute'}
                     </button>
 
                     <button
                       onClick={toggleCamera}
                       title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-                      className={`px-3 py-2 rounded-lg font-semibold text-sm ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
                         !isCameraOn
-                          ? 'bg-red-600 text-white hover:bg-red-700'
-                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-600/25'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400'
                       }`}
                     >
-                      {isCameraOn ? '📷 Camera' : '📷 Off'}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                        {!isCameraOn ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                        )}
+                      </svg>
+                      {isCameraOn ? 'Camera' : 'Off'}
                     </button>
 
                     <button
                       onClick={isScreenSharing ? stopScreenShare : startScreenShare}
                       title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-                      className={`px-3 py-2 rounded-lg font-semibold text-sm ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
                         isScreenSharing
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-sm shadow-blue-600/25'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400'
                       }`}
                     >
-                      {isScreenSharing ? '🖥 Stop Share' : '🖥 Share'}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+                      </svg>
+                      {isScreenSharing ? 'Stop Share' : 'Share'}
                     </button>
 
                     <ReactionPicker
@@ -341,7 +358,7 @@ function BroadcastContent({
 
                     <button
                       onClick={openModal}
-                      className="px-3 py-2 rounded-lg font-semibold text-sm bg-purple-600 text-white hover:bg-purple-700"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm bg-purple-600 text-white hover:bg-purple-700 active:bg-purple-800 shadow-sm hover:shadow-md transition-all duration-200"
                     >
                       {featuredCreator ? 'Change Spotlight' : 'Feature Creator'}
                     </button>
@@ -354,14 +371,14 @@ function BroadcastContent({
                     <button
                       onClick={startBroadcast}
                       disabled={isLoading}
-                      className="px-5 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      className="px-5 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-md hover:shadow-lg transition-all duration-200"
                     >
                       {isLoading ? 'Starting…' : 'Go Live'}
                     </button>
                   ) : (
                     <button
                       onClick={() => setShowStopConfirm(true)}
-                      className="px-5 py-2 bg-gray-800 text-white rounded-lg font-semibold hover:bg-gray-900 text-sm"
+                      className="px-5 py-2 bg-gray-800 text-white rounded-lg font-semibold hover:bg-gray-900 active:bg-black text-sm shadow-sm hover:shadow-md transition-all duration-200"
                     >
                       Stop Broadcast
                     </button>

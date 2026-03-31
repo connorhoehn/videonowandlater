@@ -17,9 +17,9 @@ interface DashboardProps {
  */
 function MetricRow({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
   return (
-    <div className={`flex justify-between text-xs ${alert ? 'text-yellow-400' : 'text-gray-300'}`}>
-      <span>{label}</span>
-      <span className="font-mono">{value}</span>
+    <div className={`flex justify-between items-center text-xs ${alert ? 'text-yellow-400' : 'text-gray-300'}`}>
+      <span className="text-gray-400">{label}</span>
+      <span className="font-mono tabular-nums">{value}</span>
     </div>
   );
 }
@@ -58,31 +58,36 @@ export function StreamQualityDashboard({ metrics, healthScore, isLive }: Dashboa
   }
 
   return (
-    <div className="w-full transition-all duration-200">
-      <div className="bg-black/85 backdrop-blur-md rounded-lg border border-gray-700 shadow-xl overflow-hidden">
+    <div className="w-full transition-all duration-300 ease-in-out">
+      <div className="bg-black/85 backdrop-blur-md rounded-xl border border-gray-700/50 shadow-2xl overflow-hidden">
 
         {/* Header row with live indicator and expand/collapse button */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-700/50">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-            <span className="text-xs font-semibold text-white">Stream Quality</span>
+            <span className="text-xs font-semibold text-white tracking-wide">Stream Quality</span>
           </div>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-gray-400 hover:text-white transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-150"
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
-            {isExpanded ? '−' : '+'}
+            <svg
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
           </button>
         </div>
 
         {/* Score circle and summary */}
-        <div className="px-4 py-4 flex items-center gap-4">
-          <div className={`flex-shrink-0 w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl border-2 ${scoreColor}`}>
+        <div className="px-4 py-3.5 flex items-center gap-4">
+          <div className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl border-2 transition-colors duration-300 ${scoreColor}`}>
             {healthScore.score}%
           </div>
 
-          <div className="flex-1 space-y-2">
+          <div className="flex-1 space-y-1.5">
             <div className="text-xs font-semibold text-white">
               {healthScore.warning === 'none' ? '✓ Healthy Stream' : '⚠ Issue Detected'}
             </div>
@@ -101,21 +106,23 @@ export function StreamQualityDashboard({ metrics, healthScore, isLive }: Dashboa
 
         {/* Expandable detailed metrics */}
         {isExpanded && (
-          <div className="border-t border-gray-700 px-4 py-3 space-y-3">
-            <MetricRow label="Bitrate" value={formatBitrate(metrics.bitrate)} />
-            <MetricRow label="Frame Rate" value={`${Math.round(metrics.framesPerSecond || 0)} fps`} />
-            <MetricRow
-              label="Resolution"
-              value={`${metrics.resolution.width}×${metrics.resolution.height}`}
-            />
-            <MetricRow label="Network" value={metrics.networkType} />
-            {metrics.qualityLimitation !== 'none' && (
+          <div className="border-t border-gray-700/50 animate-slide-up">
+            <div className="px-4 py-3 space-y-2.5">
+              <MetricRow label="Bitrate" value={formatBitrate(metrics.bitrate)} />
+              <MetricRow label="Frame Rate" value={`${Math.round(metrics.framesPerSecond || 0)} fps`} />
               <MetricRow
-                label="Limited By"
-                value={metrics.qualityLimitation}
-                alert
+                label="Resolution"
+                value={`${metrics.resolution.width}×${metrics.resolution.height}`}
               />
-            )}
+              <MetricRow label="Network" value={metrics.networkType} />
+              {metrics.qualityLimitation !== 'none' && (
+                <MetricRow
+                  label="Limited By"
+                  value={metrics.qualityLimitation}
+                  alert
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { formatHumanDuration } from './BroadcastActivityCard';
 import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
 import type { ActivitySession } from './types';
@@ -26,9 +27,7 @@ function formatFileSize(bytes?: number): string {
 }
 
 function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  return formatHumanDuration(ms);
 }
 
 function formatDate(dateString: string): string {
@@ -102,27 +101,30 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
   return (
     <div
       onClick={handleClick}
-      className={`p-4 bg-white rounded-lg border border-gray-100 ${
-        isViewable ? 'hover:border-gray-300 cursor-pointer' : 'cursor-default'
-      } transition-colors`}
+      className={`group bg-white rounded-2xl border border-gray-100 ${
+        isViewable ? 'hover:border-gray-200 hover:shadow-lg cursor-pointer' : 'cursor-default'
+      } transition-all duration-300 overflow-hidden`}
     >
+      <div className="p-4 sm:p-5">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1">
           {/* Upload Icon */}
-          <div className="flex-shrink-0 mt-1">
-            <svg
-              className="w-5 h-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
+          <div className="flex-shrink-0 mt-0.5">
+            <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center">
+              <svg
+                className="w-4.5 h-4.5 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+            </div>
           </div>
 
           <div className="flex-1">
@@ -134,12 +136,19 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
             {/* Processing Status */}
             <div className="mt-2 flex items-center gap-2">
               {isProcessing && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
                   {currentStep}
                 </span>
               )}
               {isViewable && !isProcessing && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
                   Ready to view
                 </span>
               )}
@@ -176,14 +185,14 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
             <span>{currentStep}</span>
             {isUploading && <span>{Math.round(progressPercent)}%</span>}
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
             {isUploading ? (
               <div
-                className="h-full bg-blue-600 transition-all duration-300"
+                className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progressPercent}%` }}
               />
             ) : (
-              <div className="h-full bg-yellow-600 animate-pulse" />
+              <div className="h-full bg-amber-400 rounded-full animate-pulse" style={{ width: `${progressPercent}%` }} />
             )}
           </div>
         </div>
@@ -201,8 +210,27 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
         </div>
       )}
 
+      {/* Highlights badge */}
+      {(session as any).highlightReelStatus === 'available' && (
+        <div className="mt-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/video/${session.sessionId}?view=highlights`);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200 hover:bg-fuchsia-100 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 4V2m0 2a2 2 0 00-2 2v1a2 2 0 002 2h0a2 2 0 002-2V6a2 2 0 00-2-2zm0 10v2m0-2a2 2 0 01-2-2v-1a2 2 0 012-2h0a2 2 0 012 2v1a2 2 0 01-2 2zM17 4V2m0 2a2 2 0 00-2 2v1a2 2 0 002 2h0a2 2 0 002-2V6a2 2 0 00-2-2zm0 10v2m0-2a2 2 0 01-2-2v-1a2 2 0 012-2h0a2 2 0 012 2v1a2 2 0 01-2 2z" />
+            </svg>
+            Highlights
+          </button>
+        </div>
+      )}
+
       {/* Audit Log - Processing Timeline */}
       {!compact && <SessionAuditLog session={session} compact={true} />}
+      </div>
     </div>
   );
 }

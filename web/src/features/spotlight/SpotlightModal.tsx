@@ -73,7 +73,7 @@ export function SpotlightModal({
 
       {/* Content panel */}
       <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-full max-w-lg max-h-[70vh] overflow-y-auto z-50 shadow-xl"
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 w-full max-w-lg max-h-[70vh] overflow-y-auto z-50 shadow-2xl animate-dialog-in"
         role="dialog"
         aria-modal="true"
         aria-labelledby="spotlight-modal-title"
@@ -214,7 +214,7 @@ export function SpotlightModal({
                 <button
                   onClick={() => handleSelect(session)}
                   disabled={selectingId === session.sessionId}
-                  className="shrink-0 px-3 py-1.5 rounded-md text-sm font-semibold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-600 text-white hover:bg-purple-700 active:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 hover:shadow-md hover:shadow-purple-600/25"
                 >
                   {selectingId === session.sessionId ? 'Featuring…' : 'Feature'}
                 </button>

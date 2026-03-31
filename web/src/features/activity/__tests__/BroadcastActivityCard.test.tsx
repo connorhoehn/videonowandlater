@@ -97,11 +97,11 @@ describe('BroadcastActivityCard', () => {
       </BrowserRouter>
     );
 
-    // 1 hour ago should render "1h"
-    expect(screen.getByText(/1h/)).toBeDefined();
+    // 1 hour ago should render "1h ago"
+    expect(screen.getByText(/1h ago/)).toBeDefined();
   });
 
-  it('renders "unknown" when recordingDuration is undefined', () => {
+  it('omits duration when recordingDuration is undefined', () => {
     const session: ActivitySession = {
       ...mockSession,
       recordingDuration: undefined,
@@ -113,7 +113,9 @@ describe('BroadcastActivityCard', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/unknown/)).toBeDefined();
+    // Should still show the timestamp but no duration text
+    expect(screen.getByText(/1h ago/)).toBeDefined();
+    expect(screen.queryByText(/min/)).toBeNull();
   });
 
   it('calls navigate to replay page on click', () => {

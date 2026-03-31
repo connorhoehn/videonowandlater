@@ -48,7 +48,7 @@ describe('StreamQualityOverlay', () => {
     );
 
     const overlay = container.firstChild;
-    expect(overlay).toHaveClass('fixed', 'bottom-4', 'right-4', 'z-40', 'w-80');
+    expect(overlay).toHaveClass('absolute', 'bottom-3', 'right-3', 'z-40');
   });
 
   it('renders StreamQualityDashboard inside overlay', () => {
@@ -127,7 +127,7 @@ describe('StreamQualityOverlay', () => {
     expect(overlay).toHaveClass('z-40');
   });
 
-  it('uses fixed width of w-80 (320px)', () => {
+  it('uses responsive width classes', () => {
     const { container } = render(
       <StreamQualityOverlay
         metrics={mockMetrics}
@@ -137,6 +137,6 @@ describe('StreamQualityOverlay', () => {
     );
 
     const overlay = container.firstChild;
-    expect(overlay).toHaveClass('w-80');
+    expect(overlay).toHaveClass('w-64');
   });
 });

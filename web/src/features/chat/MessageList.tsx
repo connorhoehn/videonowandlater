@@ -30,19 +30,25 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
-  // Auto-scroll if at bottom
+  // Auto-scroll if at bottom (smooth)
   React.useEffect(() => {
     if (isAtBottom && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
       setHasNewMessages(false);
-    } else {
+    } else if (messages.length > 0) {
       setHasNewMessages(true);
     }
   }, [messages, isAtBottom]);
 
   const scrollToBottom = () => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
       setIsAtBottom(true);
       setHasNewMessages(false);
     }
@@ -53,7 +59,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-full overflow-y-auto px-4 py-2"
+        className="h-full overflow-y-auto px-3 py-2 scroll-smooth"
       >
         {messages.map((message) => (
           <MessageRow
@@ -70,7 +76,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       {!isAtBottom && hasNewMessages && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 px-3 py-1 bg-blue-600 text-white text-sm rounded-full shadow-lg hover:bg-blue-700"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-full shadow-lg hover:bg-blue-700 transition-colors"
         >
           New messages ↓
         </button>

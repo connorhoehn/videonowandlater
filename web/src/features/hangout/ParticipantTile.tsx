@@ -1,6 +1,6 @@
 /**
  * ParticipantTile - individual video tile for hangout participant
- * Displays video stream with green border when participant is speaking
+ * Displays video stream with green ring when participant is speaking
  */
 
 import React, { useRef, useEffect } from 'react';
@@ -33,41 +33,30 @@ export const ParticipantTile: React.FC<ParticipantTileProps> = ({
 
   return (
     <div
-      style={{
-        position: 'relative',
-        aspectRatio: '16/9',
-        backgroundColor: '#1a1a1a',
-        borderRadius: '8px',
-        border: isSpeaking ? '3px solid #10b981' : '1px solid #374151',
-        transition: 'border-color 200ms ease-in-out',
-        overflow: 'hidden',
-      }}
+      className={`relative aspect-video bg-gray-900 rounded-2xl overflow-hidden transition-all duration-300 ease-in-out ${
+        isSpeaking
+          ? 'ring-3 ring-emerald-500 ring-offset-2 ring-offset-gray-900 shadow-xl shadow-emerald-500/25'
+          : 'ring-1 ring-gray-700/50 shadow-lg shadow-black/20'
+      }`}
     >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={participant.isLocal}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-        }}
+        className="w-full h-full object-cover"
       />
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '8px',
-          left: '8px',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          color: 'white',
-          padding: '4px 8px',
-          borderRadius: '4px',
-          fontSize: '0.875rem',
-          fontWeight: '500',
-        }}
-      >
-        {participant.userId} {participant.isLocal && '(You)'}
+      {/* Subtle gradient overlay at bottom for name readability */}
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+      {/* Name badge */}
+      <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 bg-black/60 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-full">
+        {isSpeaking && (
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+        )}
+        <span>{participant.userId}</span>
+        {participant.isLocal && (
+          <span className="text-white/50">(You)</span>
+        )}
       </div>
     </div>
   );

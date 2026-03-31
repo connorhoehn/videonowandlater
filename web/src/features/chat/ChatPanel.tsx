@@ -26,12 +26,27 @@ interface ConnectionIndicatorProps {
 
 const ConnectionIndicator: React.FC<ConnectionIndicatorProps> = ({ state }) => {
   if (state === 'connected') {
-    return <span className="text-xs text-green-600">● Connected</span>;
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-green-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        Live
+      </span>
+    );
   }
   if (state === 'connecting') {
-    return <span className="text-xs text-yellow-600">● Connecting...</span>;
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-yellow-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+        Connecting
+      </span>
+    );
   }
-  return <span className="text-xs text-red-600">● Disconnected</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-red-500">
+      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+      Offline
+    </span>
+  );
 };
 
 interface ChatPanelContentProps {
@@ -64,14 +79,19 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-gray-300 p-3 flex items-center justify-between">
-        <h2 className="font-semibold">Chat</h2>
+      <div className="border-b border-gray-200 bg-white/90 backdrop-blur-sm px-3 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-800">Chat</h2>
+          <ConnectionIndicator state={connectionState} />
+        </div>
         {isMobile && onClose && (
-          <button onClick={onClose} className="text-gray-600">
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 transition-colors text-sm font-medium"
+          >
             Close
           </button>
         )}
-        <ConnectionIndicator state={connectionState} />
       </div>
 
       {chatError && (
@@ -105,7 +125,7 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
 
       {/* Toast */}
       {toastMsg && (
-        <div className="absolute bottom-16 left-4 right-4 bg-gray-800 text-white text-sm px-3 py-2 rounded shadow-lg text-center pointer-events-none">
+        <div className="absolute bottom-16 left-4 right-4 bg-gray-900/90 backdrop-blur-sm text-white text-xs px-3 py-2 rounded-lg shadow-lg text-center pointer-events-none">
           {toastMsg}
         </div>
       )}
@@ -172,10 +192,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const overlayClasses = isMobile
-    ? `fixed inset-0 z-50 bg-white transform transition-transform ${
+    ? `fixed inset-0 z-50 bg-white transform transition-transform duration-300 ease-out ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`
-    : 'w-full h-full';
+    : 'w-full h-full bg-white/95 backdrop-blur-sm';
 
   return (
     <ChatMessagesProvider sessionId={sessionId} authToken={authToken}>

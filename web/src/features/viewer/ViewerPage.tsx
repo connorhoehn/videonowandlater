@@ -147,12 +147,12 @@ export function ViewerPage() {
     <ChatRoomProvider value={room}>
     <div className="h-screen flex flex-col">
       {/* Header */}
-      <div className="bg-gray-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+      <div className="bg-gray-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold">Watch Live</h1>
           {isPlaying && (
-            <span className="flex items-center text-xs bg-red-600 text-white px-2 py-0.5 rounded font-semibold">
-              <span className="w-1.5 h-1.5 bg-white rounded-full mr-1.5 animate-pulse"></span>
+            <span className="inline-flex items-center text-xs bg-red-600 text-white px-2.5 py-1 rounded-full font-bold tracking-wide shadow-lg shadow-red-600/30 animate-live-pulse">
+              <span className="w-2 h-2 bg-white rounded-full mr-1.5"></span>
               LIVE
             </span>
           )}
@@ -161,14 +161,14 @@ export function ViewerPage() {
           {isMobile && (
             <button
               onClick={() => setIsChatOpen(!isChatOpen)}
-              className="px-3 py-1 bg-blue-600 rounded text-sm"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg text-sm font-medium transition-colors duration-150"
             >
               Chat
             </button>
           )}
           <button
             onClick={() => navigate('/')}
-            className="px-3 py-1 text-white hover:text-gray-300 text-sm"
+            className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
           >
             ← Back
           </button>
@@ -198,7 +198,7 @@ export function ViewerPage() {
               <div className="flex items-center gap-3 flex-1 flex-wrap">
                 {session?.userId && (
                   <div className="flex items-center gap-2 text-gray-700">
-                    <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-700">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white">
                       {session.userId.charAt(0).toUpperCase()}
                     </div>
                     <span className="font-medium">Broadcaster</span>
@@ -208,7 +208,7 @@ export function ViewerPage() {
                   </div>
                 )}
                 {sessionStatus && (
-                  <span className="text-xs text-gray-400 border border-gray-200 px-2 py-0.5 rounded">
+                  <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 px-2.5 py-0.5 rounded-full font-medium">
                     {sessionStatus}
                   </span>
                 )}

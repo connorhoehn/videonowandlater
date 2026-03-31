@@ -15,6 +15,9 @@ import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { CommentThread } from './CommentThread';
 import { VideoInfoPanel } from './VideoInfoPanel';
+import { ChapterList } from '../replay/ChapterList';
+import { HighlightReelPlayer } from '../replay/HighlightReelPlayer';
+import type { Chapter } from '../replay/ChapterList';
 
 interface UploadSession {
   sessionId: string;
@@ -34,6 +37,13 @@ interface UploadSession {
   uploadStatus?: string;
   diarizedTranscriptS3Path?: string;
   reactionSummary?: Record<string, number>;
+  chapters?: Chapter[];
+  posterFrameUrl?: string;
+  thumbnailBaseUrl?: string;
+  thumbnailCount?: number;
+  highlightReelStatus?: 'pending' | 'processing' | 'available' | 'failed';
+  highlightReelLandscapeUrl?: string;
+  highlightReelVerticalUrl?: string;
 }
 
 function formatFileSize(bytes?: number): string {
@@ -244,15 +254,15 @@ export function VideoPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header bar */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
+      <div className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
-            className="text-gray-600 hover:text-gray-900 transition-colors"
+            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
           >
-            &#8592; Back
+            ← Back
           </button>
-          <h1 className="text-xl font-semibold text-gray-900">
+          <h1 className="text-lg font-semibold text-gray-900 truncate">
             {session.sourceFileName || 'Uploaded Video'}
           </h1>
         </div>
@@ -261,7 +271,7 @@ export function VideoPage() {
       {/* Content area */}
       <div className="max-w-4xl mx-auto p-4">
         {/* Video container with quality selector overlay */}
-        <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+        <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-xl">
           <video
             ref={videoRef}
             controls
@@ -278,8 +288,18 @@ export function VideoPage() {
           </div>
         </div>
 
+        {/* Chapter navigation */}
+        {session.chapters && session.chapters.length > 0 && (
+          <ChapterList
+            chapters={session.chapters}
+            currentTimeMs={syncTime}
+            thumbnailBaseUrl={session.thumbnailBaseUrl}
+            onSeek={seekVideo}
+          />
+        )}
+
         {/* Video metadata panel */}
-        <div className="mt-4 bg-white rounded-lg shadow p-6">
+        <div className="mt-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <span className="text-sm font-medium text-gray-500">Uploaded by</span>
@@ -325,8 +345,20 @@ export function VideoPage() {
           </div>
         </div>
 
+        {/* Highlight Reel */}
+        {session.highlightReelStatus && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2 px-1">Highlight Reel</h3>
+            <HighlightReelPlayer
+              landscapeUrl={session.highlightReelLandscapeUrl}
+              verticalUrl={session.highlightReelVerticalUrl}
+              status={session.highlightReelStatus}
+            />
+          </div>
+        )}
+
         {/* Reactions */}
-        <div className="mt-4 bg-white rounded-lg shadow p-4 flex flex-wrap items-center gap-4">
+        <div className="mt-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-center gap-4">
           <ReplayReactionPicker onReaction={(emoji) => sendReaction(emoji, 'replay')} />
           <ReactionSummaryPills reactionSummary={displayCounts} />
         </div>
@@ -345,13 +377,19 @@ export function VideoPage() {
         <div className="mt-4">
           <button
             onClick={() => setShowInfoPanel(p => !p)}
-            className="w-full text-left px-6 py-3 bg-white border rounded-lg shadow text-sm font-medium text-gray-700 flex justify-between items-center"
+            className="w-full text-left px-5 py-3 bg-white border border-gray-100 rounded-2xl shadow-sm text-sm font-medium text-gray-700 flex justify-between items-center hover:bg-gray-50 transition-all duration-200"
           >
             <span>Summary &amp; Transcript</span>
-            <span>{showInfoPanel ? '▲' : '▼'}</span>
+            <span className={`transition-transform duration-300 inline-block ${showInfoPanel ? 'rotate-180' : ''}`}>
+              &#9660;
+            </span>
           </button>
-          {showInfoPanel && (
-            <div className="mt-2 bg-white rounded-lg shadow">
+          <div
+            className={`overflow-hidden transition-all duration-300 ease-out ${
+              showInfoPanel ? 'max-h-[800px] opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+            }`}
+          >
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
               <VideoInfoPanel
                 sessionId={sessionId!}
                 authToken={authToken}
@@ -362,7 +400,7 @@ export function VideoPage() {
                 onSeek={seekVideo}
               />
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

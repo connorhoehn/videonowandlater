@@ -11,15 +11,18 @@ interface ReactionSummaryPillsProps {
 
 export function ReactionSummaryPills({ reactionSummary }: ReactionSummaryPillsProps) {
   if (!reactionSummary || Object.keys(reactionSummary).length === 0) {
-    return <div className="text-gray-400 text-xs">No reactions</div>;
+    return <div className="text-gray-400 text-xs italic">No reactions</div>;
   }
 
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex gap-1.5 flex-wrap">
       {Object.entries(reactionSummary).map(([emojiType, count]) => (
-        <div key={emojiType} className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-full">
-          <span>{EMOJI_MAP[emojiType as EmojiType]}</span>
-          <span className="text-xs font-semibold text-gray-700">{count}</span>
+        <div
+          key={emojiType}
+          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 border border-gray-200 rounded-full transition-colors hover:bg-gray-100"
+        >
+          <span className="text-sm">{EMOJI_MAP[emojiType as EmojiType]}</span>
+          <span className="text-xs font-semibold text-gray-600 tabular-nums">{count}</span>
         </div>
       ))}
     </div>

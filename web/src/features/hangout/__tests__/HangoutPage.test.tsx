@@ -164,8 +164,8 @@ describe('HangoutPage — Leave confirmation (UI-06)', () => {
     });
 
     // The controls "Leave" button is inside the controls bar (not the header)
-    const leaveButtons = screen.getAllByText('Leave');
-    const controlsLeave = leaveButtons.find(btn => btn.tagName === 'BUTTON');
+    const leaveElements = screen.getAllByText('Leave');
+    const controlsLeave = leaveElements.find(el => el.closest('button') && !el.closest('button')?.textContent?.includes('←'))?.closest('button');
     expect(controlsLeave).toBeDefined();
     fireEvent.click(controlsLeave!);
 

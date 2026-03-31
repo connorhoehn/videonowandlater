@@ -44,7 +44,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled || cooldown}
-        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-full text-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-full text-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105 active:scale-95"
         aria-label="Send reaction"
         title="Send reaction"
       >
@@ -53,12 +53,12 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
 
       {/* Emoji picker menu */}
       {isOpen && (
-        <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-2 flex gap-2 border border-gray-200">
+        <div className="animate-context-menu absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl p-1.5 flex gap-1 border border-gray-200">
           {Object.entries(EMOJI_MAP).map(([key, emoji]) => (
             <button
               key={key}
               onClick={() => handleReaction(key as EmojiType)}
-              className="p-2 hover:bg-gray-100 rounded text-2xl transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg text-2xl transition-all duration-150 hover:scale-110 active:scale-95"
               aria-label={`Send ${key} reaction`}
               title={`Send ${key} reaction`}
             >

@@ -1,14 +1,14 @@
 /**
- * FloatingReactions - Motion-powered floating animation overlay
- * Implements batching (100ms windows, max 10 per batch) and performance optimizations
+ * FloatingReactions - CSS-animation-powered floating emoji overlay
+ * Uses pure CSS transforms/animations for GPU-accelerated performance.
+ * Batches reactions (100ms windows, max 10 per batch) and caps at 50 simultaneous.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const MAX_SIMULTANEOUS = 50; // Prevent UI lag
-const BATCH_INTERVAL = 100; // Batch reactions every 100ms
-const ANIMATION_DURATION = 3000; // 3 seconds
+const MAX_SIMULTANEOUS = 50;
+const BATCH_INTERVAL = 100;
+const ANIMATION_DURATION = 3200; // Longest CSS animation duration (ms)
 
 export interface FloatingEmoji {
   id: string;
@@ -19,6 +19,13 @@ export interface FloatingEmoji {
 interface FloatingReactionsProps {
   reactions: FloatingEmoji[];
 }
+
+/** Assign a CSS animation class based on index for visual variety */
+const ANIMATION_CLASSES = [
+  'animate-float-up',
+  'animate-float-up-left',
+  'animate-float-up-right',
+] as const;
 
 export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ reactions }) => {
   const [visible, setVisible] = useState<FloatingEmoji[]>([]);
@@ -40,11 +47,8 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ reactions 
     const interval = setInterval(() => {
       if (queueRef.current.length > 0) {
         setVisible((prev) => {
-          // Take max 10 reactions from queue per batch
           const newItems = queueRef.current.splice(0, 10);
           const updated = [...prev, ...newItems];
-
-          // Enforce max simultaneous limit
           if (updated.length > MAX_SIMULTANEOUS) {
             return updated.slice(-MAX_SIMULTANEOUS);
           }
@@ -61,8 +65,9 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ reactions 
     const cleanup = setInterval(() => {
       const now = Date.now();
       setVisible((prev) => {
-        const filtered = prev.filter((item) => now - item.timestamp < ANIMATION_DURATION);
-        // Cleanup processedIds for removed items
+        const filtered = prev.filter(
+          (item) => now - item.timestamp < ANIMATION_DURATION
+        );
         prev.forEach((item) => {
           if (now - item.timestamp >= ANIMATION_DURATION) {
             processedIds.current.delete(item.id);
@@ -75,55 +80,37 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ reactions 
     return () => clearInterval(cleanup);
   }, []);
 
+  // Stable random-ish horizontal offset per emoji
+  const getStyle = useCallback((id: string, index: number) => {
+    // Simple hash from id for deterministic offset
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+    }
+    const xOffset = (Math.abs(hash) % 60) - 30; // -30px to +30px
+
+    return {
+      left: `calc(50% + ${xOffset}px)`,
+      bottom: '18%',
+      fontSize: '2.5rem',
+      animationDelay: `${(index % 5) * 40}ms`,
+    } as React.CSSProperties;
+  }, []);
+
   return (
     <div
-      className="floating-reactions-container"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        overflow: 'hidden',
-        zIndex: 10,
-      }}
+      className="absolute inset-0 pointer-events-none overflow-hidden"
+      style={{ zIndex: 10 }}
     >
-      <AnimatePresence>
-        {visible.map((item, index) => {
-          // Random horizontal offset for variety
-          const xOffset = (index % 5) * 20 - 40;
-
-          return (
-            <motion.div
-              key={item.id}
-              initial={{
-                opacity: 1,
-                y: 0,
-                x: xOffset,
-                scale: 1,
-              }}
-              animate={{
-                opacity: 0,
-                y: -200,
-                x: xOffset + Math.sin(Date.now() / 200) * 15, // Wiggle effect
-                scale: 1.2,
-              }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 3,
-                ease: 'easeOut',
-              }}
-              style={{
-                position: 'absolute',
-                bottom: '20%',
-                left: '50%',
-                fontSize: '3rem',
-                willChange: 'transform', // GPU hint
-              }}
-            >
-              {item.emoji}
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
+      {visible.map((item, index) => (
+        <div
+          key={item.id}
+          className={`absolute ${ANIMATION_CLASSES[index % ANIMATION_CLASSES.length]}`}
+          style={getStyle(item.id, index)}
+        >
+          {item.emoji}
+        </div>
+      ))}
     </div>
   );
 };

@@ -28,7 +28,7 @@ export function StreamQualityOverlay({ metrics, healthScore, isLive }: OverlayPr
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80">
+    <div className="absolute bottom-3 right-3 z-40 w-64 sm:w-72 animate-slide-up">
       <StreamQualityDashboard
         metrics={metrics}
         healthScore={healthScore}

@@ -5,9 +5,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { PutCommand, GetCommand, UpdateCommand, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
+import { Logger } from '@aws-lambda-powertools/logger';
 import type { Session } from '../domain/session';
 import { SessionStatus, SessionType, RecordingStatus } from '../domain/session';
 import { EmojiType, SHARD_COUNT } from '../domain/reaction';
+
+const logger = new Logger({ serviceName: 'vnl-repository' });
 
 /**
  * Hangout participant record - one per user per session
@@ -269,7 +272,7 @@ export async function computeAndStoreReactionSummary(
       reactionSummary[emojiType] = emojiCount;
     }
 
-    console.log('Computed reaction summary:', { sessionId, reactionSummary });
+    logger.info('Computed reaction summary', { sessionId, reactionSummary });
 
     // Update session record with reaction summary
     await updateRecordingMetadata(tableName, sessionId, {
@@ -278,7 +281,7 @@ export async function computeAndStoreReactionSummary(
 
     return reactionSummary;
   } catch (error) {
-    console.error('Error computing reaction summary:', error);
+    logger.error('Error computing reaction summary', { error: error instanceof Error ? error.message : String(error) });
     throw error;  // Caller (recording-ended) handles with try/catch
   }
 }
@@ -526,7 +529,7 @@ export async function updateTranscriptStatus(
     ExpressionAttributeValues: expressionAttributeValues,
   }));
 
-  console.log('Transcript status updated:', { sessionId, status, s3Path });
+  logger.info('Transcript status updated', { sessionId, status, s3Path });
 }
 
 /**
@@ -562,7 +565,7 @@ export async function updateDiarizedTranscriptPath(
     },
   }));
 
-  console.log('Diarized transcript path updated:', { sessionId, diarizedTranscriptS3Path });
+  logger.info('Diarized transcript path updated', { sessionId, diarizedTranscriptS3Path });
 }
 
 /**
@@ -622,7 +625,7 @@ export async function updateSessionAiSummary(
     ExpressionAttributeValues: expressionAttributeValues,
   }));
 
-  console.log('AI summary updated:', { sessionId, ...updates });
+  logger.info('AI summary updated', { sessionId, ...updates });
 }
 
 /**
@@ -657,7 +660,7 @@ export async function updateSessionChapters(
     },
   }));
 
-  console.log('Chapters updated:', { sessionId, chapterCount: chapters.length });
+  logger.info('Chapters updated', { sessionId, chapterCount: chapters.length });
 }
 
 /**

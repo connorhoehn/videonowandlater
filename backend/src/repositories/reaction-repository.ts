@@ -3,9 +3,12 @@
  */
 
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { Reaction, EmojiType } from '../domain/reaction';
 import { SHARD_COUNT } from '../domain/reaction';
+
+const logger = new Logger({ serviceName: 'vnl-repository' });
 
 /**
  * Store a reaction in DynamoDB with sharded writes
@@ -42,7 +45,7 @@ export async function persistReaction(tableName: string, reaction: Reaction): Pr
       })
     );
   } catch (error) {
-    console.error('Error persisting reaction:', error);
+    logger.error('Error persisting reaction', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -98,7 +101,7 @@ export async function getReactionsInTimeRange(
 
     return reactions;
   } catch (error) {
-    console.error('Error getting reactions in time range:', error);
+    logger.error('Error getting reactions in time range', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -151,7 +154,7 @@ export async function getReactionCounts(
 
     return totalCount;
   } catch (error) {
-    console.error('Error getting reaction counts:', error);
+    logger.error('Error getting reaction counts', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }

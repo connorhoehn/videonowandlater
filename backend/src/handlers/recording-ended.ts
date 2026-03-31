@@ -270,6 +270,16 @@ async function processEvent(
         throw new Error('Invalid event detail: missing required recording metadata');
       }
 
+      // Validate recording duration is reasonable (0 to 24 hours)
+      const MAX_RECORDING_DURATION_MS = 24 * 60 * 60 * 1000;
+      if (recordingDuration < 0 || recordingDuration > MAX_RECORDING_DURATION_MS) {
+        logger.warn('Recording duration out of expected range, clamping', {
+          sessionId,
+          rawDuration: recordingDuration,
+        });
+        recordingDuration = Math.max(0, Math.min(recordingDuration, MAX_RECORDING_DURATION_MS));
+      }
+
       // Validate S3 path doesn't contain suspicious patterns (basic injection prevention)
       if (recordingS3KeyPrefix.includes('..') || recordingS3KeyPrefix.startsWith('/')) {
         throw new Error('Invalid S3 key prefix format');

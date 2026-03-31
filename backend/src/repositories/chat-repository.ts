@@ -3,8 +3,11 @@
  */
 
 import { PutCommand, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import type { ChatMessage } from '../domain/chat-message';
+
+const logger = new Logger({ serviceName: 'vnl-repository' });
 
 /**
  * Store a chat message in DynamoDB
@@ -26,7 +29,7 @@ export async function persistMessage(tableName: string, message: ChatMessage): P
       },
     }));
   } catch (error) {
-    console.error('Error persisting message:', error);
+    logger.error('Error persisting message', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -70,7 +73,7 @@ export async function getMessageHistory(
 
     return messages;
   } catch (error) {
-    console.error('Error getting message history:', error);
+    logger.error('Error getting message history', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -109,7 +112,7 @@ export async function getMessageById(
     const { PK, SK, entityType, ...message } = result.Item;
     return message as ChatMessage;
   } catch (error) {
-    console.error('Error getting message by ID:', error);
+    logger.error('Error getting message by ID', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }

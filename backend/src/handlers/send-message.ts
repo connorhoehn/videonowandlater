@@ -143,7 +143,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       }),
     };
   } catch (error: any) {
-    console.error('Error persisting message:', { sessionId, error });
+    console.error('Error persisting message:', sessionId, error.message);
 
     return {
       statusCode: 500,

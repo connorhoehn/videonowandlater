@@ -6,35 +6,67 @@ struct LoginView: View {
     @EnvironmentObject var env: AppEnvironment
     @State private var isSigningIn = false
     @State private var errorMessage: String?
+    @State private var appeared = false
 
     var body: some View {
         ZStack {
-            Color(hex: 0x1a1a1a).ignoresSafeArea()
+            // Gradient background with depth
+            LinearGradient(
+                colors: [
+                    Color(hex: 0x0f0f0f),
+                    Color(hex: 0x1a1a1a),
+                    Color(hex: 0x161622)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 32) {
                 Spacer()
 
                 // App logo / name area
-                VStack(spacing: 16) {
-                    Image(systemName: "video.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 80, height: 80)
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                VStack(spacing: 20) {
+                    // Dark rounded badge with icon
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: 0x2a2a2a), Color(hex: 0x1f1f1f)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                        )
+                            .frame(width: 72, height: 72)
+                            .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
 
-                    Text("VideoNowAndLater")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
+                        Image(systemName: "video.circle.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 36, height: 36)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.blue, .purple],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
 
-                    Text("Live streaming, hangouts, and replay")
-                        .font(.subheadline)
-                        .foregroundColor(Color(hex: 0x8e8e93))
+                    VStack(spacing: 8) {
+                        Text("videonow")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+                            .tracking(-0.5)
+
+                        Text("Live streaming, hangouts, and replay")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color.appTextGray1)
+                    }
                 }
 
                 Spacer()
@@ -51,12 +83,12 @@ struct LoginView: View {
                                     .tint(.white)
                                     .scaleEffect(0.8)
                             }
-                            Text("Sign in with Cognito")
+                            Text(isSigningIn ? "Signing in" : "Sign in with Cognito")
                                 .font(.system(size: 17, weight: .semibold))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: 52)
                         .background(
                             LinearGradient(
                                 colors: [.blue, .purple],
@@ -64,12 +96,28 @@ struct LoginView: View {
                                 endPoint: .trailing
                             )
                         )
-                        .cornerRadius(12)
+                        .cornerRadius(14)
+                        .shadow(color: .blue.opacity(0.3), radius: 12, y: 4)
                     }
                     .disabled(isSigningIn)
+                    .scaleEffect(isSigningIn ? 0.98 : 1.0)
+                    .animation(.easeInOut(duration: 0.15), value: isSigningIn)
 
-                    // Dev mode: skip auth with placeholder
-                    // Demo mode — explore UI without backend
+                    // Divider
+                    HStack(spacing: 12) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 1)
+                        Text("or")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.appTextGray1.opacity(0.6))
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 1)
+                    }
+                    .padding(.vertical, 4)
+
+                    // Demo mode
                     Button {
                         env.isDemoMode = true
                     } label: {
@@ -81,12 +129,12 @@ struct LoginView: View {
                         }
                         .foregroundColor(.yellow)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(Color.yellow.opacity(0.12))
-                        .cornerRadius(12)
+                        .frame(height: 48)
+                        .background(Color.yellow.opacity(0.08))
+                        .cornerRadius(14)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.yellow.opacity(0.2), lineWidth: 1)
                         )
                     }
 
@@ -104,24 +152,44 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                             .background(Color.appBackgroundButton)
-                            .cornerRadius(12)
+                            .cornerRadius(14)
                     }
                     .disabled(isSigningIn)
                     #endif
 
                     if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.appRed)
-                            .multilineTextAlignment(.center)
-                            .transition(.opacity)
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.appRed)
+                            Text(errorMessage)
+                                .font(.system(size: 13))
+                                .foregroundColor(.appRed)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.appRed.opacity(0.1))
+                        .cornerRadius(12)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity
+                        ))
                     }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
             }
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 10)
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.4)) {
+                appeared = true
+            }
+        }
     }
 
     // MARK: - Cognito OAuth2 PKCE Flow

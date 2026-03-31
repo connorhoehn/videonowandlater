@@ -22,9 +22,18 @@ struct SessionCard: View {
         }
         .background(Color.appBackgroundList)
         .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    session.isLive
+                        ? LinearGradient(colors: [.red.opacity(0.3), .orange.opacity(0.15), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [Color.white.opacity(0.04), .clear], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+        )
         .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .scaleEffect(isPressed ? 0.97 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isPressed)
+        .animation(.easeInOut(duration: 0.12), value: isPressed)
         .onLongPressGesture(minimumDuration: .infinity, pressing: { pressing in
             isPressed = pressing
         }, perform: {})

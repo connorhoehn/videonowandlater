@@ -18,22 +18,21 @@ import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
 import { DemoPage } from './demo/DemoPage';
 
+function BrandedLoader() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 animate-page-enter">
+      <svg className="branded-spinner w-8 h-8 text-gray-400" viewBox="0 0 50 50">
+        <circle cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+      </svg>
+      <span className="text-sm font-medium text-gray-400 tracking-tight">videonow</span>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontSize: '1.2rem',
-      }}>
-        Loading...
-      </div>
-    );
-  }
+  if (isLoading) return <BrandedLoader />;
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
@@ -56,17 +55,7 @@ function App() {
   }, []);
 
   if (configState === 'loading') {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontSize: '1.2rem',
-      }}>
-        Loading configuration...
-      </div>
-    );
+    return <BrandedLoader />;
   }
 
   if (configState === 'missing') {

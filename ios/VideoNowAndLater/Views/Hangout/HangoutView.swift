@@ -124,8 +124,9 @@ struct HangoutView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
-                    .background(Color.appBackgroundButton)
+                    .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
             }
 
             Text(session.title ?? "Hangout")
@@ -210,8 +211,11 @@ struct HangoutView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.appBackground.opacity(0.95))
+        .padding(.vertical, 10)
+        .background(
+            Color.appBackground.opacity(0.95)
+                .shadow(.drop(color: .black.opacity(0.3), radius: 12, y: -4))
+        )
     }
 
     // MARK: - Participant Management Sheet (from multi-host demo)

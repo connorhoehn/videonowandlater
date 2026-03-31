@@ -157,7 +157,7 @@ export function HomePage() {
   const busy = isCreating || isCreatingHangout;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 animate-page-enter">
       {/* Sticky header */}
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-2xl mx-auto flex items-center justify-between px-4 sm:px-6 h-14">
@@ -167,29 +167,39 @@ export function HomePage() {
           </span>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={handleCreateBroadcast}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-50"
-              style={{ background: '#ef4444', color: 'white' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500 text-white hover:bg-red-600 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-red-500/20"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />
-              {isCreating ? 'Creating…' : 'Go Live'}
+              {isCreating ? (
+                <svg className="branded-spinner w-3 h-3" viewBox="0 0 50 50">
+                  <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="6" />
+                </svg>
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />
+              )}
+              {isCreating ? 'Creating' : 'Go Live'}
             </button>
             <button
               onClick={handleCreateHangout}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-50"
-              style={{ background: '#7c3aed', color: 'white' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-violet-600/20"
             >
-              {isCreatingHangout ? 'Creating…' : 'Hangout'}
+              {isCreatingHangout ? (
+                <>
+                  <svg className="branded-spinner w-3 h-3" viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="6" />
+                  </svg>
+                  Creating
+                </>
+              ) : 'Hangout'}
             </button>
             <button
               onClick={() => setShowUploadModal(true)}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-50"
-              style={{ background: '#16a34a', color: 'white' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-green-600/20"
             >
               Upload
             </button>
@@ -210,7 +220,14 @@ export function HomePage() {
         </div>
 
         {error && (
-          <div className="px-4 pb-2 text-xs text-red-500 text-center">{error}</div>
+          <div className="px-4 pb-2 animate-fade-in">
+            <div className="max-w-2xl mx-auto flex items-center justify-center gap-1.5 text-xs text-red-500">
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              {error}
+            </div>
+          </div>
         )}
       </header>
 
@@ -249,8 +266,11 @@ export function HomePage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 animate-backdrop-in">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full sm:mx-4 animate-dialog-in">
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 animate-backdrop-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowUploadModal(false); }}
+        >
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full sm:mx-4 animate-dialog-in shadow-2xl">
             <VideoUploadForm
               authToken={authToken}
               onClose={() => setShowUploadModal(false)}

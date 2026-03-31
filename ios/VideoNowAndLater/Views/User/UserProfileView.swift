@@ -57,7 +57,7 @@ struct UserProfileView: View {
                     Button {
                         showSignOutConfirm = true
                     } label: {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                             Text("Sign Out")
                         }
@@ -65,9 +65,14 @@ struct UserProfileView: View {
                         .foregroundColor(.appRed)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(Color.appBackgroundList)
+                        .background(Color.appRed.opacity(0.08))
                         .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.appRed.opacity(0.15), lineWidth: 1)
+                        )
                     }
+                    .buttonStyle(PressScaleButtonStyle())
                     .padding(.horizontal, 16)
 
                     // Version
@@ -106,8 +111,15 @@ struct UserProfileView: View {
 
         return ZStack {
             Circle()
-                .fill(color)
+                .fill(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .frame(width: 80, height: 80)
+                .shadow(color: color.opacity(0.3), radius: 12, y: 4)
             Text(initial)
                 .font(.system(size: 32, weight: .bold))
                 .foregroundColor(.white)

@@ -20,4 +20,16 @@ extension Color {
 
     /// Destructive / error red — #ff453a
     static let appRed = Color(red: 0xff / 255.0, green: 0x45 / 255.0, blue: 0x3a / 255.0)
+
+    /// Indigo accent — #6366f1
+    static let appIndigo = Color(red: 0x63 / 255.0, green: 0x66 / 255.0, blue: 0xf1 / 255.0)
+
+    /// Violet accent — #7c3aed
+    static let appViolet = Color(red: 0x7c / 255.0, green: 0x3a / 255.0, blue: 0xed / 255.0)
+
+    /// Input field background — subtle tint
+    static let appInputBackground = Color.white.opacity(0.06)
+
+    /// Input field focused background
+    static let appInputFocused = Color.white.opacity(0.1)
 }

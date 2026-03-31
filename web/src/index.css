@@ -229,3 +229,66 @@ body {
   overflow: hidden;
   box-shadow: 0 0 0 2px rgba(55, 65, 81, 0.15), 0 8px 24px rgba(0, 0, 0, 0.3);
 }
+
+/* ── Focus-visible rings (accessibility) ── */
+:focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.5);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.5);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.4);
+  outline-offset: 0px;
+}
+
+/* ── Branded spinner ── */
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinner-dash {
+  0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+.branded-spinner {
+  animation: spinner-rotate 1.4s linear infinite;
+}
+
+.branded-spinner circle {
+  stroke: currentColor;
+  stroke-linecap: round;
+  animation: spinner-dash 1.4s ease-in-out infinite;
+}
+
+/* ── Page entrance ── */
+@keyframes page-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-page-enter {
+  animation: page-enter 300ms ease-out;
+}
+
+/* ── Drag-and-drop zone ── */
+@keyframes drop-zone-pulse {
+  0%, 100% { border-color: rgb(99 102 241 / 0.3); }
+  50% { border-color: rgb(99 102 241 / 0.6); }
+}
+
+.drop-zone-active {
+  animation: drop-zone-pulse 1.5s ease-in-out infinite;
+  background-color: rgb(99 102 241 / 0.04);
+}

@@ -1,38 +1,36 @@
 import SwiftUI
 
-/// Reusable empty state with SF Symbol icon, title, and subtitle. Centered in available space.
-///
-/// Usage:
-/// ```
-/// EmptyStateView(
-///     icon: "video.slash",
-///     title: "No Sessions",
-///     subtitle: "Start a broadcast or join a hangout to get started."
-/// )
-/// ```
+/// Reusable empty state with SF Symbol icon in a tinted circle, title, and subtitle.
 struct EmptyStateView: View {
     let icon: String
     let title: String
     var subtitle: String? = nil
+    var iconColor: Color = .appIndigo
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundColor(Color.appTextGray1)
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.1))
+                    .frame(width: 72, height: 72)
+                Image(systemName: icon)
+                    .font(.system(size: 28))
+                    .foregroundColor(iconColor)
+            }
 
-            Text(title)
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-
-            if let subtitle {
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundColor(Color.appTextGray1)
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.appTextGray1)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,7 +56,8 @@ struct EmptyStateView_Previews: PreviewProvider {
 
             EmptyStateView(
                 icon: "person.2.slash",
-                title: "No Participants"
+                title: "No Participants",
+                iconColor: .appViolet
             )
         }
         .preferredColorScheme(.dark)

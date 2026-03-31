@@ -8,6 +8,7 @@ struct BroadcastSetupView: View {
     @State private var errorMessage: String?
     @State private var navigateToBroadcast = false
     @State private var sessionResponse: CreateSessionResponse?
+    @State private var isTitleFocused = false
 
     private let apiClient = APIClient()
 
@@ -15,37 +16,72 @@ struct BroadcastSetupView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 24) {
+            VStack(spacing: 28) {
                 Spacer()
 
-                Image(systemName: "video.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white.opacity(0.6))
+                // Icon in badge
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 64, height: 64)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.7))
+                }
 
                 Text("Start a Broadcast")
-                    .font(.title2.weight(.bold))
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Session Title")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white.opacity(0.7))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("SESSION TITLE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.appTextGray1)
+                        .tracking(1)
 
-                    TextField("What are you streaming?", text: $title)
+                    TextField("What are you streaming?", text: $title, onEditingChanged: { editing in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isTitleFocused = editing
+                        }
+                    })
                         .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(10)
+                        .padding(14)
+                        .background(isTitleFocused ? Color.appInputFocused : Color.appInputBackground)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isTitleFocused ? Color.appIndigo.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+                        )
                         .foregroundColor(.white)
-                        .accentColor(.white)
+                        .accentColor(.appIndigo)
+                        .animation(.easeInOut(duration: 0.15), value: isTitleFocused)
                 }
                 .padding(.horizontal, 24)
 
                 if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 24)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.appRed)
+                        Text(errorMessage)
+                            .font(.system(size: 13))
+                            .foregroundColor(.appRed)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.appRed.opacity(0.1))
+                    .cornerRadius(12)
+                    .padding(.horizontal, 24)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
                 }
 
                 Button {
@@ -55,21 +91,25 @@ struct BroadcastSetupView: View {
                         if isLoading {
                             ProgressView()
                                 .tint(.black)
+                                .scaleEffect(0.85)
                         }
-                        Text("Start Broadcast")
-                            .font(.headline)
+                        Text(isLoading ? "Starting" : "Start Broadcast")
+                            .font(.system(size: 17, weight: .semibold))
                     }
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 15)
                     .background(
                         title.trimmingCharacters(in: .whitespaces).isEmpty || isLoading
                             ? Color.white.opacity(0.3)
                             : Color.white
                     )
-                    .cornerRadius(12)
+                    .cornerRadius(14)
+                    .shadow(color: .white.opacity(title.trimmingCharacters(in: .whitespaces).isEmpty ? 0 : 0.15), radius: 12, y: 4)
                 }
                 .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
+                .scaleEffect(isLoading ? 0.98 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isLoading)
                 .padding(.horizontal, 24)
 
                 Spacer()

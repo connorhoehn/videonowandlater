@@ -78,12 +78,13 @@ struct NotificationBannerView: View {
                 .foregroundColor(.appTextGray1)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(Color.appBackgroundList)
-        .cornerRadius(12)
+        .cornerRadius(14)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(notification.type.color.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(notification.type.color.opacity(0.2), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
     }
 }

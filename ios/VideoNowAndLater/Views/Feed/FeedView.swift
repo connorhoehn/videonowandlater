@@ -205,29 +205,41 @@ struct FeedView: View {
     // MARK: - Error State
 
     private func errorState(_ error: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
-                .foregroundColor(.appTextGray1)
-            Text("Something went wrong")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.white)
-            Text(error)
-                .foregroundColor(.appTextGray1)
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Button("Retry") {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(Color.appRed.opacity(0.1))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.appRed)
+            }
+
+            VStack(spacing: 8) {
+                Text("Something went wrong")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                Text(error)
+                    .foregroundColor(.appTextGray1)
+                    .font(.system(size: 14))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Button {
                 Task {
                     guard let token = env.idToken else { return }
                     await vm.load(authToken: token)
                 }
+            } label: {
+                Text("Try Again")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 12)
+                    .background(Color.appBackgroundButton)
+                    .cornerRadius(12)
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(Color.appBackgroundButton)
-            .cornerRadius(10)
         }
         .padding()
     }
@@ -235,28 +247,45 @@ struct FeedView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "video.slash")
-                .font(.system(size: 48))
-                .foregroundColor(.appTextGray1)
-            Text("No sessions yet")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.white)
-            Text("Start a broadcast or join a hangout\nto see sessions here.")
-                .font(.subheadline)
-                .foregroundColor(.appTextGray1)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(Color.appIndigo.opacity(0.1))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "video.slash")
+                    .font(.system(size: 28))
+                    .foregroundColor(.appIndigo)
+            }
+
+            VStack(spacing: 8) {
+                Text("No sessions yet")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Start a broadcast or join a hangout\nto see sessions here.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.appTextGray1)
+                    .multilineTextAlignment(.center)
+            }
 
             NavigationLink(destination: BroadcastSetupView()) {
                 HStack(spacing: 6) {
                     Image(systemName: "video.badge.plus")
+                        .font(.system(size: 14))
                     Text("Start Broadcasting")
+                        .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 10)
-                .background(Color.blue)
-                .cornerRadius(10)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [.blue, .purple],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .shadow(color: .blue.opacity(0.3), radius: 8, y: 4)
             }
         }
         .padding()

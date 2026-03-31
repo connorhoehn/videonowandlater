@@ -66,7 +66,7 @@ struct OnboardingView: View {
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 50)
+                            .frame(height: 52)
                             .background(
                                 LinearGradient(
                                     colors: pages[currentPage].iconColors,
@@ -74,8 +74,10 @@ struct OnboardingView: View {
                                     endPoint: .trailing
                                 )
                             )
-                            .cornerRadius(12)
+                            .cornerRadius(14)
+                            .shadow(color: pages[currentPage].iconColors.first?.opacity(0.3) ?? .clear, radius: 12, y: 4)
                     }
+                    .buttonStyle(PressScaleButtonStyle())
 
                     // Skip button
                     if currentPage < pages.count - 1 {
@@ -137,6 +139,15 @@ private struct OnboardingPage {
     let iconColors: [Color]
     let title: String
     let subtitle: String
+}
+
+/// Button style that scales down on press for tactile feedback
+struct PressScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
+    }
 }
 
 #Preview {

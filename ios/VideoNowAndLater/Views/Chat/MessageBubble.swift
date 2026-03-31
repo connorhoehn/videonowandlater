@@ -95,7 +95,13 @@ struct MessageBubble: View {
 
     private var defaultAvatar: some View {
         Circle()
-            .fill(avatarColor.opacity(0.4))
+            .fill(
+                LinearGradient(
+                    colors: [avatarColor.opacity(0.6), avatarColor.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .frame(width: 28, height: 28)
             .overlay(
                 Text(String(displayName.prefix(1)).uppercased())

@@ -7,21 +7,33 @@ struct SummaryPanel: View {
     let session: Session
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 12))
-                    .foregroundColor(.blue)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                 Text("AI Summary")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(Color.appTextGray1)
+                    .textCase(.uppercase)
+                    .tracking(0.5)
             }
 
             content
         }
-        .padding(12)
+        .padding(14)
         .background(Color.appBackgroundButton)
-        .cornerRadius(12)
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.04), lineWidth: 1)
+        )
     }
 
     @ViewBuilder

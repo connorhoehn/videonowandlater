@@ -154,9 +154,16 @@ struct ReplayView: View {
                 activeSegmentId: vm.activeSegmentId
             )
         } else if vm.session.transcriptStatus == "processing" {
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("Transcript is being generated...")
+            VStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.appIndigo.opacity(0.1))
+                        .frame(width: 52, height: 52)
+                    ProgressView()
+                        .tint(.appIndigo)
+                        .scaleEffect(0.9)
+                }
+                Text("Generating transcript...")
                     .font(.system(size: 13))
                     .foregroundColor(Color.appTextGray1)
             }
@@ -177,10 +184,15 @@ struct ReplayView: View {
     // MARK: - Empty State Helper
 
     private func emptyState(icon: String, message: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 28))
-                .foregroundColor(Color.appTextGray1.opacity(0.4))
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.appTextGray1.opacity(0.08))
+                    .frame(width: 52, height: 52)
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(Color.appTextGray1.opacity(0.5))
+            }
             Text(message)
                 .font(.system(size: 13))
                 .foregroundColor(Color.appTextGray1.opacity(0.6))

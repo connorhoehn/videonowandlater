@@ -84,29 +84,36 @@ struct ChatView: View {
     // MARK: - Connection Banner
 
     private var connectionBanner: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ProgressView()
                 .tint(.white)
                 .scaleEffect(0.7)
             Text("Connecting to chat...")
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.white.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial.opacity(0.3))
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Error Banner
 
     private func errorBanner(_ error: String) -> some View {
-        Text(error)
-            .font(.system(size: 12))
-            .foregroundColor(.red)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.15))
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.appRed)
+            Text(error)
+                .font(.system(size: 12))
+                .foregroundColor(.appRed)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appRed.opacity(0.1))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Quick Reaction Bar

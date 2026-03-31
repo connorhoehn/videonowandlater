@@ -21,6 +21,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# iOS
+Config.local.xcconfig
+*.xcuserdata/
+
 # TypeScript
 *.js
 *.d.ts

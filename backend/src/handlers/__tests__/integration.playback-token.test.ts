@@ -163,7 +163,7 @@ describe('Phase 22: Private Broadcast Playback Token Integration', () => {
       ];
 
       const mockGetRecentActivity = sessionRepository.getRecentActivity as jest.MockedFunction<any>;
-      mockGetRecentActivity.mockResolvedValueOnce(sessions);
+      mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
       const event = {
         requestContext: {
@@ -190,7 +190,7 @@ describe('Phase 22: Private Broadcast Playback Token Integration', () => {
       ];
 
       const mockGetRecentActivity = sessionRepository.getRecentActivity as jest.MockedFunction<any>;
-      mockGetRecentActivity.mockResolvedValueOnce(sessions);
+      mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
       const event = {
         requestContext: {
@@ -224,7 +224,7 @@ describe('Phase 22: Private Broadcast Playback Token Integration', () => {
       };
 
       const mockGetRecentActivity = sessionRepository.getRecentActivity as jest.MockedFunction<any>;
-      mockGetRecentActivity.mockResolvedValueOnce([legacySession]);
+      mockGetRecentActivity.mockResolvedValueOnce({ items: [legacySession] });
 
       const event = {
         requestContext: {

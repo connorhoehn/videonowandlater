@@ -4,6 +4,9 @@
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getReactionsInTimeRange } from '../repositories/reaction-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-reactions' } });
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -56,7 +59,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       body: JSON.stringify({ reactions }),
     };
   } catch (error: any) {
-    console.error('Error getting reactions:', { sessionId, error });
+    logger.error('Error getting reactions', { sessionId, error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,

@@ -7,6 +7,9 @@
 import type { SNSEvent } from 'aws-lambda';
 import { MediaConvertClient, CreateJobCommand } from '@aws-sdk/client-mediaconvert';
 import { getSessionById, updateConvertStatus } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'start-mediaconvert' } });
 
 interface MediaConvertInput {
   sessionId: string;
@@ -26,12 +29,12 @@ export const handler = async (event: SNSEvent): Promise<void> => {
       const message = JSON.parse(record.Sns.Message) as MediaConvertInput;
       const { sessionId, s3Bucket, s3Key, sourceFileName } = message;
 
-      console.log(`Starting MediaConvert job for session: ${sessionId}`);
+      logger.info('Starting MediaConvert job', { sessionId });
 
       // Verify session exists
       const session = await getSessionById(tableName, sessionId);
       if (!session) {
-        console.error(`Session not found: ${sessionId}`);
+        logger.error('Session not found', { sessionId });
         continue;
       }
 
@@ -134,16 +137,16 @@ export const handler = async (event: SNSEvent): Promise<void> => {
       );
 
       const jobId = response.Job?.Id!;
-      console.log(`MediaConvert job submitted: ${jobName} (ID: ${jobId})`);
+      logger.info('MediaConvert job submitted', { jobName, jobId });
 
       // Store job name in session for later correlation
-      console.log(`Job name stored in session for correlation: ${jobName}`);
+      logger.info('Job name stored in session for correlation', { jobName });
 
       // Update session with job name and pending status
       await updateConvertStatus(tableName, sessionId, jobName, 'pending');
     }
   } catch (error) {
-    console.error('start-mediaconvert error:', error);
+    logger.error('start-mediaconvert error', { error: error instanceof Error ? error.message : String(error) });
     // Don't rethrow; SNS message is consumed even if handler fails
   }
 };

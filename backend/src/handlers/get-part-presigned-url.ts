@@ -7,6 +7,9 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { S3Client, UploadPartCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSessionById } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-part-presigned-url' } });
 
 interface GetPartUrlRequest {
   sessionId: string;
@@ -91,7 +94,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify(response),
     };
   } catch (error) {
-    console.error('get-part-presigned-url error:', error);
+    logger.error('get-part-presigned-url error', { error: error instanceof Error ? error.message : String(error) });
     return {
       statusCode: 500,
       headers: {

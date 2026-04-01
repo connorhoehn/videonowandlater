@@ -286,20 +286,30 @@ export async function computeAndStoreReactionSummary(
   }
 }
 
+export interface PaginatedResult<T> {
+  items: T[];
+  nextCursor?: string;
+}
+
 /**
- * Get recently recorded sessions
+ * Get recently recorded sessions with cursor-based pagination
  * Returns sessions that have ended or are ending (recording may still be processing).
  * Excludes failed recordings. Sorted by endedAt descending.
  *
  * @param tableName DynamoDB table name
- * @param limit Maximum number of recordings to return (default 20)
- * @returns Array of Session objects
+ * @param limit Maximum number of recordings to return (default 20, max 100)
+ * @param cursor Optional pagination cursor from previous response
+ * @returns PaginatedResult with sessions and optional nextCursor
  */
 export async function getRecentRecordings(
   tableName: string,
-  limit: number = 20
-): Promise<Session[]> {
+  limit: number = 20,
+  cursor?: string
+): Promise<PaginatedResult<Session>> {
   const docClient = getDocumentClient();
+  const safeLimit = Math.max(1, Math.min(limit, 100));
+
+  const exclusiveStartKey = cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString()) : undefined;
 
   const result = await docClient.send(
     new ScanCommand({
@@ -315,12 +325,13 @@ export async function getRecentRecordings(
         ':ended': SessionStatus.ENDED,
         ':failed': 'failed',
       },
-      Limit: limit * 2, // Scan is cheaper with higher limit; we'll sort in memory
+      Limit: safeLimit * 3,
+      ...(exclusiveStartKey && { ExclusiveStartKey: exclusiveStartKey }),
     })
   );
 
   if (!result.Items) {
-    return [];
+    return { items: [] };
   }
 
   // Extract session fields and sort by endedAt descending
@@ -334,9 +345,13 @@ export async function getRecentRecordings(
       const bTime = b.endedAt ? new Date(b.endedAt).getTime() : 0;
       return bTime - aTime;
     })
-    .slice(0, limit);
+    .slice(0, safeLimit);
 
-  return sessions;
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64url')
+    : undefined;
+
+  return { items: sessions, nextCursor };
 }
 
 /**
@@ -715,19 +730,24 @@ export async function updateSessionChapters(
 }
 
 /**
- * Get all sessions sorted by creation time for activity feed
+ * Get all sessions sorted by creation time for activity feed with cursor-based pagination
  * Returns sessions of all types (BROADCAST, HANGOUT, UPLOAD) with all activity metadata
  * Used by GET /activity endpoint to populate activity feed
  *
  * @param tableName DynamoDB table name
- * @param limit Maximum number of sessions to return (default 50)
- * @returns Array of Session objects sorted by createdAt descending
+ * @param limit Maximum number of sessions to return (default 50, max 100)
+ * @param cursor Optional pagination cursor from previous response
+ * @returns PaginatedResult with sessions and optional nextCursor
  */
 export async function getRecentActivity(
   tableName: string,
-  limit: number = 50
-): Promise<Session[]> {
+  limit: number = 50,
+  cursor?: string
+): Promise<PaginatedResult<Session>> {
   const docClient = getDocumentClient();
+  const safeLimit = Math.max(1, Math.min(limit, 100));
+
+  const exclusiveStartKey = cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString()) : undefined;
 
   const result = await docClient.send(
     new ScanCommand({
@@ -744,12 +764,13 @@ export async function getRecentActivity(
         ':ended': SessionStatus.ENDED,
         ':upload': SessionType.UPLOAD,
       },
-      Limit: limit * 2, // Scan is cheaper with higher limit; we'll sort in memory
+      Limit: safeLimit * 3,
+      ...(exclusiveStartKey && { ExclusiveStartKey: exclusiveStartKey }),
     })
   );
 
   if (!result.Items) {
-    return [];
+    return { items: [] };
   }
 
   // Extract session fields and sort by createdAt descending
@@ -759,9 +780,13 @@ export async function getRecentActivity(
       return session as Session;
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, limit);
+    .slice(0, safeLimit);
 
-  return sessions;
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64url')
+    : undefined;
+
+  return { items: sessions, nextCursor };
 }
 
 /**

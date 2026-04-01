@@ -7,6 +7,9 @@
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getLivePublicSessions } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'list-live-sessions' } });
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -29,7 +32,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     const sessions = await getLivePublicSessions(tableName, userId);
     return resp(200, { sessions });
   } catch (err: any) {
-    console.error('[list-live-sessions] error:', err);
+    logger.error('Error listing live sessions', { error: err instanceof Error ? err.message : String(err) });
     return resp(500, { error: err.message });
   }
 };

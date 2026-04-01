@@ -10,6 +10,9 @@ import type { ChatMessage } from '../domain/chat-message';
 import { getSessionById } from '../repositories/session-repository';
 import { persistMessage } from '../repositories/chat-repository';
 import { getDocumentClient } from '../lib/dynamodb-client';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'send-message' } });
 
 interface SendMessageRequest {
   messageId: string;
@@ -143,7 +146,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       }),
     };
   } catch (error: any) {
-    console.error('Error persisting message:', sessionId, error.message);
+    logger.error('Error persisting message', { sessionId, error: error.message });
 
     return {
       statusCode: 500,

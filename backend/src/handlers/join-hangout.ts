@@ -13,6 +13,9 @@ import { CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
 import { getIVSRealTimeClient } from '../lib/ivs-clients';
 import { getSessionById, updateSessionStatus, addHangoutParticipant } from '../repositories/session-repository';
 import { SessionType, SessionStatus } from '../domain/session';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'join-hangout' } });
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -74,7 +77,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         response.participantToken!.participantId!,
       );
     } catch (participantErr: any) {
-      console.error('[join-hangout] Failed to persist participant:', participantErr.message);
+      logger.error('Failed to persist participant', { error: participantErr.message });
     }
 
     // Transition session to LIVE so send-message accepts chat messages (HANG-11)
@@ -82,7 +85,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
     } catch (err: any) {
       // Already LIVE (second+ participant joining) — expected, not an error
-      console.info('[join-hangout] Status transition skipped (likely already LIVE):', err.message);
+      logger.info('Status transition skipped (likely already LIVE)', { error: err.message });
     }
 
     if (!response.participantToken) {
@@ -96,7 +99,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       userId,
     });
   } catch (error) {
-    console.error('Error generating participant token:', error);
+    logger.error('Error generating participant token', { error: error instanceof Error ? error.message : String(error) });
     return resp(500, {
       error: error instanceof Error ? error.message : 'Failed to generate participant token',
     });

@@ -3,8 +3,11 @@
  */
 
 import { SendEventCommand } from '@aws-sdk/client-ivschat';
+import { Logger } from '@aws-lambda-powertools/logger';
 import { getIVSChatClient } from '../lib/ivs-clients';
 import { EmojiType } from '../domain/reaction';
+
+const logger = new Logger({ serviceName: 'vnl-api' });
 
 /**
  * Broadcast a reaction to all connected chat clients via IVS SendEvent
@@ -40,7 +43,7 @@ export async function broadcastReaction(
     const response = await chatClient.send(command);
     return response.id!;
   } catch (error) {
-    console.error('Error broadcasting reaction:', error);
+    logger.error('Error broadcasting reaction', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }

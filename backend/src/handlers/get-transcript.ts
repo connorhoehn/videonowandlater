@@ -5,6 +5,9 @@
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSessionById } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-transcript' } });
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -84,7 +87,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       }),
     };
   } catch (error: any) {
-    console.error('Error fetching transcript:', error);
+    logger.error('Error fetching transcript', { error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,

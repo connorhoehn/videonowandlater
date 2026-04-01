@@ -7,6 +7,9 @@
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSessionById } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-speaker-segments' } });
 
 interface SpeakerSegment {
   speaker: string;   // 'Speaker 1' or 'Speaker 2'
@@ -86,7 +89,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       }),
     };
   } catch (error: any) {
-    console.error('Error fetching speaker segments:', error);
+    logger.error('Error fetching speaker segments', { error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,

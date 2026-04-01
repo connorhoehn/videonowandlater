@@ -11,6 +11,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { getSessionById, updateUploadProgress } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'complete-upload' } });
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || 'http://localhost:5173',
@@ -84,7 +87,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       );
 
-      console.log(`Multipart upload completed: ${sessionId}`);
+      logger.info('Multipart upload completed', { sessionId });
 
       // Update session: mark upload as processing (S3 complete, awaiting MediaConvert)
       await updateUploadProgress(tableName, sessionId, 'processing', 100);
@@ -115,7 +118,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         body: JSON.stringify(response),
       };
     } catch (s3Error) {
-      console.error(`Failed to complete multipart upload ${uploadId}:`, s3Error);
+      logger.error('Failed to complete multipart upload', { uploadId, error: s3Error instanceof Error ? s3Error.message : String(s3Error) });
 
       // Abort the multipart upload to prevent orphaned parts
       try {
@@ -126,9 +129,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             UploadId: uploadId,
           })
         );
-        console.log(`Aborted multipart upload: ${uploadId}`);
+        logger.info('Aborted multipart upload', { uploadId });
       } catch (abortError) {
-        console.error(`Failed to abort multipart upload ${uploadId}:`, abortError);
+        logger.error('Failed to abort multipart upload', { uploadId, error: abortError instanceof Error ? abortError.message : String(abortError) });
       }
 
       // Mark session as failed
@@ -141,7 +144,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
   } catch (error) {
-    console.error('complete-upload error:', error);
+    logger.error('complete-upload error', { error: error instanceof Error ? error.message : String(error) });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },

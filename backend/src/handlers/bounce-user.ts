@@ -11,6 +11,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { getIVSChatClient } from '../lib/ivs-clients';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { getSessionById } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'bounce-user' } });
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -72,7 +75,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     );
   } catch (error: any) {
     if (error.name === 'ResourceNotFoundException') {
-      console.log('User already left chat, continuing with BOUNCE record', { sessionId, targetUserId });
+      logger.info('User already left chat, continuing with BOUNCE record', { sessionId, targetUserId });
     } else {
       throw error;
     }

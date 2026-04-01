@@ -8,6 +8,9 @@ import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { SessionStatus } from '../domain/session';
 import { updateSessionStatus } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'start-broadcast' } });
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -92,7 +95,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     try {
       await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
     } catch (err: any) {
-      console.warn('Could not transition session to LIVE (may already be LIVE):', err.message);
+      logger.warn('Could not transition session to LIVE (may already be LIVE)', { error: err.message });
     }
   }
 

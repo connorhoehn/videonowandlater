@@ -7,6 +7,9 @@ import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResul
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { generateChatToken } from '../services/chat-service';
 import { getDocumentClient } from '../lib/dynamodb-client';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'create-chat-token' } });
 
 /**
  * Check whether a user has an active BOUNCE record for the given session.
@@ -84,7 +87,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       body: JSON.stringify(result),
     };
   } catch (error: any) {
-    console.error('Error generating chat token:', { sessionId, userId, error });
+    logger.error('Error generating chat token', { sessionId, userId, error: error instanceof Error ? error.message : String(error) });
 
     // Session not found
     if (error.message?.includes('not found')) {

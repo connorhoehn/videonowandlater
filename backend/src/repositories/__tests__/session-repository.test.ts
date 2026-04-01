@@ -285,8 +285,8 @@ describe('session-repository', () => {
 
       const results = await getRecentRecordings(tableName, 20);
 
-      expect(results[0].sessionId).toBe('newer');
-      expect(results[1].sessionId).toBe('older');
+      expect(results.items[0].sessionId).toBe('newer');
+      expect(results.items[1].sessionId).toBe('older');
     });
   });
 

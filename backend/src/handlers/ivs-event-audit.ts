@@ -9,11 +9,14 @@
  */
 
 import type { EventBridgeEvent } from 'aws-lambda';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-events', persistentKeys: { handler: 'ivs-event-audit' } });
 
 export const handler = async (
   event: EventBridgeEvent<string, Record<string, any>>
 ): Promise<void> => {
-  console.log(JSON.stringify({
+  logger.info('IVS event received', {
     audit: true,
     id: event.id,
     time: event.time,
@@ -23,5 +26,5 @@ export const handler = async (
     account: event.account,
     resources: event.resources,
     detail: event.detail,
-  }));
+  });
 };

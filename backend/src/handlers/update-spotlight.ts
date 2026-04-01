@@ -7,6 +7,9 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById, updateSpotlight } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'update-spotlight' } });
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -63,7 +66,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       featuredCreatorName ?? null
     );
 
-    console.log(`[update-spotlight] ${sessionId} spotlight set to ${featuredCreatorId} by ${userId}`);
+    logger.info('Spotlight updated', { sessionId, featuredCreatorId, userId });
 
     return resp(200, {
       message: 'Spotlight updated',
@@ -71,7 +74,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       featuredCreatorName: featuredCreatorName ?? null,
     });
   } catch (err: any) {
-    console.error('[update-spotlight] error:', err);
+    logger.error('Error updating spotlight', { error: err instanceof Error ? err.message : String(err) });
     return resp(500, { error: err.message });
   }
 }

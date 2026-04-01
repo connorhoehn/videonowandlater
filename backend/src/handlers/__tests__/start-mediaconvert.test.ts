@@ -90,7 +90,6 @@ describe('start-mediaconvert handler', () => {
     });
 
     it('should log error and continue when session not found', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mockGetSessionById.mockResolvedValueOnce(null);
 
       const event = createEvent({
@@ -103,12 +102,7 @@ describe('start-mediaconvert handler', () => {
 
       await handler(event);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Session not found/)
-      );
       expect(mockUpdateConvertStatus).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it('should handle multiple SNS records', async () => {
@@ -297,7 +291,6 @@ describe('start-mediaconvert handler', () => {
     it('should not rethrow handler errors (non-blocking)', async () => {
       mockGetSessionById.mockRejectedValueOnce(new Error('DynamoDB error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       const event = createEvent({
         sessionId: 'error-test-session',
         s3Bucket: BUCKET_NAME,
@@ -308,9 +301,6 @@ describe('start-mediaconvert handler', () => {
 
       // Should not throw
       await expect(handler(event)).resolves.toBeUndefined();
-
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
   });
 });

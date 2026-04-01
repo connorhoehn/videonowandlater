@@ -10,6 +10,9 @@ import type { Reaction } from '../domain/reaction';
 import { getSessionById } from '../repositories/session-repository';
 import { persistReaction } from '../repositories/reaction-repository';
 import { broadcastReaction } from '../services/reaction-service';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'create-reaction' } });
 
 const VALID_EMOJI_TYPES = ['heart', 'fire', 'clap', 'laugh', 'surprised'];
 
@@ -182,7 +185,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       body: JSON.stringify(response),
     };
   } catch (error: any) {
-    console.error('Error creating reaction:', { sessionId, error });
+    logger.error('Error creating reaction', { sessionId, error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,

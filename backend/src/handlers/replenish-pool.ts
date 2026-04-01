@@ -18,6 +18,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { getIVSClient, getIVSRealTimeClient, getIVSChatClient } from '../lib/ivs-clients';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { ResourceType, Status } from '../domain/types';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-infra', persistentKeys: { handler: 'replenish-pool' } });
 
 interface ReplenishResult {
   channelsCreated: number;
@@ -45,7 +48,7 @@ export const handler: Handler = async (_event): Promise<ReplenishResult> => {
   const minRooms = parseInt(process.env.MIN_ROOMS || '5', 10);
   const minPrivateChannels = parseInt(process.env.MIN_PRIVATE_CHANNELS || '5', 10); // Phase 22
 
-  console.log('Starting pool replenishment check', { minChannels, minStages, minRooms, minPrivateChannels });
+  logger.info('Starting pool replenishment check', { minChannels, minStages, minRooms, minPrivateChannels });
 
   // Count available resources by type
   const availableChannels = await countAvailableResources(tableName, ResourceType.CHANNEL);
@@ -53,7 +56,7 @@ export const handler: Handler = async (_event): Promise<ReplenishResult> => {
   const availableRooms = await countAvailableResources(tableName, ResourceType.ROOM);
   const availablePrivateChannels = await countAvailablePrivateChannels(tableName); // Phase 22
 
-  console.log('Current pool status', { availableChannels, availableStages, availableRooms, availablePrivateChannels });
+  logger.info('Current pool status', { availableChannels, availableStages, availableRooms, availablePrivateChannels });
 
   // Calculate how many resources to create
   const channelsToCreate = Math.max(0, minChannels - availableChannels);
@@ -62,11 +65,11 @@ export const handler: Handler = async (_event): Promise<ReplenishResult> => {
   const privateChannelsToCreate = Math.max(0, minPrivateChannels - availablePrivateChannels); // Phase 22
 
   if (channelsToCreate === 0 && stagesToCreate === 0 && roomsToCreate === 0 && privateChannelsToCreate === 0) {
-    console.log('Pool is healthy, no resources needed');
+    logger.info('Pool is healthy, no resources needed');
     return { channelsCreated: 0, stagesCreated: 0, roomsCreated: 0 };
   }
 
-  console.log('Creating resources', { channelsToCreate, stagesToCreate, roomsToCreate, privateChannelsToCreate });
+  logger.info('Creating resources', { channelsToCreate, stagesToCreate, roomsToCreate, privateChannelsToCreate });
 
   // Create resources in parallel
   await Promise.all([
@@ -76,7 +79,7 @@ export const handler: Handler = async (_event): Promise<ReplenishResult> => {
     ...Array.from({ length: privateChannelsToCreate }, () => createPrivateChannel(tableName, recordingConfigArn)), // Phase 22
   ]);
 
-  console.log('Pool replenishment complete', { channelsCreated: channelsToCreate, stagesCreated: stagesToCreate, roomsCreated: roomsToCreate, privateChannelsCreated: privateChannelsToCreate });
+  logger.info('Pool replenishment complete', { channelsCreated: channelsToCreate, stagesCreated: stagesToCreate, roomsCreated: roomsToCreate, privateChannelsCreated: privateChannelsToCreate });
 
   return {
     channelsCreated: channelsToCreate,
@@ -106,7 +109,7 @@ async function countAvailableResources(tableName: string, resourceType: Resource
 
     return result.Count || 0;
   } catch (error) {
-    console.error('Error counting available resources', { resourceType, error });
+    logger.error('Error counting available resources', { resourceType, error: error instanceof Error ? error.message : String(error) });
     return 0;
   }
 }
@@ -132,7 +135,7 @@ async function countAvailablePrivateChannels(tableName: string): Promise<number>
 
     return result.Count || 0;
   } catch (error) {
-    console.error('Error counting available private channels', error);
+    logger.error('Error counting available private channels', { error: error instanceof Error ? error.message : String(error) });
     return 0;
   }
 }
@@ -155,7 +158,7 @@ async function createChannel(tableName: string, recordingConfigArn: string): Pro
     );
 
     if (!response.channel || !response.streamKey) {
-      console.error('CreateChannel response missing channel or streamKey', response);
+      logger.error('CreateChannel response missing channel or streamKey', { response: JSON.stringify(response) });
       return;
     }
 
@@ -187,9 +190,9 @@ async function createChannel(tableName: string, recordingConfigArn: string): Pro
       })
     );
 
-    console.log('Created channel', { resourceId });
+    logger.info('Created channel', { resourceId });
   } catch (error) {
-    console.error('Error creating channel', error);
+    logger.error('Error creating channel', { error: error instanceof Error ? error.message : String(error) });
     // Don't throw - continue creating other resources
   }
 }
@@ -213,7 +216,7 @@ async function createPrivateChannel(tableName: string, recordingConfigArn: strin
     );
 
     if (!response.channel || !response.streamKey) {
-      console.error('CreateChannel response missing channel or streamKey', response);
+      logger.error('CreateChannel response missing channel or streamKey', { response: JSON.stringify(response) });
       return;
     }
 
@@ -246,9 +249,9 @@ async function createPrivateChannel(tableName: string, recordingConfigArn: strin
       })
     );
 
-    console.log('Created private channel', { resourceId });
+    logger.info('Created private channel', { resourceId });
   } catch (error) {
-    console.error('Error creating private channel', error);
+    logger.error('Error creating private channel', { error: error instanceof Error ? error.message : String(error) });
     // Don't throw - continue creating other resources
   }
 }
@@ -268,7 +271,7 @@ async function createStage(tableName: string, recordingConfigArn: string): Promi
     );
 
     if (!response.stage) {
-      console.error('CreateStage response missing stage', response);
+      logger.error('CreateStage response missing stage', { response: JSON.stringify(response) });
       return;
     }
 
@@ -301,9 +304,9 @@ async function createStage(tableName: string, recordingConfigArn: string): Promi
       })
     );
 
-    console.log('Created stage', { resourceId });
+    logger.info('Created stage', { resourceId });
   } catch (error) {
-    console.error('Error creating stage', error);
+    logger.error('Error creating stage', { error: error instanceof Error ? error.message : String(error) });
     // Don't throw - continue creating other resources
   }
 }
@@ -323,7 +326,7 @@ async function createRoom(tableName: string): Promise<void> {
     );
 
     if (!response.arn) {
-      console.error('CreateRoom response missing arn', response);
+      logger.error('CreateRoom response missing arn', { response: JSON.stringify(response) });
       return;
     }
 
@@ -352,9 +355,9 @@ async function createRoom(tableName: string): Promise<void> {
       })
     );
 
-    console.log('Created room', { resourceId });
+    logger.info('Created room', { resourceId });
   } catch (error) {
-    console.error('Error creating room', error);
+    logger.error('Error creating room', { error: error instanceof Error ? error.message : String(error) });
     // Don't throw - continue creating other resources
   }
 }

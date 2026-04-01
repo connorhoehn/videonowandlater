@@ -2,6 +2,9 @@ import type { APIGatewayProxyHandler } from 'aws-lambda';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import jwt from 'jsonwebtoken';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'generate-playback-token' } });
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   const tableName = process.env.TABLE_NAME!;
@@ -19,7 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
     // Validate private key is available
     if (!privateKey) {
-      console.error('IVS_PLAYBACK_PRIVATE_KEY not configured');
+      logger.error('IVS_PLAYBACK_PRIVATE_KEY not configured');
       return {
         statusCode: 500,
         body: JSON.stringify({ error: 'Token generation not configured' }),
@@ -138,7 +141,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       }),
     };
   } catch (error: any) {
-    console.error('Error generating playback token:', error.message);
+    logger.error('Error generating playback token', { error: error.message });
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Failed to generate token' }),

@@ -7,6 +7,9 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { S3Client, CreateMultipartUploadCommand } from '@aws-sdk/client-s3';
 import { createUploadSession } from '../repositories/session-repository';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'init-upload' } });
 
 const SUPPORTED_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024; // 10GB
@@ -110,7 +113,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify(response),
     };
   } catch (error) {
-    console.error('init-upload error:', error);
+    logger.error('init-upload error', { error: error instanceof Error ? error.message : String(error) });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },

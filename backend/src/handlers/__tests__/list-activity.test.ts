@@ -74,7 +74,7 @@ describe('list-activity handler', () => {
       },
     ];
 
-    mockGetRecentActivity.mockResolvedValueOnce(sessions);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -104,7 +104,7 @@ describe('list-activity handler', () => {
       },
     ];
 
-    mockGetRecentActivity.mockResolvedValueOnce(sessions);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -130,7 +130,7 @@ describe('list-activity handler', () => {
       },
     ];
 
-    mockGetRecentActivity.mockResolvedValueOnce(sessions);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -168,7 +168,7 @@ describe('list-activity handler', () => {
       },
     ];
 
-    mockGetRecentActivity.mockResolvedValueOnce(sessions);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -192,7 +192,7 @@ describe('list-activity handler', () => {
       messageCount: i + 1,
     }));
 
-    mockGetRecentActivity.mockResolvedValueOnce(sessions);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: sessions });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -202,7 +202,7 @@ describe('list-activity handler', () => {
   });
 
   test('should handle empty session list', async () => {
-    mockGetRecentActivity.mockResolvedValueOnce([]);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [] });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -235,7 +235,7 @@ describe('list-activity handler', () => {
   });
 
   test('should include CORS headers', async () => {
-    mockGetRecentActivity.mockResolvedValueOnce([]);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [] });
 
     const result = (await handler(createEvent(), mockContext, mockCallback)) as APIGatewayProxyResult;
 
@@ -291,11 +291,11 @@ describe('list-activity handler', () => {
       messageCount: 2,
     };
 
-    mockGetRecentActivity.mockResolvedValueOnce([
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [
       publicSession,
       privateSessionAlice,
       privateSessionBob,
-    ]);
+    ] });
 
     // User charlie (not owner of any private session)
     const event = {
@@ -357,11 +357,11 @@ describe('list-activity handler', () => {
       messageCount: 2,
     };
 
-    mockGetRecentActivity.mockResolvedValueOnce([
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [
       publicSession,
       privateSessionAlice,
       privateSessionBob,
-    ]);
+    ] });
 
     // User alice (owner of sess-private-1)
     const event = {
@@ -413,7 +413,7 @@ describe('list-activity handler', () => {
       messageCount: 2,
     };
 
-    mockGetRecentActivity.mockResolvedValueOnce([publicSession, privateSessionBob]);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [publicSession, privateSessionBob] });
 
     // User alice (not owner)
     const event = {
@@ -475,11 +475,11 @@ describe('list-activity handler', () => {
       messageCount: 2,
     };
 
-    mockGetRecentActivity.mockResolvedValueOnce([
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [
       publicSession,
       privateSessionAlice,
       privateSessionBob,
-    ]);
+    ] });
 
     // No auth
     const event = {
@@ -525,7 +525,7 @@ describe('list-activity handler', () => {
       messageCount: 3,
     };
 
-    mockGetRecentActivity.mockResolvedValueOnce([legacySession, privateSessionAlice]);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [legacySession, privateSessionAlice] });
 
     // User eve (not owner)
     const event = {
@@ -589,7 +589,7 @@ describe('list-activity handler', () => {
     };
 
     // Mock already returns sessions in sorted order (DESC by createdAt)
-    mockGetRecentActivity.mockResolvedValueOnce([session2, session3, session1]);
+    mockGetRecentActivity.mockResolvedValueOnce({ items: [session2, session3, session1] });
 
     const event = {
       requestContext: {

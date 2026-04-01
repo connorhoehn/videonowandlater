@@ -8,6 +8,9 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById, updateSessionStatus, updateSpotlight } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
+import { Logger } from '@aws-lambda-powertools/logger';
+
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'end-session' } });
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -40,18 +43,18 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
-    console.log(`[end-session] ${sessionId} → ENDING by ${userId}`);
+    logger.info('Session transitioning to ENDING', { sessionId, userId });
 
     // Clear any spotlight on this session (non-blocking)
     try {
       await updateSpotlight(tableName, sessionId, null, null);
     } catch (spotlightErr) {
-      console.warn('[end-session] spotlight cleanup failed:', spotlightErr);
+      logger.warn('Spotlight cleanup failed', { error: spotlightErr instanceof Error ? spotlightErr.message : String(spotlightErr) });
     }
 
     return resp(200, { message: 'Session ending', status: 'ending' });
   } catch (err: any) {
-    console.error('[end-session] error:', err);
+    logger.error('Error ending session', { error: err instanceof Error ? err.message : String(err) });
     return resp(500, { error: err.message });
   }
 }

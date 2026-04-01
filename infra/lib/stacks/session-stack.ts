@@ -716,6 +716,7 @@ export class SessionStack extends Stack {
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/transcribe-completed.ts'),
       timeout: Duration.seconds(30),
+      memorySize: 512, // Transcribe JSON can be large (word-level timing data)
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,

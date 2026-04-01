@@ -187,6 +187,17 @@ async function processEvent(
     });
 
     const response = await s3Client.send(getObjectCommand);
+    const contentLength = response.ContentLength ?? 0;
+    logger.info('Transcript S3 object size', { sessionId, contentLengthBytes: contentLength });
+
+    // Warn on large transcripts (>50MB) — may approach Lambda memory limits
+    if (contentLength > 50 * 1024 * 1024) {
+      logger.warn('Large transcript detected — consider increasing Lambda memory', {
+        sessionId,
+        contentLengthMB: Math.round(contentLength / (1024 * 1024)),
+      });
+    }
+
     const bodyString = await response.Body?.transformToString();
     const transcribeOutput: TranscribeOutput = JSON.parse(bodyString || '{}');
 

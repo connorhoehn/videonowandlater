@@ -1,99 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchToken } from '../auth/fetchToken';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
-import { RecordingSlider, type ActivitySession } from '../features/activity/RecordingSlider';
+import { RecordingSlider } from '../features/activity/RecordingSlider';
 import { LiveBroadcastsSlider } from '../features/activity/LiveBroadcastsSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 import { CreatePostCard } from '../components/social/CreatePostCard';
 import { CameraIcon, UsersIcon, UploadIcon } from '../components/social/Icons';
-
-function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
-  return sessions.some(
-    (s) =>
-      s.transcriptStatus === 'processing' ||
-      s.transcriptStatus === 'pending' ||
-      s.aiSummaryStatus === 'pending' ||
-      s.convertStatus === 'processing' ||
-      s.convertStatus === 'pending',
-  );
-}
+import { Skeleton } from '../components/social';
+import { useActivityData } from '../hooks/useActivityData';
 
 export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { sessions, loading: loadingActivity } = useActivityData();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [error, setError] = useState('');
-  const [sessions, setSessions] = useState<ActivitySession[]>([]);
-  const [loadingActivity, setLoadingActivity] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [pollInterval, setPollInterval] = useState(15000);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevHasNonTerminalRef = useRef(false);
-
-  useEffect(() => {
-    const fetchActivity = async () => {
-      const config = getConfig();
-      if (!config?.apiUrl) {
-        setLoadingActivity(false);
-        return;
-      }
-      try {
-        const response = await fetch(`${config.apiUrl}/activity`);
-        if (!response.ok) throw new Error(`${response.status}`);
-        const data = await response.json();
-        setSessions(data.sessions || []);
-      } catch (err) {
-        console.error('Error fetching activity:', err);
-      } finally {
-        setLoadingActivity(false);
-      }
-    };
-    fetchActivity();
-  }, []);
-
-  useEffect(() => {
-    const nonTerminal = hasNonTerminalSessions(sessions);
-
-    // Reset poll interval when transitioning from all-terminal to having non-terminal sessions
-    if (nonTerminal && !prevHasNonTerminalRef.current) {
-      setPollInterval(15000);
-    }
-    prevHasNonTerminalRef.current = nonTerminal;
-
-    if (!nonTerminal) {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      return;
-    }
-
-    const intervalId = setInterval(async () => {
-      const config = getConfig();
-      if (!config?.apiUrl) return;
-      try {
-        const response = await fetch(`${config.apiUrl}/activity`);
-        if (!response.ok) throw new Error(`${response.status}`);
-        const data = await response.json();
-        setSessions(data.sessions || []);
-      } catch (err) {
-        console.error('Error polling activity:', err);
-      }
-      setPollInterval(prev => Math.min(prev * 2, 60000));
-    }, pollInterval);
-
-    pollIntervalRef.current = intervalId;
-
-    return () => {
-      clearInterval(intervalId);
-      pollIntervalRef.current = null;
-    };
-  }, [sessions, pollInterval]);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -180,14 +107,14 @@ export function HomePage() {
             {/* Skeleton for recording slider */}
             <div className="border-b border-gray-100">
               <div className="py-6">
-                <div className="animate-shimmer h-4 w-28 rounded mb-4" />
+                <Skeleton.Line width="w-28" height="h-4" className="mb-4" />
                 <div className="flex gap-4 overflow-hidden">
                   {[0, 1, 2, 3].map((i) => (
                     <div key={i} className="flex-shrink-0 w-56 rounded-xl overflow-hidden">
-                      <div className="animate-shimmer aspect-video rounded-t-xl" />
+                      <Skeleton.Rect height="h-auto" rounded="rounded-t-xl" className="aspect-video" />
                       <div className="p-3 bg-white">
-                        <div className="animate-shimmer h-3 w-24 rounded mb-2" />
-                        <div className="animate-shimmer h-3 w-16 rounded" />
+                        <Skeleton.Line width="w-24" height="h-3" className="mb-2" />
+                        <Skeleton.Line width="w-16" height="h-3" />
                       </div>
                     </div>
                   ))}

@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'motion/react';
-import { Card } from '../../components/social';
+import { Card, InfiniteScroll, Skeleton } from '../../components/social';
 import { BroadcastActivityCard } from './BroadcastActivityCard';
 import { HangoutActivityCard } from './HangoutActivityCard';
 import { UploadActivityCard } from './UploadActivityCard';
@@ -23,30 +23,36 @@ const cardVariants = {
 interface ActivityFeedProps {
   sessions: ActivitySession[];
   loading?: boolean;
+  /** Called when the user scrolls near the bottom and more pages exist */
+  onLoadMore?: () => void | Promise<void>;
+  /** Whether additional pages are available */
+  hasMore?: boolean;
+  /** Whether a next page is currently being fetched */
+  loadingMore?: boolean;
 }
 
 function SkeletonCard() {
   return (
     <Card>
       {/* Thumbnail skeleton */}
-      <div className="animate-shimmer h-48 sm:h-56" />
+      <Skeleton.Rect height="h-48 sm:h-56" rounded="rounded-none" />
       <Card.Body>
         {/* Header row */}
         <div className="flex items-center gap-2.5 mb-2.5">
-          <div className="animate-shimmer w-8 h-8 rounded-full flex-shrink-0" />
-          <div className="animate-shimmer h-4 w-28 rounded" />
-          <div className="animate-shimmer h-5 w-16 rounded-full" />
+          <Skeleton.Circle size="w-8 h-8" className="flex-shrink-0" />
+          <Skeleton.Line width="w-28" height="h-4" />
+          <Skeleton.Line width="w-16" height="h-5" className="rounded-full" />
         </div>
         {/* Meta row */}
-        <div className="animate-shimmer h-3 w-44 rounded mb-3" />
+        <Skeleton.Line width="w-44" height="h-3" className="mb-3" />
         {/* Reaction pills */}
         <div className="flex gap-2 mb-3">
-          <div className="animate-shimmer h-7 w-14 rounded-full" />
-          <div className="animate-shimmer h-7 w-14 rounded-full" />
-          <div className="animate-shimmer h-7 w-14 rounded-full" />
+          <Skeleton.Line width="w-14" height="h-7" className="rounded-full" />
+          <Skeleton.Line width="w-14" height="h-7" className="rounded-full" />
+          <Skeleton.Line width="w-14" height="h-7" className="rounded-full" />
         </div>
         {/* Summary block */}
-        <div className="animate-shimmer h-12 w-full rounded-xl" />
+        <Skeleton.Rect height="h-12" rounded="rounded-xl" />
       </Card.Body>
     </Card>
   );
@@ -71,7 +77,13 @@ function EmptyState() {
   );
 }
 
-export function ActivityFeed({ sessions, loading = false }: ActivityFeedProps) {
+export function ActivityFeed({
+  sessions,
+  loading = false,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
+}: ActivityFeedProps) {
   // Sort by endedAt DESC (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
     const dateA = new Date(a.endedAt || a.createdAt).getTime();
@@ -95,36 +107,46 @@ export function ActivityFeed({ sessions, loading = false }: ActivityFeedProps) {
     return <EmptyState />;
   }
 
+  const noop = () => {};
+
   return (
     <div className="py-6">
-      <motion.div
-        className="space-y-5"
-        variants={feedVariants}
-        initial="hidden"
-        animate="visible"
+      <InfiniteScroll
+        onLoadMore={onLoadMore ?? noop}
+        hasMore={hasMore}
+        loading={loadingMore}
+        endText="You're all caught up"
+        showEndText={sortedSessions.length > 0}
       >
-        {sortedSessions.map((session) => {
-          let card: React.ReactNode;
-          switch (session.sessionType) {
-            case 'BROADCAST':
-              card = <BroadcastActivityCard session={session} />;
-              break;
-            case 'HANGOUT':
-              card = <HangoutActivityCard session={session} />;
-              break;
-            case 'UPLOAD':
-              card = <UploadActivityCard session={session} />;
-              break;
-            default:
-              return null;
-          }
-          return (
-            <motion.div key={session.sessionId} variants={cardVariants}>
-              {card}
-            </motion.div>
-          );
-        })}
-      </motion.div>
+        <motion.div
+          className="space-y-5"
+          variants={feedVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {sortedSessions.map((session) => {
+            let card: React.ReactNode;
+            switch (session.sessionType) {
+              case 'BROADCAST':
+                card = <BroadcastActivityCard session={session} />;
+                break;
+              case 'HANGOUT':
+                card = <HangoutActivityCard session={session} />;
+                break;
+              case 'UPLOAD':
+                card = <UploadActivityCard session={session} />;
+                break;
+              default:
+                return null;
+            }
+            return (
+              <motion.div key={session.sessionId} variants={cardVariants}>
+                {card}
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </InfiniteScroll>
     </div>
   );
 }

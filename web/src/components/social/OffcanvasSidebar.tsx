@@ -83,7 +83,7 @@ export function OffcanvasSidebar({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 ${side === 'left' ? 'left-0' : 'right-0'} z-50 h-full ${width} bg-white shadow-2xl dark:bg-gray-900 ${panelTranslate} transition-transform duration-300 ease-in-out ${className}`}
+        className={`fixed top-0 ${side === 'left' ? 'left-0' : 'right-0'} z-50 h-full ${width} max-w-[85vw] flex flex-col bg-white shadow-2xl dark:bg-gray-900 ${panelTranslate} transition-transform duration-300 ease-in-out ${className}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-700">
@@ -102,7 +102,7 @@ export function OffcanvasSidebar({
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-4 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-4">{children}</div>
       </div>
     </>
   );

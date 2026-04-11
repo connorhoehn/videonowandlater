@@ -1,5 +1,9 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'motion/react';
 import { useAuth } from '../auth/useAuth';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { PageTransition } from './PageTransition';
 import {
   AppShell,
   Navbar,
@@ -11,18 +15,31 @@ import {
   UserAvatarDropdown,
   NotificationDropdown,
   ChatLauncher,
+  OffcanvasSidebar,
 } from './social';
-import { ChatIcon, BellIcon } from './social/Icons';
+import { ChatIcon, MenuIcon } from './social/Icons';
 
 export function AuthenticatedShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { isDark, toggle: toggleDarkMode } = useDarkMode();
 
   const navbar = (
     <Navbar
       brand={{ label: 'videonow', href: '/' }}
       actions={
         <div className="flex items-center gap-2">
+          {/* Mobile sidebar hamburger — visible below lg */}
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="lg:hidden w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+          >
+            <MenuIcon size={18} />
+          </button>
           <NavIconButton icon={<ChatIcon size={18} />} label="Messages" />
           <NotificationDropdown notifications={[]} unreadCount={0} />
           <UserAvatarDropdown
@@ -30,6 +47,8 @@ export function AuthenticatedShell() {
             onProfile={() => navigate('/')}
             onSettings={() => navigate('/')}
             onSignOut={() => signOut()}
+            darkMode={isDark}
+            onToggleDarkMode={toggleDarkMode}
           />
         </div>
       }
@@ -68,8 +87,36 @@ export function AuthenticatedShell() {
         leftSidebar={leftSidebar}
         rightSidebar={rightSidebar}
       >
-        <Outlet />
+        <AnimatePresence mode="wait">
+          <PageTransition key={location.pathname}>
+            <Outlet />
+          </PageTransition>
+        </AnimatePresence>
       </AppShell>
+
+      {/* Mobile offcanvas sidebar — profile + nav for small screens */}
+      <OffcanvasSidebar
+        isOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+        title="Menu"
+        side="left"
+      >
+        <ProfileSidebar
+          user={{ name: user?.username ?? '' }}
+          navItems={[
+            { label: 'Feed', href: '/' },
+            { label: 'Settings' },
+          ]}
+          onViewProfile={() => {
+            navigate('/');
+            setMobileSidebarOpen(false);
+          }}
+        />
+        <div className="mt-4">
+          <FooterLinks />
+        </div>
+      </OffcanvasSidebar>
+
       <ChatLauncher />
     </>
   );

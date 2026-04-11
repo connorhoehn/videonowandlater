@@ -148,7 +148,7 @@ describe('on-mediaconvert-complete handler', () => {
       expect(mockUpdateSessionRecording).toHaveBeenCalled();
     });
 
-    it('should set recordingStatus=available on COMPLETE', async () => {
+    it('should set convertStatus=available (not recordingStatus) on COMPLETE', async () => {
       const sessionId = 'test-session-456';
       const mockSession = {
         sessionId,
@@ -181,11 +181,12 @@ describe('on-mediaconvert-complete handler', () => {
 
       expect(result.batchItemFailures).toHaveLength(0);
 
+      // Handler only sets convertStatus on COMPLETE — recordingStatus is not updated here
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
         sessionId,
         expect.objectContaining({
-          recordingStatus: 'available',
+          convertStatus: 'available',
         })
       );
     });
@@ -232,7 +233,7 @@ describe('on-mediaconvert-complete handler', () => {
       );
     });
 
-    it('should set status=ended on COMPLETE', async () => {
+    it('should not set session status on COMPLETE (only convertStatus)', async () => {
       const sessionId = 'ended-test-session';
       const mockSession = {
         sessionId,
@@ -265,12 +266,11 @@ describe('on-mediaconvert-complete handler', () => {
 
       expect(result.batchItemFailures).toHaveLength(0);
 
+      // Handler only updates convertStatus — session status is not changed here
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
         sessionId,
-        expect.objectContaining({
-          status: 'ended',
-        })
+        { convertStatus: 'available' }
       );
     });
   });
@@ -522,7 +522,11 @@ describe('on-mediaconvert-complete handler', () => {
   });
 
   describe('HLS URL construction', () => {
-    it('should construct recordingHlsUrl with s3://{bucket}/hls/{sessionId}/master.m3u8 format', async () => {
+    it('should use s3://{bucket}/hls/{sessionId}/master.m3u8 for EventBridge event (not stored in DB)', async () => {
+      // Wire the module-scope eventBridgeClient instance to a controlled send mock.
+      const mockSend = setupEbSend();
+      (eventbridgeModule.PutEventsCommand as unknown as jest.Mock).mockImplementation((input) => ({ input }));
+
       const sessionId = 'hls-test-session';
       const mockSession = {
         sessionId,
@@ -555,13 +559,18 @@ describe('on-mediaconvert-complete handler', () => {
 
       expect(result.batchItemFailures).toHaveLength(0);
 
+      // recordingHlsUrl is NOT stored in DB — it's only passed via EventBridge event
       expect(mockUpdateSessionRecording).toHaveBeenCalledWith(
         TABLE_NAME,
         sessionId,
-        expect.objectContaining({
-          recordingHlsUrl: `s3://${BUCKET_NAME}/hls/${sessionId}/master.m3u8`,
-        })
+        { convertStatus: 'available' }
       );
+
+      // Verify the HLS URL is passed in the EventBridge event detail
+      expect(mockSend).toHaveBeenCalled();
+      const putEventsCommand = mockSend.mock.calls[0][0];
+      const detail = JSON.parse(putEventsCommand.input.Entries[0].Detail);
+      expect(detail.recordingHlsUrl).toBe(`s3://${BUCKET_NAME}/hls/${sessionId}/master.m3u8`);
     });
   });
 

@@ -48,6 +48,8 @@ function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
 export function ActivityProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ActivitySession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState(15000);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevHasNonTerminalRef = useRef(false);
@@ -63,12 +65,33 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error(`${response.status}`);
       const data = await response.json();
       setSessions(data.sessions || []);
+      setNextCursor(data.nextCursor ?? null);
     } catch (err) {
       console.error('Error fetching activity:', err);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    const config = getConfig();
+    if (!config?.apiUrl) return;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(
+        `${config.apiUrl}/activity?cursor=${encodeURIComponent(nextCursor)}`,
+      );
+      if (!response.ok) throw new Error(`${response.status}`);
+      const data = await response.json();
+      setSessions((prev) => [...prev, ...(data.sessions || [])]);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (err) {
+      console.error('Error loading more activity:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore]);
 
   // Initial fetch
   useEffect(() => {
@@ -116,7 +139,16 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   }, [sessions, pollInterval]);
 
   return (
-    <ActivityContext.Provider value={{ sessions, loading, refresh: fetchActivity }}>
+    <ActivityContext.Provider
+      value={{
+        sessions,
+        loading,
+        refresh: fetchActivity,
+        loadMore,
+        hasMore: nextCursor !== null,
+        loadingMore,
+      }}
+    >
       {children}
     </ActivityContext.Provider>
   );

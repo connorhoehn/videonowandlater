@@ -15,7 +15,7 @@ import { useActivityData } from '../hooks/useActivityData';
 export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { sessions, loading: loadingActivity } = useActivityData();
+  const { sessions, loading: loadingActivity, loadMore, hasMore, loadingMore } = useActivityData();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -128,7 +128,12 @@ export function HomePage() {
           <>
             <LiveBroadcastsSlider sessions={sessions} />
             <RecordingSlider sessions={sessions} />
-            <ActivityFeed sessions={sessions} />
+            <ActivityFeed
+              sessions={sessions}
+              onLoadMore={loadMore}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+            />
           </>
         )}
       </div>

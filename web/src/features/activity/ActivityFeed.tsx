@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'motion/react';
-import { Card, InfiniteScroll, Skeleton } from '../../components/social';
+import { Card, EmptyState, InfiniteScroll, Skeleton, VideoIcon } from '../../components/social';
 import { BroadcastActivityCard } from './BroadcastActivityCard';
 import { HangoutActivityCard } from './HangoutActivityCard';
 import { UploadActivityCard } from './UploadActivityCard';
@@ -58,25 +58,6 @@ function SkeletonCard() {
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="py-16 text-center">
-      <div className="flex flex-col items-center gap-4">
-        {/* Empty state icon */}
-        <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
-          <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-500">No activity yet</p>
-          <p className="text-xs text-gray-400 mt-1">Start a broadcast, hangout, or upload a video to get started</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ActivityFeed({
   sessions,
   loading = false,
@@ -104,7 +85,13 @@ export function ActivityFeed({
   }
 
   if (sortedSessions.length === 0) {
-    return <EmptyState />;
+    return (
+      <EmptyState
+        title="No activity yet"
+        description="Start a broadcast, hangout, or upload a video to get started"
+        icon={<VideoIcon className="w-8 h-8 text-gray-300" />}
+      />
+    );
   }
 
   const noop = () => {};

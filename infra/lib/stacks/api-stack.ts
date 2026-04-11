@@ -681,6 +681,136 @@ export class ApiStack extends Stack {
       });
     }
 
+    // ============================================================
+    // Stories API Routes
+    // ============================================================
+
+    const stories = api.root.addResource('stories');
+
+    // POST /stories — create a new story session
+    const createStoryHandler = new NodejsFunction(this, 'CreateStoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-story-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(createStoryHandler);
+    stories.addMethod('POST', new apigateway.LambdaIntegration(createStoryHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /stories — get stories feed
+    const getStoriesFeedHandler = new NodejsFunction(this, 'GetStoriesFeedHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-stories-feed.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getStoriesFeedHandler);
+    stories.addMethod('GET', new apigateway.LambdaIntegration(getStoriesFeedHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const storyIdResource = stories.addResource('{sessionId}');
+
+    // POST /stories/{sessionId}/segments — add segment with presigned upload URL
+    const addStorySegmentHandler = new NodejsFunction(this, 'AddStorySegmentHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/add-story-segment.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        STORY_BUCKET: 'vnl-transcription-vnl-session', // reuse transcription bucket for story media
+        CLOUDFRONT_DOMAIN: '', // will be set via CfnOutput or parameter
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(addStorySegmentHandler);
+    // S3 write access for presigned URLs
+    addStorySegmentHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject'],
+      resources: ['arn:aws:s3:::vnl-transcription-vnl-session/stories/*'],
+    }));
+    const segmentsResource = storyIdResource.addResource('segments');
+    segmentsResource.addMethod('POST', new apigateway.LambdaIntegration(addStorySegmentHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /stories/{sessionId}/publish — publish story
+    const publishStoryHandler = new NodejsFunction(this, 'PublishStoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/publish-story.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        CLOUDFRONT_DOMAIN: '', // needs to match transcription bucket CloudFront
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(publishStoryHandler);
+    const publishResource = storyIdResource.addResource('publish');
+    publishResource.addMethod('POST', new apigateway.LambdaIntegration(publishStoryHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /stories/{sessionId}/view — mark story as viewed
+    const viewStoryHandler = new NodejsFunction(this, 'ViewStoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/view-story.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(viewStoryHandler);
+    const viewResource = storyIdResource.addResource('view');
+    viewResource.addMethod('POST', new apigateway.LambdaIntegration(viewStoryHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /stories/{sessionId}/react — react to story
+    const reactToStoryHandler = new NodejsFunction(this, 'ReactToStoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/react-to-story.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(reactToStoryHandler);
+    const reactResource = storyIdResource.addResource('react');
+    reactResource.addMethod('POST', new apigateway.LambdaIntegration(reactToStoryHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /stories/{sessionId}/reply — reply to story
+    const replyToStoryHandler = new NodejsFunction(this, 'ReplyToStoryHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/reply-to-story.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(replyToStoryHandler);
+    const replyResource = storyIdResource.addResource('reply');
+    replyResource.addMethod('POST', new apigateway.LambdaIntegration(replyToStoryHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /stories/{sessionId}/viewers — get story viewers (owner only)
+    const getStoryViewersHandler = new NodejsFunction(this, 'GetStoryViewersHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-story-viewers.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getStoryViewersHandler);
+    const viewersResource = storyIdResource.addResource('viewers');
+    viewersResource.addMethod('GET', new apigateway.LambdaIntegration(getStoryViewersHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

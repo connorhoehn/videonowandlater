@@ -36,14 +36,14 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
-  if (!body.sessionType || !['BROADCAST', 'HANGOUT'].includes(body.sessionType)) {
+  if (!body.sessionType || !['BROADCAST', 'HANGOUT', 'STORY'].includes(body.sessionType)) {
     return {
       statusCode: 400,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'sessionType required (BROADCAST or HANGOUT)' }),
+      body: JSON.stringify({ error: 'sessionType required (BROADCAST, HANGOUT, or STORY)' }),
     };
   }
 

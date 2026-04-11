@@ -357,6 +357,29 @@ export class SessionStack extends Stack {
       description: 'Scan for stuck pipeline sessions and re-trigger recovery every 15 minutes',
     });
 
+    // Scheduled Lambda to expire old stories (runs hourly)
+    const expireStoriesFn = new nodejs.NodejsFunction(this, 'ExpireStories', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/expire-stories.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'ExpireStoriesLogGroup', {
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+    this.table.grantReadWriteData(expireStoriesFn);
+
+    // Run every hour
+    new events.Rule(this, 'ExpireStoriesSchedule', {
+      schedule: events.Schedule.rate(Duration.hours(1)),
+      targets: [new targets.LambdaFunction(expireStoriesFn)],
+    });
+
     // Lambda function for stream-started events
     const streamStartedFn = new nodejs.NodejsFunction(this, 'StreamStarted', {
       runtime: lambda.Runtime.NODEJS_20_X,

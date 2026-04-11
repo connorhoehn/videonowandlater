@@ -42,6 +42,8 @@ export { StoriesSlider } from './StoriesSlider';
 export type { Story } from './StoriesSlider';
 export { StoryViewer } from './StoryViewer';
 export type { StorySegment, StoryUser } from './StoryViewer';
+export { StoryCreator } from './StoryCreator';
+export type { StoryCreatorProps } from './StoryCreator';
 export { SuggestedStoriesSlider } from './SuggestedStoriesSlider';
 export type { SuggestedStory } from './SuggestedStoriesSlider';
 export { LinkPreviewCard } from './LinkPreviewCard';

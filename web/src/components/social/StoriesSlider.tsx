@@ -16,6 +16,7 @@ interface StoriesSliderProps {
   stories: Story[];
   onCreateStory?: () => void;
   createLabel?: string;
+  onStoryView?: (storyIndex: number) => void;
   className?: string;
 }
 
@@ -26,6 +27,7 @@ export function StoriesSlider({
   stories,
   onCreateStory,
   createLabel = 'Post a Story',
+  onStoryView,
   className = '',
 }: StoriesSliderProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -89,16 +91,18 @@ export function StoriesSlider({
         </button>
 
         {/* Story cards */}
-        {stories.map((story) => (
+        {stories.map((story, storyIdx) => (
           <div
             key={story.id}
             role="button"
             tabIndex={0}
-            onClick={story.onClick}
+            onClick={() =>
+              onStoryView ? onStoryView(storyIdx) : story.onClick?.()
+            }
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                story.onClick?.();
+                onStoryView ? onStoryView(storyIdx) : story.onClick?.();
               }
             }}
             className="h-[150px] w-[120px] flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer"

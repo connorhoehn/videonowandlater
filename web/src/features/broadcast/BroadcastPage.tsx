@@ -22,7 +22,7 @@ import { useStreamMetrics } from './useStreamMetrics';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { SpotlightModal } from '../spotlight/SpotlightModal';
 import { useSpotlight } from '../spotlight/useSpotlight';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { ConfirmModal } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
@@ -452,13 +452,14 @@ function BroadcastContent({
           onRefresh={refreshLiveSessions}
         />
 
-        <ConfirmDialog
+        <ConfirmModal
           isOpen={showStopConfirm}
           title="Stop broadcast?"
           message="Your stream will end and viewers will be disconnected."
           confirmLabel="Stop"
+          variant="danger"
           onConfirm={() => { stopBroadcast(); setShowStopConfirm(false); }}
-          onCancel={() => setShowStopConfirm(false)}
+          onClose={() => setShowStopConfirm(false)}
         />
       </div>
     </ChatRoomProvider>

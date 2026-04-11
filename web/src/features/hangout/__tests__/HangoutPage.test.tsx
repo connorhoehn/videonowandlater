@@ -103,29 +103,33 @@ vi.mock('../../config/aws-config', () => ({
   getConfig: vi.fn(() => ({ apiUrl: 'http://localhost:3000/api' })),
 }));
 
-vi.mock('../../components/ConfirmDialog', () => ({
-  ConfirmDialog: vi.fn(
-    ({
-      isOpen,
-      onConfirm,
-      onCancel,
-    }: {
-      isOpen: boolean;
-      onConfirm: () => void;
-      onCancel: () => void;
-    }) =>
-      isOpen ? (
-        <div data-testid="confirm-dialog">
-          <button onClick={onConfirm} data-testid="confirm-btn">
-            Confirm
-          </button>
-          <button onClick={onCancel} data-testid="cancel-btn">
-            Cancel
-          </button>
-        </div>
-      ) : null
-  ),
-}));
+vi.mock('../../components/social', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    ConfirmModal: vi.fn(
+      ({
+        isOpen,
+        onConfirm,
+        onClose,
+      }: {
+        isOpen: boolean;
+        onConfirm: () => void;
+        onClose: () => void;
+      }) =>
+        isOpen ? (
+          <div data-testid="confirm-dialog">
+            <button onClick={onConfirm} data-testid="confirm-btn">
+              Confirm
+            </button>
+            <button onClick={onClose} data-testid="cancel-btn">
+              Cancel
+            </button>
+          </div>
+        ) : null
+    ),
+  };
+});
 
 import { HangoutPage } from '../HangoutPage';
 

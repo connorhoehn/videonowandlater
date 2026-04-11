@@ -1,11 +1,11 @@
 /**
  * DemoPage — visual showcase of features at /demo (no auth required)
- * Shows ConfirmDialog, emoji reactions, pipeline status, and click-to-seek comments.
+ * Shows ConfirmModal, emoji reactions, pipeline status, and click-to-seek comments.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ConfirmModal } from '../components/social';
 import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../features/reactions/ReactionPicker';
 import { FloatingReactions, type FloatingEmoji } from '../features/reactions/FloatingReactions';
 import { SessionAuditLog } from '../features/activity/SessionAuditLog';
@@ -86,7 +86,7 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 export function DemoPage() {
   const navigate = useNavigate();
 
-  // ConfirmDialog state
+  // ConfirmModal state
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [lastAction, setLastAction] = useState<string | null>(null);
@@ -285,22 +285,24 @@ export function DemoPage() {
 
       </div>
 
-      {/* Confirm Dialogs (rendered at root so they overlay everything) */}
-      <ConfirmDialog
+      {/* Confirm Modals (rendered at root so they overlay everything) */}
+      <ConfirmModal
         isOpen={showStopConfirm}
         title="Stop broadcast?"
         message="Your stream will end and viewers will be disconnected."
         confirmLabel="Stop"
+        variant="danger"
         onConfirm={() => { setLastAction('Broadcast stopped'); setShowStopConfirm(false); }}
-        onCancel={() => setShowStopConfirm(false)}
+        onClose={() => setShowStopConfirm(false)}
       />
-      <ConfirmDialog
+      <ConfirmModal
         isOpen={showLeaveConfirm}
         title="Leave hangout?"
         message="You will be disconnected from the session."
         confirmLabel="Leave"
+        variant="danger"
         onConfirm={() => { setLastAction('Left hangout'); setShowLeaveConfirm(false); }}
-        onCancel={() => setShowLeaveConfirm(false)}
+        onClose={() => setShowLeaveConfirm(false)}
       />
     </div>
   );

@@ -18,7 +18,7 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { ConfirmModal } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 
 export function HangoutPage() {
@@ -315,13 +315,14 @@ export function HangoutPage() {
       <video ref={localVideoRef} style={{ display: 'none' }} autoPlay muted playsInline />
     </div>
 
-    <ConfirmDialog
+    <ConfirmModal
       isOpen={showLeaveConfirm}
       title="Leave hangout?"
       message="You will be disconnected from the session."
       confirmLabel="Leave"
+      variant="danger"
       onConfirm={() => { handleLeave(); setShowLeaveConfirm(false); }}
-      onCancel={() => setShowLeaveConfirm(false)}
+      onClose={() => setShowLeaveConfirm(false)}
     />
     </ChatRoomProvider>
   );

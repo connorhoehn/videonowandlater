@@ -760,12 +760,14 @@ export class SessionStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/store-summary.ts'),
-      timeout: Duration.seconds(60), // Critical: Bedrock latency 5-10s + buffer
+      timeout: Duration.seconds(90), // Bedrock latency 5-10s + VLM vision call + buffer
+      memorySize: 512, // base64 image handling for visual analysis
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         TABLE_NAME: this.table.tableName,
         BEDROCK_REGION: this.region,
         BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0',
+        TRANSCRIPTION_BUCKET: transcriptionBucket.bucketName,
         EVENT_BUS_NAME: 'default',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),

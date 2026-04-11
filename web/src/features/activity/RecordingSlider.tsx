@@ -23,6 +23,7 @@ export interface ActivitySession {
   recordingHlsUrl?: string;
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  visualAnalysis?: string;
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   mediaConvertJobName?: string;

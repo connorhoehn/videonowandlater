@@ -202,6 +202,7 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
           <SummaryDisplay
             summary={session.aiSummary}
             status={session.aiSummaryStatus}
+            visualAnalysis={session.visualAnalysis}
             truncate={true}
             className="text-gray-700"
           />

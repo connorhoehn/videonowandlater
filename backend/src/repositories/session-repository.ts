@@ -652,6 +652,7 @@ export async function updateSessionAiSummary(
   updates: {
     aiSummary?: string;
     aiSummaryStatus?: 'pending' | 'available' | 'failed';
+    visualAnalysis?: string;
   }
 ): Promise<void> {
   const docClient = getDocumentClient();
@@ -675,6 +676,12 @@ export async function updateSessionAiSummary(
     updateParts.push('#aiSummaryStatus = :aiSummaryStatus');
     expressionAttributeNames['#aiSummaryStatus'] = 'aiSummaryStatus';
     expressionAttributeValues[':aiSummaryStatus'] = updates.aiSummaryStatus;
+  }
+
+  if (updates.visualAnalysis !== undefined) {
+    updateParts.push('#visualAnalysis = :visualAnalysis');
+    expressionAttributeNames['#visualAnalysis'] = 'visualAnalysis';
+    expressionAttributeValues[':visualAnalysis'] = updates.visualAnalysis;
   }
 
   if (updateParts.length === 0) {

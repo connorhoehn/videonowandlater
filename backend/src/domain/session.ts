@@ -99,6 +99,8 @@ export interface Session {
    * Used to show placeholder states on frontend during processing
    */
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  /** AI-generated visual analysis from VLM analysis of video frames */
+  visualAnalysis?: string;
   // Upload tracking (UPLOAD sessions only)
   uploadId?: string;
   uploadStatus?: 'pending' | 'processing' | 'converting' | 'available' | 'failed';

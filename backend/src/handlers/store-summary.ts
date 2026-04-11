@@ -299,6 +299,94 @@ ${speakerSegmentsJson}`;
       logger.warn('Chapter generation failed (non-blocking):', { sessionId, errorMessage: chapterError.message });
       // Non-blocking: chapter failure should NOT fail the overall handler
     }
+
+    // --- Visual analysis via VLM (non-blocking) ---
+    try {
+      const sessionForVlm = await getSessionById(tableName, sessionId);
+      if (sessionForVlm?.thumbnailBaseUrl && sessionForVlm?.thumbnailCount && sessionForVlm.thumbnailCount > 0) {
+        logger.info('Starting visual analysis', { sessionId, thumbnailCount: sessionForVlm.thumbnailCount });
+
+        // Sample 4-6 evenly spaced frames
+        const frameCount = Math.min(6, sessionForVlm.thumbnailCount);
+        const step = Math.floor(sessionForVlm.thumbnailCount / frameCount);
+        const frameIndices = Array.from({ length: frameCount }, (_, i) =>
+          Math.min(i * step + 1, sessionForVlm.thumbnailCount! - 1) // skip index 0 (often black)
+        );
+
+        // Fetch frames from S3
+        const transcriptionBucketName = process.env.TRANSCRIPTION_BUCKET;
+        if (!transcriptionBucketName) {
+          logger.warn('TRANSCRIPTION_BUCKET not set, skipping visual analysis');
+        } else {
+          const imageContents: { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg'; data: string } }[] = [];
+
+          for (const index of frameIndices) {
+            const paddedIndex = String(index).padStart(7, '0');
+            const s3Key = `${sessionId}/thumbnails/recording-thumb.${paddedIndex}.jpg`;
+
+            try {
+              const frameResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: transcriptionBucketName,
+                Key: s3Key,
+              }));
+              const frameBytes = await frameResponse.Body?.transformToByteArray();
+              if (frameBytes) {
+                const base64 = Buffer.from(frameBytes).toString('base64');
+                imageContents.push({
+                  type: 'image',
+                  source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
+                });
+              }
+            } catch (frameErr: any) {
+              logger.warn('Failed to fetch frame', { s3Key, error: frameErr.message });
+            }
+          }
+
+          if (imageContents.length > 0) {
+            // Use Claude for vision (Nova doesn't support images)
+            const visionModelId = 'anthropic.claude-sonnet-4-20250514-v1:0';
+
+            const visionPayload = {
+              anthropic_version: 'bedrock-2023-05-31',
+              max_tokens: 800,
+              messages: [{
+                role: 'user' as const,
+                content: [
+                  ...imageContents,
+                  {
+                    type: 'text' as const,
+                    text: `These are sample frames from a video session. Provide a concise visual analysis (2-4 sentences) covering:
+1. What is shown in the video (people, environment, activities)
+2. The visual quality and setting (lighting, camera angle, indoor/outdoor)
+3. Any notable visual elements or changes across frames
+
+Be specific and descriptive but brief.`,
+                  },
+                ],
+              }],
+            };
+
+            const visionCommand = new InvokeModelCommand({
+              contentType: 'application/json',
+              body: JSON.stringify(visionPayload),
+              modelId: visionModelId,
+            });
+
+            const visionResponse = await bedrockClient.send(visionCommand);
+            const visionDecoded = new TextDecoder().decode(visionResponse.body);
+            const visionBody = JSON.parse(visionDecoded);
+            const visualAnalysis = visionBody?.content?.[0]?.text;
+
+            if (visualAnalysis) {
+              await updateSessionAiSummary(tableName, sessionId, { visualAnalysis });
+              logger.info('Visual analysis stored', { sessionId, length: visualAnalysis.length });
+            }
+          }
+        }
+      }
+    } catch (visualError: any) {
+      logger.warn('Visual analysis failed (non-blocking)', { sessionId, error: visualError.message });
+    }
   } catch (error: any) {
     logger.error('Bedrock summarization failed:', { errorMessage: error.message });
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error instanceof Error ? error.message : String(error) });

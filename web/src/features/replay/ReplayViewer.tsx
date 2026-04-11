@@ -36,6 +36,7 @@ interface Session {
   reactionSummary?: Record<string, number>;
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  visualAnalysis?: string;
   recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
@@ -481,6 +482,7 @@ export function ReplayViewer() {
                 <SummaryDisplay
                   summary={session.aiSummary}
                   status={session.aiSummaryStatus}
+                  visualAnalysis={session.visualAnalysis}
                   truncate={false}
                   className="text-gray-800"
                 />

@@ -84,6 +84,7 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
         <SummaryDisplay
           summary={session.aiSummary}
           status={session.aiSummaryStatus}
+          visualAnalysis={session.visualAnalysis}
           truncate={true}
           className="text-gray-700"
         />

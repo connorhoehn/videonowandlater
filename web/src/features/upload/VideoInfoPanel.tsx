@@ -11,6 +11,7 @@ interface VideoInfoPanelProps {
   syncTime: number;
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  visualAnalysis?: string;
   diarizedTranscriptS3Path?: string;
   onSeek?: (timeMs: number) => void;
 }
@@ -21,6 +22,7 @@ export function VideoInfoPanel({
   syncTime,
   aiSummary,
   aiSummaryStatus,
+  visualAnalysis,
   diarizedTranscriptS3Path,
   onSeek,
 }: VideoInfoPanelProps) {
@@ -29,7 +31,7 @@ export function VideoInfoPanel({
       {/* AI Summary section */}
       <div>
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">AI Summary</h4>
-        <SummaryDisplay summary={aiSummary} status={aiSummaryStatus} truncate={false} />
+        <SummaryDisplay summary={aiSummary} status={aiSummaryStatus} visualAnalysis={visualAnalysis} truncate={false} />
       </div>
 
       {/* Transcript section */}

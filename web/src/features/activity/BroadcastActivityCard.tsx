@@ -134,6 +134,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
           <SummaryDisplay
             summary={session.aiSummary}
             status={session.aiSummaryStatus}
+            visualAnalysis={session.visualAnalysis}
             truncate={true}
             className="text-gray-700"
           />

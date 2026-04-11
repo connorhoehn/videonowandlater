@@ -29,6 +29,7 @@ interface UploadSession {
   endedAt?: string;
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'available' | 'failed';
+  visualAnalysis?: string;
   recordingStatus?: 'pending' | 'processing' | 'available' | 'failed';
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
@@ -333,6 +334,7 @@ export function VideoPage() {
             <SummaryDisplay
               summary={session.aiSummary}
               status={session.aiSummaryStatus}
+              visualAnalysis={session.visualAnalysis}
               truncate={false}
               className="text-gray-800"
             />
@@ -396,6 +398,7 @@ export function VideoPage() {
                 syncTime={syncTime}
                 aiSummary={session.aiSummary}
                 aiSummaryStatus={session.aiSummaryStatus}
+                visualAnalysis={session.visualAnalysis}
                 diarizedTranscriptS3Path={session.diarizedTranscriptS3Path}
                 onSeek={seekVideo}
               />

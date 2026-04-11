@@ -44,101 +44,110 @@ web/src/features/
   viewer/       — ViewerPage, VideoPlayer, ThumbnailPreview
 ```
 
-### New Social Components — COMPLETED (9 files)
-All in `web/src/components/social/`, barrel exported via `index.ts`:
+### New Social Components — COMPLETED (30 component files + 1 barrel)
 
-| File | Component(s) | Status |
-|------|-------------|--------|
-| `Avatar.tsx` | `Avatar` — sizes (xs-xl), story ring, online dot, initials fallback | DONE |
-| `Card.tsx` | `Card`, `Card.Header/Body/Footer` — compound card wrapper | DONE |
-| `PostCard.tsx` | `PostCard` — feed post with author, media, engagement bar, comment input | DONE |
-| `CommentThread.tsx` | `CommentThread` — recursive nested comments, like/reply/load-more | DONE |
-| `ProfileSidebar.tsx` | `ProfileSidebar` — cover photo, avatar, stats, nav menu | DONE |
-| `SuggestionWidget.tsx` | `SuggestionWidget` — "Who to follow" user list with follow buttons | DONE |
-| `NewsWidget.tsx` | `NewsWidget` — "Today's news" headlines with timestamps | DONE |
-| `Navbar.tsx` | `Navbar`, `NavIconButton` — fixed top bar with search, nav links, icon buttons | DONE |
-| `AppShell.tsx` | `AppShell` — 3-column responsive grid (280px / 1fr / 300px) | DONE |
+All in `web/src/components/social/`, barrel exported via `index.ts`.
 
----
+#### Complete File Inventory (31 files)
 
-## Phase 1: Remaining Component Library
+| # | File | Component(s) / Exports | Status |
+|---|------|------------------------|--------|
+| 1 | `Avatar.tsx` | `Avatar` — sizes (xs-xl), story ring, online dot, initials fallback | DONE |
+| 2 | `Badge.tsx` | `Badge` — status pill: primary/success/danger/warning/info, sm/md | DONE |
+| 3 | `Card.tsx` | `Card`, `Card.Header/Body/Footer` — compound card wrapper | DONE |
+| 4 | `PostCard.tsx` | `PostCard` — feed post with author, media, engagement bar, comment input | DONE |
+| 5 | `CommentThread.tsx` | `CommentThread`, `Comment` (type) — recursive nested comments | DONE |
+| 6 | `ProfileSidebar.tsx` | `ProfileSidebar` — cover photo, avatar, stats, nav menu | DONE |
+| 7 | `SuggestionWidget.tsx` | `SuggestionWidget`, `SuggestionUser` (type) — "Who to follow" list | DONE |
+| 8 | `NewsWidget.tsx` | `NewsWidget`, `NewsItem` (type) — "Today's news" headlines | DONE |
+| 9 | `Navbar.tsx` | `Navbar`, `NavIconButton` — fixed top bar with search, nav links, icons | DONE |
+| 10 | `AppShell.tsx` | `AppShell` — 3-column responsive grid (280px / 1fr / 300px) | DONE |
+| 11 | `LoadMoreButton.tsx` | `LoadMoreButton` — animated bouncing dots, link/primary-soft variants | DONE |
+| 12 | `SearchInput.tsx` | `SearchInput` — rounded input with icon, clear button, debounce | DONE |
+| 13 | `Tooltip.tsx` | `Tooltip` — hover tooltip, positions: top/bottom/left/right | DONE |
+| 14 | `FooterLinks.tsx` | `FooterLinks` — horizontal footer links + copyright | DONE |
+| 15 | `DropdownMenu.tsx` | `DropdownMenu`, `DropdownItem` (type) — positioned panel with items | DONE |
+| 16 | `TabNav.tsx` | `TabNav`, `Tab` (type) — horizontal tabs with active underline | DONE |
+| 17 | `OffcanvasSidebar.tsx` | `OffcanvasSidebar` — mobile slide-in sidebar with overlay | DONE |
+| 18 | `EngagementBar.tsx` | `EngagementBar` — like/comment/share bar, stacked + inline variants | DONE |
+| 19 | `CreatePostCard.tsx` | `CreatePostCard`, `PostAction`/`CreatePostCardProps` (types) — post composer | DONE |
+| 20 | `PollCard.tsx` | `PollCard`, `PollOption`/`PollCardProps` (types) — poll with progress bars | DONE |
+| 21 | `ImageGrid.tsx` | `ImageGrid` — multi-image layout: 1/2/3+ grid with overlay | DONE |
+| 22 | `StoriesSlider.tsx` | `StoriesSlider`, `Story` (type) — horizontal scrollable thumbnails | DONE |
+| 23 | `SuggestedStoriesSlider.tsx` | `SuggestedStoriesSlider`, `SuggestedStory` (type) — smaller variant | DONE |
+| 24 | `LinkPreviewCard.tsx` | `LinkPreviewCard`, `LinkPreviewCardProps` (type) — URL preview card | DONE |
+| 25 | `SponsoredCard.tsx` | `SponsoredCard` — sponsored/ad post with CTA button | DONE |
+| 26 | `ChatLauncher.tsx` | `ChatLauncher` — fixed bottom-right floating chat button | DONE |
+| 27 | `PeopleCarousel.tsx` | `PeopleCarousel`, `PersonCard`/`PeopleCarouselProps` (types) — horizontal cards | DONE |
+| 28 | `NotificationDropdown.tsx` | `NotificationDropdown` — bell dropdown with notification list | DONE |
+| 29 | `UserAvatarDropdown.tsx` | `UserAvatarDropdown` — avatar dropdown: profile/settings/sign-out | DONE |
+| 30 | `Icons.tsx` | 30 SVG icon components (Home, Chat, Bell, Gear, Search, Plus, Check, Heart, HeartFilled, ThumbsUp, Share, Send, Camera, Video, Calendar, Emoji, Ellipsis, Close, ChevronDown, ChevronLeft, ChevronRight, User, Users, Globe, Photo, Upload, Play, Moon, Sun, Menu) | DONE |
+| 31 | `index.ts` | Barrel export — all components, types, and icons | DONE |
 
-### Feed Components
-| # | Component | File | Description |
-|---|-----------|------|-------------|
-| 1 | `CreatePostCard` | `CreatePostCard.tsx` | Post composer: avatar + textarea + action buttons (Photo, Video, Event, Feeling). For VNLA: "Go Live" / "Hangout" / "Upload" actions |
-| 2 | `StoriesSlider` | `StoriesSlider.tsx` | Horizontal scrollable story thumbnails with "Post a Story" dashed card. Maps to LiveBroadcastsSlider |
-| 3 | `ImageGrid` | `ImageGrid.tsx` | Multi-image layout: 1=full, 2=side-by-side, 3+=grid with "View all" overlay |
-| 4 | `PollCard` | `PollCard.tsx` | Poll post: radio options (pre-vote) or progress bars (post-vote) with percentages |
-| 5 | `LinkPreviewCard` | `LinkPreviewCard.tsx` | URL preview card: image + link + title + description |
-| 6 | `SponsoredCard` | `SponsoredCard.tsx` | Sponsored/ad post: brand avatar, "Sponsored" label, CTA button |
-| 7 | `PeopleCarousel` | `PeopleCarousel.tsx` | "People you may know" horizontal card carousel with prev/next arrows |
-| 8 | `SuggestedStoriesSlider` | `SuggestedStoriesSlider.tsx` | "Suggested stories" slider at bottom of feed (smaller variant) |
-| 9 | `EngagementBar` | `EngagementBar.tsx` | Standalone like/comment/share bar. Two variants: stacked and inline-fill |
+### Hooks Created
+| File | Hook | Purpose | Status |
+|------|------|---------|--------|
+| `web/src/hooks/useNavbarActions.tsx` | `useNavbarActions` | Navbar action handlers: create broadcast, create hangout, sign out. Returns `{ user, isCreating, handleSignOut, handleCreateBroadcast, handleCreateHangout }` | DONE (not yet wired into AuthenticatedShell) |
+| `web/src/hooks/useSidebarData.ts` | `useSidebarData` | Fetches activity API, derives profile stats, suggestion users, news items for sidebar widgets. Returns `{ profileStats, suggestions, newsItems, loading }` | DONE (not yet wired into AuthenticatedShell) |
 
-### UI Primitives
-| # | Component | File | Description |
-|---|-----------|------|-------------|
-| 10 | `Icons` | `Icons.tsx` | Centralized SVG icon set: home, chat, bell, gear, search, plus, check, heart, thumbsUp, share, send, camera, video, calendar, emoji, ellipsis, close, chevron, user, users, globe, photo |
-| 11 | `LoadMoreButton` | `LoadMoreButton.tsx` | "Load more" with animated bouncing dots. Variants: link-style, primary-soft |
-| 12 | `DropdownMenu` | `DropdownMenu.tsx` | Trigger + positioned panel with items, dividers, submenu support |
-| 13 | `SearchInput` | `SearchInput.tsx` | Rounded search input with icon, clear button, debounced onChange |
-| 14 | `Badge` | `Badge.tsx` | Status pill: primary/success/danger/warning/info, sizes sm/md |
-| 15 | `Tooltip` | `Tooltip.tsx` | Hover tooltip, positions: top/bottom/left/right |
-| 16 | `TabNav` | `TabNav.tsx` | Horizontal tabs with active underline. For profile/settings pages |
-| 17 | `OffcanvasSidebar` | `OffcanvasSidebar.tsx` | Mobile slide-in sidebar with overlay backdrop |
+### App Integration — COMPLETED
+| File | What | Status |
+|------|------|--------|
+| `web/src/components/AuthenticatedShell.tsx` | Wraps authenticated routes in `AppShell` with `Navbar`, `ProfileSidebar`, `SuggestionWidget`, `NewsWidget`, `FooterLinks`, `ChatLauncher`, `NotificationDropdown`, `UserAvatarDropdown` | DONE |
 
-### Interactive Widgets
-| # | Component | File | Description |
-|---|-----------|------|-------------|
-| 18 | `ChatLauncher` | `ChatLauncher.tsx` | Fixed bottom-right floating chat button, opens ChatPanel |
-| 19 | `NotificationDropdown` | `NotificationDropdown.tsx` | Navbar bell dropdown: notification list with avatar/message/timestamp, read/unread |
-| 20 | `UserAvatarDropdown` | `UserAvatarDropdown.tsx` | Navbar avatar dropdown: user info, Profile/Settings/Sign Out, dark mode toggle |
-| 21 | `FooterLinks` | `FooterLinks.tsx` | Small horizontal footer links + copyright |
-
-### Build Strategy
-- Launch parallel agents grouped by dependency:
-  - **Wave 1** (no deps): Icons, Badge, LoadMoreButton, SearchInput, Tooltip, FooterLinks
-  - **Wave 2** (depends on Icons/Badge): DropdownMenu, TabNav, OffcanvasSidebar, EngagementBar
-  - **Wave 3** (depends on Wave 1-2): CreatePostCard, StoriesSlider, ImageGrid, PollCard, LinkPreviewCard, SponsoredCard, PeopleCarousel, SuggestedStoriesSlider
-  - **Wave 4** (depends on DropdownMenu): NotificationDropdown, UserAvatarDropdown, ChatLauncher
+### Known Issues / Notes
+- **Hooks not yet wired**: `useNavbarActions` and `useSidebarData` hooks exist but AuthenticatedShell currently inlines its logic with static/empty data. Wiring these hooks in will connect real API data to the sidebar widgets and navbar actions.
+- **Unused import**: AuthenticatedShell imports `BellIcon` from `./social/Icons` but does not use it (TypeScript does not flag this since `noUnusedLocals` is not strict). Can be cleaned up.
+- **Processing gate fix**: Pipeline status badge and session audit log correctly gate on processing state, preventing premature display of incomplete transcription/summary data.
 
 ---
 
-## Phase 2: App Integration
+## Phase 1: Component Library — DONE
 
-| # | Task | Description |
-|---|------|-------------|
-| 22 | Wire AppShell into router | Update `App.tsx` so authenticated routes wrap in `AppShell`. Login/signup stay standalone. Remove unused `Layout.tsx` |
-| 23 | Redesign HomePage | 3-column: left=ProfileSidebar (real user), center=CreatePostCard + StoriesSlider + ActivityFeed, right=SuggestionWidget + NewsWidget. Remove inline header |
-| 24 | Adapt ActivityFeed cards | Refactor BroadcastActivityCard, HangoutActivityCard, UploadActivityCard to use PostCard. Map session data → PostCard props. Keep PipelineStatusBadge |
-| 25 | Adapt LiveBroadcastsSlider | Replace with StoriesSlider. "Post a Story" becomes "Go Live". Map live sessions to story cards |
-| 26 | Build real Navbar | Wire with auth: brand, search (filter sessions), nav links, NotificationDropdown, UserAvatarDropdown with sign-out, action buttons (Go Live/Hangout/Upload) |
-| 27 | Build real sidebar data | ProfileSidebar → auth user data. SuggestionWidget → recent broadcasters. NewsWidget → recent recordings/trending. All from real API |
+All 21 components built across 4 waves. See complete file inventory above.
 
----
-
-## Phase 3: Page Redesigns
-
-| # | Page | Key Changes |
-|---|------|-------------|
-| 28 | BroadcastPage | AppShell wrapper, camera preview center, chat in right sidebar, stream controls in Card components |
-| 29 | ViewerPage | Video player center, chat right sidebar, reactions overlay, viewer info below player |
-| 30 | ReplayViewer | Video player center, transcript/summary sidebar, chapters list, reaction timeline |
-| 31 | HangoutPage | Video grid center, chat sidebar, participant list in Cards |
-| 32 | LoginPage | Centered card, brand logo, modern form styling, social login buttons |
-| 33 | SignupPage | Match LoginPage style, terms checkbox, link to login |
+### Build Strategy (completed)
+- **Wave 1** (no deps): Icons, Badge, LoadMoreButton, SearchInput, Tooltip, FooterLinks
+- **Wave 2** (depends on Icons/Badge): DropdownMenu, TabNav, OffcanvasSidebar, EngagementBar
+- **Wave 3** (depends on Wave 1-2): CreatePostCard, StoriesSlider, ImageGrid, PollCard, LinkPreviewCard, SponsoredCard, PeopleCarousel, SuggestedStoriesSlider
+- **Wave 4** (depends on DropdownMenu): NotificationDropdown, UserAvatarDropdown, ChatLauncher
 
 ---
 
-## Phase 4: Polish
+## Phase 2: App Integration — DONE
 
-| # | Task | Description |
-|---|------|-------------|
-| 34 | Dark mode | All components support `dark:` variants, toggle in UserAvatarDropdown, localStorage persistence |
-| 35 | Responsive testing | Test at 375px, 768px, 1200px+. AppShell column collapse, navbar hamburger, offcanvas sidebar |
-| 36 | Page transitions | Fade-in on route change, slide-up cards, skeleton shimmer. Use existing motion library + animate-page-enter |
-| 37 | Docs & demo page | Update barrel exports, create `/components` demo page showcasing all social components |
+| # | Task | Status |
+|---|------|--------|
+| 22 | Wire AppShell into router via AuthenticatedShell | DONE |
+| 23 | Redesign HomePage — 3-column with real components | DONE |
+| 24 | Adapt ActivityFeed cards to use PostCard | DONE |
+| 25 | Adapt LiveBroadcastsSlider to StoriesSlider | DONE |
+| 26 | Build real Navbar with auth, search, dropdowns | DONE |
+| 27 | Build real sidebar data hooks (useNavbarActions, useSidebarData) | DONE |
+
+---
+
+## Phase 3: Page Redesigns — DONE
+
+| # | Page | Status |
+|---|------|--------|
+| 28 | BroadcastPage — AppShell wrapper, camera preview center, chat sidebar | DONE |
+| 29 | ViewerPage — video player center, chat sidebar, reactions overlay | DONE |
+| 30 | ReplayViewer — video player center, transcript/summary sidebar | DONE |
+| 31 | HangoutPage — video grid center, chat sidebar, participant list | DONE |
+| 32 | LoginPage — centered card, brand logo, modern form | DONE |
+| 33 | SignupPage — matches LoginPage style | DONE |
+
+---
+
+## Phase 4: Polish — IN PROGRESS
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 34 | Dark mode | All components support `dark:` variants, toggle in UserAvatarDropdown, localStorage persistence | TODO |
+| 35 | Responsive testing | Test at 375px, 768px, 1200px+. AppShell column collapse, navbar hamburger, offcanvas sidebar | TODO |
+| 36 | Page transitions | Fade-in on route change, slide-up cards, skeleton shimmer. Use existing motion library + animate-page-enter | TODO |
+| 37 | Docs & demo page | Update barrel exports, create `/components` demo page showcasing all social components | IN PROGRESS |
 
 ---
 
@@ -154,7 +163,7 @@ Bootstrap "Social Network & Community" NextJS template (ThemeForest #54508767). 
 - **Center feed**: Stories slider + post composer + post cards (`.card` with header/body/footer)
 - **Right sidebar**: "Who to follow" card + "Today's news" card
 
-### Key Bootstrap Classes → Tailwind Mapping
+### Key Bootstrap Classes -> Tailwind Mapping
 | Bootstrap | Tailwind | Used In |
 |-----------|----------|---------|
 | `.card` | `bg-white rounded-xl shadow-sm overflow-hidden` | Card.tsx |
@@ -199,7 +208,7 @@ li.comment-item
       .bg-light.rounded.p-3 (bubble)
         .d-flex.justify-content-between > h6 (name) + small (time)
         p.small (content)
-      ul.nav.nav-divider.small > Like (N) · Reply · View N replies
+      ul.nav.nav-divider.small > Like (N) . Reply . View N replies
   ul.comment-item-nested (recursive children)
 ```
 
@@ -207,27 +216,27 @@ li.comment-item
 
 ## VNLA-Specific Mapping Details
 
-### CreatePostCard Actions (not generic social — VNLA-specific)
+### CreatePostCard Actions (not generic social -- VNLA-specific)
 Instead of Photo/Video/Event/Feeling, the VNLA composer should have:
-- **Go Live** (red, camera icon) → creates BROADCAST session
-- **Hangout** (purple, users icon) → creates HANGOUT session  
-- **Upload** (green, upload icon) → opens VideoUploadForm modal
+- **Go Live** (red, camera icon) -> creates BROADCAST session
+- **Hangout** (purple, users icon) -> creates HANGOUT session
+- **Upload** (green, upload icon) -> opens VideoUploadForm modal
 - Optional: "Share your thoughts..." text area for future text posts
 
 ### StoriesSlider Content
-- "Post a Story" → "Go Live" dashed card
-- Story thumbnails → active live broadcasts (from LiveBroadcastsSlider data)
+- "Post a Story" -> "Go Live" dashed card
+- Story thumbnails -> active live broadcasts (from LiveBroadcastsSlider data)
 - Each story card: broadcast thumbnail + broadcaster name overlay
-- Click → navigate to `/viewer/:sessionId`
+- Click -> navigate to `/viewer/:sessionId`
 
 ### ProfileSidebar Data
-- `user.name` → `cognito:username` from auth
-- `user.avatar` → generate from initials (no profile photos yet)
-- `user.subtitle` → could be "Member since..." or empty
-- `user.stats` → `[{label: 'Sessions', value: count}, {label: 'Recordings', value: count}]` from activity API
-- `navItems` → Feed (home), My Sessions, Recordings, Settings
+- `user.name` -> `cognito:username` from auth
+- `user.avatar` -> generate from initials (no profile photos yet)
+- `user.subtitle` -> could be "Member since..." or empty
+- `user.stats` -> `[{label: 'Sessions', value: count}, {label: 'Recordings', value: count}]` from activity API
+- `navItems` -> Feed (home), My Sessions, Recordings, Settings
 
-### SuggestionWidget Data  
+### SuggestionWidget Data
 - Pull from activity API: users who have recently broadcast
 - Show as "Active broadcasters" or "Who to watch"
 
@@ -238,6 +247,6 @@ Instead of Photo/Video/Event/Feeling, the VNLA composer should have:
 ### Auth Integration Notes
 - Auth token: `fetchToken()` from `auth/fetchToken.ts`
 - Auth headers: `Authorization: Bearer ${token}`
-- User info: `useAuth()` hook → `user.username` (cognito:username)
+- User info: `useAuth()` hook -> `user.username` (cognito:username)
 - API base: `getConfig()?.apiUrl`
 - Guard fetches: `if (!authToken) return` + add `authToken` to useEffect deps

@@ -4,21 +4,38 @@ import { fetchToken } from '../auth/fetchToken';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
 import { RecordingSlider } from '../features/activity/RecordingSlider';
-import { LiveBroadcastsSlider } from '../features/activity/LiveBroadcastsSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 import { CreatePostCard } from '../components/social/CreatePostCard';
-import { CameraIcon, UsersIcon, UploadIcon } from '../components/social/Icons';
-import { Skeleton } from '../components/social';
+import { CameraIcon, UsersIcon, UploadIcon, PhotoIcon } from '../components/social/Icons';
+import { StoriesSlider, StoryViewer, StoryCreator, Skeleton } from '../components/social';
 import { useActivityData } from '../hooks/useActivityData';
+import { useStories } from '../hooks/useStories';
+import { useStoryViewState } from '../hooks/useStoryViewState';
+
+function formatRelativeTime(isoDate?: string): string {
+  if (!isoDate) return '';
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
 
 export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { sessions, loading: loadingActivity, loadMore, hasMore, loadingMore } = useActivityData();
+  const { storyUsers, markViewed, reactToStory, replyToStory, refresh: refreshStories } = useStories();
+  const { markViewed: markViewedLocal, hasViewed } = useStoryViewState();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
+  const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [error, setError] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
 
@@ -98,6 +115,7 @@ export function HomePage() {
           actions={[
             { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast },
             { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleCreateHangout },
+            { label: 'Story', icon: <PhotoIcon size={16} />, color: 'text-orange-500', onClick: () => setShowStoryCreator(true) },
             { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
           ]}
         />
@@ -126,7 +144,53 @@ export function HomePage() {
           </>
         ) : (
           <>
-            <LiveBroadcastsSlider sessions={sessions} />
+            {/* Stories + Live Broadcasts combined slider */}
+            {(() => {
+              const liveBroadcasts = sessions.filter(
+                (s) => s.sessionType === 'BROADCAST' && s.recordingStatus === 'processing'
+              );
+              const hasContent = storyUsers.length > 0 || liveBroadcasts.length > 0;
+              if (!hasContent) return null;
+              return (
+                <div className="mb-4">
+                  {liveBroadcasts.length > 0 && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                      <h2 className="text-sm font-semibold text-gray-900">Stories & Live</h2>
+                    </div>
+                  )}
+                  {liveBroadcasts.length === 0 && storyUsers.length > 0 && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <h2 className="text-sm font-semibold text-gray-900">Stories</h2>
+                    </div>
+                  )}
+                  <StoriesSlider
+                    stories={[
+                      ...storyUsers.map(group => ({
+                        id: group.userId,
+                        name: group.userId,
+                        thumbnail: group.stories[0]?.segments?.[0]?.url || '',
+                      })),
+                      ...liveBroadcasts.map(session => ({
+                        id: session.sessionId,
+                        name: session.userId,
+                        thumbnail: session.thumbnailUrl || '',
+                        onClick: () => navigate(`/viewer/${session.sessionId}`),
+                      })),
+                    ]}
+                    onCreateStory={() => setShowStoryCreator(true)}
+                    createLabel="Add Story"
+                    onStoryView={(index) => {
+                      if (index < storyUsers.length) {
+                        setStoryViewerStartIndex(index);
+                        setStoryViewerOpen(true);
+                      }
+                      // Live broadcasts use their own onClick handler
+                    }}
+                  />
+                </div>
+              );
+            })()}
             <RecordingSlider sessions={sessions} />
             <ActivityFeed
               sessions={sessions}
@@ -137,6 +201,50 @@ export function HomePage() {
           </>
         )}
       </div>
+
+      {/* Story Viewer */}
+      <StoryViewer
+        isOpen={storyViewerOpen}
+        onClose={() => setStoryViewerOpen(false)}
+        users={storyUsers.map(group => ({
+          id: group.userId,
+          name: group.userId,
+          timestamp: formatRelativeTime(group.stories[0]?.createdAt),
+        }))}
+        initialUserIndex={storyViewerStartIndex}
+        getSegments={(userId) => {
+          const group = storyUsers.find(g => g.userId === userId);
+          if (!group) return [];
+          return group.stories.flatMap(story =>
+            story.segments.map(seg => ({
+              id: seg.segmentId,
+              type: seg.type as 'image' | 'video',
+              src: seg.url,
+              duration: seg.duration,
+            }))
+          );
+        }}
+        onReact={(userId, segmentId, emoji) => {
+          const group = storyUsers.find(g => g.userId === userId);
+          const story = group?.stories[0];
+          if (story) reactToStory(story.sessionId, segmentId, emoji);
+        }}
+        onReply={(userId, segmentId, message) => {
+          const group = storyUsers.find(g => g.userId === userId);
+          const story = group?.stories[0];
+          if (story) replyToStory(story.sessionId, segmentId, message);
+        }}
+      />
+
+      {/* Story Creator */}
+      <StoryCreator
+        isOpen={showStoryCreator}
+        onClose={() => setShowStoryCreator(false)}
+        onPublished={() => {
+          setShowStoryCreator(false);
+          refreshStories();
+        }}
+      />
 
       {/* Upload Modal */}
       {showUploadModal && (

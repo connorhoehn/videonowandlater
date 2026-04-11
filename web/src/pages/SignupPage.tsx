@@ -27,7 +27,7 @@ export function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center p-4 animate-page-enter">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4 animate-page-enter">
       <div className="w-full max-w-sm">
         {/* Logo / Brand */}
         <div className="text-center mb-10">
@@ -36,15 +36,15 @@ export function SignupPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">videonow</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">videonow</h1>
           <p className="text-sm text-gray-400 mt-1.5">Create your account</p>
         </div>
 
-        <Card className="shadow-xl shadow-gray-200/50 border border-gray-100/80">
+        <Card className="shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-100/80 dark:border-gray-700/80 dark:bg-gray-800">
           <Card.Body className="p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Username
               </label>
               <input
@@ -54,13 +54,13 @@ export function SignupPage() {
                 required
                 autoFocus
                 autoComplete="username"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-700/50 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white dark:focus:bg-gray-700 transition-all duration-200"
                 placeholder="Choose a username"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Password
               </label>
               <input
@@ -69,7 +69,7 @@ export function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="new-password"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-700/50 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white dark:focus:bg-gray-700 transition-all duration-200"
                 placeholder="Create a password"
               />
               <div className="mt-2.5 flex items-center gap-1.5 pl-1">
@@ -107,7 +107,7 @@ export function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-gray-400">
             Already have an account?{' '}
-            <Link to="/login" className="text-gray-900 font-semibold hover:text-indigo-600 transition-colors">
+            <Link to="/login" className="text-gray-900 dark:text-white font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
               Sign in
             </Link>
           </p>

@@ -28,7 +28,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center p-4 animate-page-enter">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4 animate-page-enter">
       <div className="w-full max-w-sm">
         {/* Logo / Brand */}
         <div className="text-center mb-10">
@@ -37,15 +37,15 @@ export function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">videonow</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">videonow</h1>
           <p className="text-sm text-gray-400 mt-1.5">Sign in to your account</p>
         </div>
 
-        <Card className="shadow-xl shadow-gray-200/50 border border-gray-100/80">
+        <Card className="shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-100/80 dark:border-gray-700/80 dark:bg-gray-800">
           <Card.Body className="p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Username
               </label>
               <input
@@ -55,13 +55,13 @@ export function LoginPage() {
                 required
                 autoFocus
                 autoComplete="username"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-700/50 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white dark:focus:bg-gray-700 transition-all duration-200"
                 placeholder="Enter your username"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Password
               </label>
               <input
@@ -70,7 +70,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-700/50 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white dark:focus:bg-gray-700 transition-all duration-200"
                 placeholder="Enter your password"
               />
             </div>
@@ -102,7 +102,7 @@ export function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-gray-400">
             Don't have an account?{' '}
-            <Link to="/signup" className="text-gray-900 font-semibold hover:text-indigo-600 transition-colors">
+            <Link to="/signup" className="text-gray-900 dark:text-white font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
               Sign up
             </Link>
           </p>
@@ -116,13 +116,13 @@ export function LoginPage() {
               <div className="w-full border-t border-gray-200/60" />
             </div>
             <div className="relative flex justify-center text-xs text-gray-300">
-              <span className="bg-gradient-to-br from-gray-50 via-white to-gray-100 px-3">or</span>
+              <span className="bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 px-3">or</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => { installMockFetch(); enterDemoMode(); navigate('/'); }}
-            className="mt-4 w-full py-3 rounded-xl border border-gray-200 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 hover:text-gray-700 hover:border-gray-300 active:scale-[0.98] transition-all duration-150"
+            className="mt-4 w-full py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 active:scale-[0.98] transition-all duration-150"
           >
             Continue in Demo Mode
           </button>

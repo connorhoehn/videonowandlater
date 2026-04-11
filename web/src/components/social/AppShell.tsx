@@ -9,7 +9,7 @@ interface AppShellProps {
 
 export function AppShell({ navbar, leftSidebar, rightSidebar, children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       {navbar}
 
       <div className="max-w-[1200px] mx-auto px-4 pt-20 pb-8">

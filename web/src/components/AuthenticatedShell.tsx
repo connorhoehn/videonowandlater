@@ -4,6 +4,7 @@ import { AnimatePresence } from 'motion/react';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useNavbarActions } from '../hooks/useNavbarActions';
 import { useSidebarData } from '../hooks/useSidebarData';
+import { ActivityProvider } from '../hooks/useActivityData';
 import { PageTransition } from './PageTransition';
 import {
   AppShell,
@@ -86,7 +87,7 @@ export function AuthenticatedShell() {
   );
 
   return (
-    <>
+    <ActivityProvider>
       <AppShell
         navbar={navbar}
         leftSidebar={leftSidebar}
@@ -126,6 +127,6 @@ export function AuthenticatedShell() {
       </OffcanvasSidebar>
 
       <ChatLauncher />
-    </>
+    </ActivityProvider>
   );
 }

@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getConfig } from '../config/aws-config';
 import { useAuth } from '../auth/useAuth';
+import { useActivityData } from './useActivityData';
 import type { SuggestionUser } from '../components/social';
 import type { NewsItem } from '../components/social';
 
@@ -13,26 +12,7 @@ interface SidebarData {
 
 export function useSidebarData(): SidebarData {
   const { user } = useAuth();
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchActivity = async () => {
-      const config = getConfig();
-      if (!config?.apiUrl) { setLoading(false); return; }
-      try {
-        const response = await fetch(`${config.apiUrl}/activity`);
-        if (!response.ok) throw new Error(`${response.status}`);
-        const data = await response.json();
-        setSessions(data.sessions || []);
-      } catch (err) {
-        console.error('Error fetching sidebar data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchActivity();
-  }, []);
+  const { sessions, loading } = useActivityData();
 
   // Derive profile stats from sessions
   const mySessions = sessions.filter(s => s.userId === user?.username);

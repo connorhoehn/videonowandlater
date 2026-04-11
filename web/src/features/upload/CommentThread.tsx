@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { EmptyState, ChatIcon } from '../../components/social';
 import { getConfig } from '../../config/aws-config';
 import { useCommentHighlight } from './useCommentHighlight';
 
@@ -127,9 +128,12 @@ export function CommentThread({ sessionId, authToken, syncTime, onSeek }: Commen
           <div className="p-4 text-center text-red-500 text-sm animate-fade-in">{fetchError}</div>
         )}
         {!loading && !fetchError && sortedComments.length === 0 && (
-          <div className="p-4 text-center text-gray-400 text-sm animate-fade-in">
-            No comments yet -- be the first!
-          </div>
+          <EmptyState
+            title="No comments yet"
+            description="Be the first to comment!"
+            icon={<ChatIcon className="w-8 h-8 text-gray-300" />}
+            variant="compact"
+          />
         )}
         {!loading &&
           sortedComments.map((comment) => {

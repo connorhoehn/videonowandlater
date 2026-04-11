@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EmptyState, VideoIcon } from '../../components/social';
 
 export interface Recording {
   sessionId: string;
@@ -51,16 +52,11 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
 
   if (recordings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
-        <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="7" width="20" height="15" rx="2" ry="2" />
-            <polyline points="17 2 12 7 7 2" />
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-gray-500">No recordings yet</p>
-        <p className="text-xs mt-1 text-gray-400">Go live to create your first recording</p>
-      </div>
+      <EmptyState
+        title="No recordings yet"
+        description="Go live to create your first recording"
+        icon={<VideoIcon className="w-8 h-8 text-gray-300" />}
+      />
     );
   }
 

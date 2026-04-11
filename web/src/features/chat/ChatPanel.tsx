@@ -4,7 +4,7 @@ import { useChatRoomContext } from './ChatRoomProvider';
 import { ChatMessagesProvider, useChatMessagesContext } from './ChatMessagesProvider';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { EmptyState } from './EmptyState';
+import { EmptyState, ChatIcon } from '../../components/social';
 import { LoadingState } from './LoadingState';
 import { getConfig } from '../../config/aws-config';
 
@@ -105,7 +105,12 @@ const ChatPanelContent: React.FC<ChatPanelContentProps> = ({
         {isLoadingHistory ? (
           <LoadingState />
         ) : messages.length === 0 ? (
-          <EmptyState />
+          <EmptyState
+            title="Be the first to say hi!"
+            description="Start the conversation below"
+            icon={<ChatIcon className="w-8 h-8 text-gray-300" />}
+            variant="compact"
+          />
         ) : (
           <MessageList
             messages={messages}

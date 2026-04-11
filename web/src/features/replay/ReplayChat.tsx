@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../../../../backend/src/domain/chat-message';
+import { EmptyState, ChatIcon } from '../../components/social';
 import { useSynchronizedChat } from './useSynchronizedChat';
 import { getConfig } from '../../config/aws-config';
 
@@ -111,9 +112,11 @@ export function ReplayChat({ sessionId, currentSyncTime, authToken }: ReplayChat
       {/* Message List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {visibleMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-gray-500">No messages yet</p>
-          </div>
+          <EmptyState
+            title="No messages yet"
+            icon={<ChatIcon className="w-8 h-8 text-gray-300" />}
+            variant="compact"
+          />
         ) : (
           <>
             {visibleMessages.map((message) => (

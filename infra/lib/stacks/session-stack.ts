@@ -33,6 +33,7 @@ export class SessionStack extends Stack {
   public readonly recordingEndRule: events.Rule;
   public readonly recordingsBucket!: s3.Bucket;
   public readonly mediaConvertTopic!: sns.Topic;
+  public readonly cloudfrontDomainName!: string;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -196,6 +197,8 @@ export class SessionStack extends Stack {
       },
       comment: 'CloudFront distribution for VNL session recordings',
     });
+
+    this.cloudfrontDomainName = distribution.distributionDomainName;
 
     // Grant CloudFront access to S3 bucket
     this.recordingsBucket.addToResourcePolicy(

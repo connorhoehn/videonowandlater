@@ -1,4 +1,4 @@
-import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Stack, StackProps, CfnOutput, Duration } from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -16,6 +16,7 @@ export interface ApiStackProps extends StackProps {
   sessionsTable: dynamodb.ITable;
   recordingsBucket?: s3.IBucket;
   mediaConvertTopic?: sns.ITopic;
+  cloudfrontDomainName?: string;
 }
 
 export class ApiStack extends Stack {
@@ -304,13 +305,14 @@ export class ApiStack extends Stack {
     const sessionTranscriptResource = sessionIdResource.addResource('transcript');
 
     // GET /sessions/{sessionId}/transcript (get transcript)
+    const transcriptionBucketName = props.recordingsBucket?.bucketName ?? 'vnl-transcription-vnl-session';
     const getTranscriptHandler = new NodejsFunction(this, 'GetTranscriptHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-transcript.ts'),
       handler: 'handler',
       runtime: Runtime.NODEJS_20_X,
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
-        TRANSCRIPTION_BUCKET: 'vnl-transcription-vnl-session',
+        TRANSCRIPTION_BUCKET: transcriptionBucketName,
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
@@ -318,12 +320,16 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadData(getTranscriptHandler);
 
     // Grant S3 read access to transcription bucket
-    getTranscriptHandler.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: ['arn:aws:s3:::vnl-transcription-vnl-session/*'],
-      })
-    );
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantRead(getTranscriptHandler);
+    } else {
+      getTranscriptHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['s3:GetObject'],
+          resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+        })
+      );
+    }
 
     sessionTranscriptResource.addMethod('GET', new apigateway.LambdaIntegration(getTranscriptHandler), {
       authorizer,
@@ -340,19 +346,23 @@ export class ApiStack extends Stack {
       runtime: Runtime.NODEJS_20_X,
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
-        TRANSCRIPTION_BUCKET: 'vnl-transcription-vnl-session',
+        TRANSCRIPTION_BUCKET: transcriptionBucketName,
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
 
     props.sessionsTable.grantReadData(getSpeakerSegmentsHandler);
 
-    getSpeakerSegmentsHandler.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: ['arn:aws:s3:::vnl-transcription-vnl-session/*'],
-      })
-    );
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantRead(getSpeakerSegmentsHandler);
+    } else {
+      getSpeakerSegmentsHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['s3:GetObject'],
+          resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+        })
+      );
+    }
 
     sessionSpeakerSegmentsResource.addMethod('GET', new apigateway.LambdaIntegration(getSpeakerSegmentsHandler), {
       authorizer,
@@ -705,6 +715,7 @@ export class ApiStack extends Stack {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-stories-feed.ts'),
       handler: 'handler',
       runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
       environment: { TABLE_NAME: props.sessionsTable.tableName },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
@@ -716,23 +727,29 @@ export class ApiStack extends Stack {
     const storyIdResource = stories.addResource('{sessionId}');
 
     // POST /stories/{sessionId}/segments — add segment with presigned upload URL
+    const storyBucketName = props.recordingsBucket?.bucketName ?? 'vnl-transcription-vnl-session';
     const addStorySegmentHandler = new NodejsFunction(this, 'AddStorySegmentHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/add-story-segment.ts'),
       handler: 'handler',
       runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
-        STORY_BUCKET: 'vnl-transcription-vnl-session', // reuse transcription bucket for story media
-        CLOUDFRONT_DOMAIN: '', // will be set via CfnOutput or parameter
+        STORY_BUCKET: storyBucketName,
+        CLOUDFRONT_DOMAIN: props.cloudfrontDomainName ?? '',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
     props.sessionsTable.grantReadWriteData(addStorySegmentHandler);
     // S3 write access for presigned URLs
-    addStorySegmentHandler.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['s3:PutObject'],
-      resources: ['arn:aws:s3:::vnl-transcription-vnl-session/stories/*'],
-    }));
+    if (props.recordingsBucket) {
+      props.recordingsBucket.grantPut(addStorySegmentHandler, 'stories/*');
+    } else {
+      addStorySegmentHandler.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['s3:PutObject'],
+        resources: [`arn:aws:s3:::${storyBucketName}/stories/*`],
+      }));
+    }
     const segmentsResource = storyIdResource.addResource('segments');
     segmentsResource.addMethod('POST', new apigateway.LambdaIntegration(addStorySegmentHandler), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
@@ -745,7 +762,7 @@ export class ApiStack extends Stack {
       runtime: Runtime.NODEJS_20_X,
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
-        CLOUDFRONT_DOMAIN: '', // needs to match transcription bucket CloudFront
+        CLOUDFRONT_DOMAIN: props.cloudfrontDomainName ?? '',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
@@ -808,6 +825,20 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadData(getStoryViewersHandler);
     const viewersResource = storyIdResource.addResource('viewers');
     viewersResource.addMethod('GET', new apigateway.LambdaIntegration(getStoryViewersHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /stories/{sessionId}/replies — get story replies (owner only)
+    const getStoryRepliesHandler = new NodejsFunction(this, 'GetStoryRepliesHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-story-replies.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getStoryRepliesHandler);
+    const repliesResource = storyIdResource.addResource('replies');
+    repliesResource.addMethod('GET', new apigateway.LambdaIntegration(getStoryRepliesHandler), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 

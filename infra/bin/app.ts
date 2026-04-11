@@ -18,6 +18,7 @@ new ApiStack(app, 'VNL-Api', {
   sessionsTable: sessionStack.table,
   recordingsBucket: sessionStack.recordingsBucket,
   mediaConvertTopic: sessionStack.mediaConvertTopic,
+  cloudfrontDomainName: sessionStack.cloudfrontDomainName,
 });
 new MonitoringStack(app, 'VNL-Monitoring', { env });
 new WebStack(app, 'VNL-Web', { env });

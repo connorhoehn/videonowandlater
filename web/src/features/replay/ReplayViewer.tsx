@@ -80,6 +80,8 @@ export function ReplayViewer() {
     fetchToken().then(({ token, username }) => {
       if (username) setCurrentUserId(username);
       setAuthToken(token);
+    }).catch((err) => {
+      console.error('Failed to get auth session:', err);
     });
   }, []);
 

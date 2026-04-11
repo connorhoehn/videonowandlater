@@ -182,7 +182,11 @@ function BroadcastContent({
 
   // Handle sending reaction
   const handleReaction = async (emoji: EmojiType) => {
-    await sendReaction(emoji);
+    try {
+      await sendReaction(emoji);
+    } catch (err) {
+      console.error('Failed to send reaction:', err);
+    }
     // Optimistic UI: immediately add to floatingReactions
     setFloatingReactions((prev) => [
       ...prev,

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card } from './Card';
 import { CloseIcon, UploadIcon, CheckIcon, PhotoIcon, VideoIcon } from './Icons';
 import { useStoryCreator } from '../../hooks/useStoryCreator';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export interface StoryCreatorProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export interface StoryCreatorProps {
 const MAX_SEGMENTS = 10;
 
 export function StoryCreator({ isOpen, onClose, onPublished }: StoryCreatorProps) {
+  const trapRef = useFocusTrap(isOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const { segments, isPublishing, error, startStory, addFiles, publish, removeSegment } =
@@ -99,6 +101,7 @@ export function StoryCreator({ isOpen, onClose, onPublished }: StoryCreatorProps
       `}</style>
 
       <div
+        ref={trapRef}
         className="max-w-md w-full mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
         style={{ animation: 'story-creator-in 150ms ease-out' }}
         onClick={(e) => e.stopPropagation()}

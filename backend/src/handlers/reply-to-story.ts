@@ -122,6 +122,17 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
+    if (session.storyExpiresAt && new Date(session.storyExpiresAt) < new Date()) {
+      return {
+        statusCode: 410,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Story has expired' }),
+      };
+    }
+
     const replyId = uuid();
     const reply: StoryReply = {
       replyId,

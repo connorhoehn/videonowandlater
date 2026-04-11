@@ -120,7 +120,7 @@ export function SponsoredCard({
 
         {image && (
           <div className="w-full">
-            <img src={image} alt="" className="w-full object-cover" />
+            <img src={image} alt={`${brand.name} sponsored content`} className="w-full object-cover" />
           </div>
         )}
       </Card.Body>

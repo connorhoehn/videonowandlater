@@ -8,6 +8,17 @@
 import type { APIGatewayProxyEvent, ScheduledEvent } from 'aws-lambda';
 import { SessionStatus, SessionType } from '../../domain/session';
 import type { Session } from '../../domain/session';
+import { handler as createStorySessionHandler } from '../create-story-session';
+import { handler as addStorySegmentHandler } from '../add-story-segment';
+import { handler as publishStoryHandler } from '../publish-story';
+import { handler as getStoriesFeedHandler } from '../get-stories-feed';
+import { handler as viewStoryHandler } from '../view-story';
+import { handler as reactToStoryHandler } from '../react-to-story';
+import { handler as replyToStoryHandler } from '../reply-to-story';
+import { handler as getStoryViewersHandler } from '../get-story-viewers';
+import { handler as deleteStoryHandler } from '../delete-story';
+import { handler as expireStoriesHandler } from '../expire-stories';
+import { handler as getStoryReactionsHandler } from '../get-story-reactions';
 
 // Mock dependencies
 jest.mock('../../repositories/story-repository');
@@ -23,7 +34,7 @@ jest.mock('uuid', () => ({
   v4: jest.fn().mockReturnValue('mock-uuid-1234'),
 }));
 
-import { createStorySession, addStorySegment, publishStory, recordStoryView, getActiveStories, hasUserViewedStory, reactToStory, createStoryReply, getStoryViewers, expireOldStories } from '../../repositories/story-repository';
+import { createStorySession, addStorySegment, publishStory, recordStoryView, getActiveStories, hasUserViewedStory, reactToStory, createStoryReply, getStoryViewers, getStoryReactions, expireOldStories, deleteStory } from '../../repositories/story-repository';
 import { getSessionById } from '../../repositories/session-repository';
 
 const mockCreateStorySession = createStorySession as jest.MockedFunction<typeof createStorySession>;
@@ -35,7 +46,9 @@ const mockHasUserViewedStory = hasUserViewedStory as jest.MockedFunction<typeof 
 const mockReactToStory = reactToStory as jest.MockedFunction<typeof reactToStory>;
 const mockCreateStoryReply = createStoryReply as jest.MockedFunction<typeof createStoryReply>;
 const mockGetStoryViewers = getStoryViewers as jest.MockedFunction<typeof getStoryViewers>;
+const mockGetStoryReactions = getStoryReactions as jest.MockedFunction<typeof getStoryReactions>;
 const mockExpireOldStories = expireOldStories as jest.MockedFunction<typeof expireOldStories>;
+const mockDeleteStory = deleteStory as jest.MockedFunction<typeof deleteStory>;
 const mockGetSessionById = getSessionById as jest.MockedFunction<typeof getSessionById>;
 
 const TABLE_NAME = 'test-table';
@@ -85,7 +98,7 @@ const makeStorySession = (overrides: Partial<Session> = {}): Session => ({
   claimedResources: { chatRoom: '' },
   createdAt: '2026-04-10T10:00:00Z',
   version: 1,
-  storyExpiresAt: '2026-04-11T10:00:00Z',
+  storyExpiresAt: '2099-12-31T23:59:59Z',
   storySegments: [],
   storyViewCount: 0,
   storyReplyCount: 0,
@@ -99,7 +112,7 @@ describe('create-story-session handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../create-story-session')).handler;
+    handler = createStorySessionHandler;
   });
 
   it('should return 401 when userId is missing', async () => {
@@ -155,7 +168,7 @@ describe('add-story-segment handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../add-story-segment')).handler;
+    handler = addStorySegmentHandler;
   });
 
   const segmentEvent = (body: any, sessionId = 'session-123', authed = true) =>
@@ -325,7 +338,7 @@ describe('publish-story handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../publish-story')).handler;
+    handler = publishStoryHandler;
   });
 
   const publishEvent = (sessionId = 'session-123', authed = true) =>
@@ -439,7 +452,7 @@ describe('get-stories-feed handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../get-stories-feed')).handler;
+    handler = getStoriesFeedHandler;
   });
 
   it('should return 401 when userId is missing', async () => {
@@ -506,7 +519,7 @@ describe('view-story handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../view-story')).handler;
+    handler = viewStoryHandler;
   });
 
   it('should return 401 when userId is missing', async () => {
@@ -556,7 +569,7 @@ describe('react-to-story handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../react-to-story')).handler;
+    handler = reactToStoryHandler;
   });
 
   const reactEvent = (body: any, sessionId = 'session-123', authed = true) =>
@@ -630,6 +643,17 @@ describe('react-to-story handler', () => {
     expect(JSON.parse(result.body).error).toContain('not a story');
   });
 
+  it('should return 410 when story has expired', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({ status: SessionStatus.LIVE, storyExpiresAt: '2020-01-01T00:00:00Z' }));
+
+    const event = reactEvent({ segmentId: 'seg-1', emoji: '🔥' });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(410);
+    expect(JSON.parse(result.body).error).toContain('expired');
+  });
+
   it('should return 201 on success', async () => {
     mockGetSessionById.mockResolvedValue(makeStorySession({ status: SessionStatus.LIVE }));
     mockReactToStory.mockResolvedValue();
@@ -662,7 +686,7 @@ describe('reply-to-story handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../reply-to-story')).handler;
+    handler = replyToStoryHandler;
   });
 
   const replyEvent = (body: any, sessionId = 'session-123', authed = true) =>
@@ -746,6 +770,17 @@ describe('reply-to-story handler', () => {
     expect(JSON.parse(result.body).error).toContain('not a story');
   });
 
+  it('should return 410 when story has expired', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({ status: SessionStatus.LIVE, storyExpiresAt: '2020-01-01T00:00:00Z' }));
+
+    const event = replyEvent({ segmentId: 'seg-1', message: 'cool!' });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(410);
+    expect(JSON.parse(result.body).error).toContain('expired');
+  });
+
   it('should return 201 on success with replyId', async () => {
     mockGetSessionById.mockResolvedValue(makeStorySession({ status: SessionStatus.LIVE }));
     mockCreateStoryReply.mockResolvedValue();
@@ -799,7 +834,7 @@ describe('get-story-viewers handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../get-story-viewers')).handler;
+    handler = getStoryViewersHandler;
   });
 
   const viewersEvent = (sessionId = 'session-123', authed = true) =>
@@ -841,6 +876,16 @@ describe('get-story-viewers handler', () => {
 
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toContain('not a story');
+  });
+
+  it('should return 410 when story has expired', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({ storyExpiresAt: '2020-01-01T00:00:00Z' }));
+    const event = viewersEvent();
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(410);
+    expect(JSON.parse(result.body).error).toContain('expired');
   });
 
   it('should return 403 when non-owner requests viewers', async () => {
@@ -899,13 +944,200 @@ describe('get-story-viewers handler', () => {
 });
 
 // ===========================
+// get-story-reactions handler
+// ===========================
+describe('get-story-reactions handler', () => {
+  let handler: any;
+
+  beforeEach(async () => {
+    handler = getStoryReactionsHandler;
+  });
+
+  const reactionsEvent = (sessionId = 'session-123', authed = true) =>
+    authed
+      ? createEvent({ pathParameters: { sessionId } })
+      : createUnauthEvent({ pathParameters: { sessionId } });
+
+  it('should return 401 when userId is missing', async () => {
+    const event = reactionsEvent('session-123', false);
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(401);
+  });
+
+  it('should return 403 when non-owner requests reactions', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({ userId: 'other-user' }));
+    const event = reactionsEvent();
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toContain('owner');
+  });
+
+  it('should return 200 with reactions array and summary', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession());
+    const reactions = [
+      { sessionId: 'session-123', segmentId: 'seg-1', userId: 'viewer-1', emoji: '\u{1F525}', createdAt: '2026-04-10T10:05:00Z' },
+      { sessionId: 'session-123', segmentId: 'seg-1', userId: 'viewer-2', emoji: '\u{1F525}', createdAt: '2026-04-10T10:06:00Z' },
+      { sessionId: 'session-123', segmentId: 'seg-2', userId: 'viewer-1', emoji: '\u2764\uFE0F', createdAt: '2026-04-10T10:07:00Z' },
+    ];
+    mockGetStoryReactions.mockResolvedValue(reactions);
+
+    const event = reactionsEvent();
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.reactions).toHaveLength(3);
+    expect(body.summary).toEqual({ '\u{1F525}': 2, '\u2764\uFE0F': 1 });
+    expect(mockGetStoryReactions).toHaveBeenCalledWith(TABLE_NAME, 'session-123');
+  });
+
+  it('should return 410 when story has expired', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      storyExpiresAt: '2020-01-01T00:00:00Z',
+    }));
+    const event = reactionsEvent();
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(410);
+    expect(JSON.parse(result.body).error).toContain('expired');
+  });
+});
+
+// ===========================
+// delete-story handler
+// ===========================
+describe('delete-story handler', () => {
+  let handler: any;
+
+  beforeEach(async () => {
+    handler = deleteStoryHandler;
+  });
+
+  it('should return 401 when no userId', async () => {
+    const event = createUnauthEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(401);
+    expect(JSON.parse(result.body).error).toBe('Unauthorized');
+  });
+
+  it('should return 400 when missing sessionId', async () => {
+    const event = createEvent();
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('sessionId required');
+  });
+
+  it('should return 404 when session not found', async () => {
+    mockGetSessionById.mockResolvedValue(null);
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'nonexistent' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(404);
+    expect(JSON.parse(result.body).error).toBe('Session not found');
+  });
+
+  it('should return 400 when not STORY type', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      sessionType: SessionType.BROADCAST,
+    }));
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('Session is not a story');
+  });
+
+  it('should return 403 when non-owner', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      userId: 'other-user',
+    }));
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toBe('Only the story owner can delete the story');
+  });
+
+  it('should return 400 when already ENDED', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      status: SessionStatus.ENDED,
+    }));
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('Story is already ended');
+  });
+
+  it('should return 200 on success', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      status: SessionStatus.LIVE,
+    }));
+    mockDeleteStory.mockResolvedValue(undefined);
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)).toEqual({ ok: true });
+    expect(mockDeleteStory).toHaveBeenCalledWith(TABLE_NAME, 'session-123');
+  });
+
+  it('should return 500 when repository throws', async () => {
+    mockGetSessionById.mockResolvedValue(makeStorySession({
+      status: SessionStatus.LIVE,
+    }));
+    mockDeleteStory.mockRejectedValue(new Error('DynamoDB error'));
+
+    const event = createEvent({
+      pathParameters: { sessionId: 'session-123' },
+    });
+
+    const result = await handler(event, {} as any, {} as any);
+
+    expect(result.statusCode).toBe(500);
+  });
+});
+
+// ===========================
 // expire-stories handler
 // ===========================
 describe('expire-stories handler', () => {
   let handler: any;
 
   beforeEach(async () => {
-    handler = (await import('../expire-stories')).handler;
+    handler = expireStoriesHandler;
   });
 
   const scheduledEvent: ScheduledEvent = {
@@ -930,6 +1162,15 @@ describe('expire-stories handler', () => {
 
   it('should call expireOldStories when no stories need expiring', async () => {
     mockExpireOldStories.mockResolvedValue(0);
+
+    await handler(scheduledEvent, {} as any, {} as any);
+
+    expect(mockExpireOldStories).toHaveBeenCalledWith(TABLE_NAME);
+  });
+
+  it('should expire abandoned CREATING stories via expireOldStories', async () => {
+    // expireOldStories now handles both expired LIVE and abandoned CREATING stories
+    mockExpireOldStories.mockResolvedValue(2);
 
     await handler(scheduledEvent, {} as any, {} as any);
 

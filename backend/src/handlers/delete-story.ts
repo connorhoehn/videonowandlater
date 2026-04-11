@@ -1,18 +1,20 @@
 /**
- * POST /stories/{sessionId}/view handler - record a story view
+ * DELETE /stories/{sessionId} handler - delete own story (owner only)
+ * Sets status to ENDED and expires the story immediately.
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
 import { getSessionById } from '../repositories/session-repository';
-import { recordStoryView } from '../repositories/story-repository';
+import { deleteStory } from '../repositories/story-repository';
+import { SessionType, SessionStatus } from '../domain/session';
+import { Logger } from '@aws-lambda-powertools/logger';
 
-const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'view-story' } });
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'delete-story' } });
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
-  const userId = event.requestContext.authorizer?.claims?.['cognito:username'];
 
+  const userId = event.requestContext?.authorizer?.claims?.['cognito:username'];
   if (!userId) {
     return {
       statusCode: 401,
@@ -45,22 +47,44 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Story not found' }),
+        body: JSON.stringify({ error: 'Session not found' }),
       };
     }
 
-    if (session.storyExpiresAt && new Date(session.storyExpiresAt) < new Date()) {
+    if (session.sessionType !== SessionType.STORY) {
       return {
-        statusCode: 410,
+        statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Story has expired' }),
+        body: JSON.stringify({ error: 'Session is not a story' }),
       };
     }
 
-    await recordStoryView(tableName, sessionId, userId);
+    if (session.userId !== userId) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Only the story owner can delete the story' }),
+      };
+    }
+
+    if (session.status === SessionStatus.ENDED) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Story is already ended' }),
+      };
+    }
+
+    await deleteStory(tableName, sessionId);
 
     return {
       statusCode: 200,
@@ -70,8 +94,8 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       },
       body: JSON.stringify({ ok: true }),
     };
-  } catch (error) {
-    logger.error('Error recording story view', { sessionId, error: error instanceof Error ? error.message : String(error) });
+  } catch (error: any) {
+    logger.error('Error deleting story', { sessionId, error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,
@@ -79,7 +103,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'Failed to record story view' }),
+      body: JSON.stringify({ error: 'Failed to delete story' }),
     };
   }
 };

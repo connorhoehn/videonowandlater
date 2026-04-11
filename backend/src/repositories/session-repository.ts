@@ -762,7 +762,7 @@ export async function getRecentActivity(
   const result = await docClient.send(
     new ScanCommand({
       TableName: tableName,
-      FilterExpression: 'begins_with(PK, :session) AND (#status IN (:ending, :ended) OR (#sessionType = :upload AND attribute_exists(#uploadStatus)))',
+      FilterExpression: 'begins_with(PK, :session) AND (#status IN (:ending, :ended) OR (#sessionType = :upload AND attribute_exists(#uploadStatus)) OR (#sessionType = :story AND #status = :live))',
       ExpressionAttributeNames: {
         '#status': 'status',
         '#sessionType': 'sessionType',
@@ -773,6 +773,8 @@ export async function getRecentActivity(
         ':ending': SessionStatus.ENDING,
         ':ended': SessionStatus.ENDED,
         ':upload': SessionType.UPLOAD,
+        ':story': SessionType.STORY,
+        ':live': SessionStatus.LIVE,
       },
       Limit: safeLimit * 3,
       ...(exclusiveStartKey && { ExclusiveStartKey: exclusiveStartKey }),

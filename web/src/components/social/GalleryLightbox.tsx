@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CloseIcon, ChevronLeftIcon, ChevronRightIcon } from './Icons';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface GalleryLightboxProps {
   images: { src: string; alt?: string }[];
@@ -14,6 +15,7 @@ export function GalleryLightbox({
   isOpen,
   onClose,
 }: GalleryLightboxProps) {
+  const trapRef = useFocusTrap(isOpen);
   const [index, setIndex] = useState(initialIndex);
   const [visible, setVisible] = useState(false);
 
@@ -72,6 +74,7 @@ export function GalleryLightbox({
 
   return (
     <div
+      ref={trapRef}
       className={`fixed inset-0 bg-black/90 z-50 flex items-center justify-center transition-opacity duration-200 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}

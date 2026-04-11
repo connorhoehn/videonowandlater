@@ -12,7 +12,7 @@ import { ReactionSummaryPills } from './ReactionSummaryPills';
 export interface ActivitySession {
   sessionId: string;
   userId: string;
-  sessionType: 'BROADCAST' | 'HANGOUT' | 'UPLOAD';
+  sessionType: 'BROADCAST' | 'HANGOUT' | 'UPLOAD' | 'STORY';
   thumbnailUrl?: string;
   recordingDuration?: number; // milliseconds
   createdAt: string;
@@ -58,7 +58,7 @@ function RecordingCard({ session, navigate }: { session: ActivitySession; naviga
         {showThumbnail ? (
           <img
             src={thumbnailSrc}
-            alt=""
+            alt={`${session.sourceFileName || session.userId} recording thumbnail`}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover group-hover:brightness-95 transition-all duration-200"
           />

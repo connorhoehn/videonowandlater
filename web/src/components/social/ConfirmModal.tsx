@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { Card } from './Card';
 import { CloseIcon } from './Icons';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export interface ConfirmModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export function ConfirmModal({
   variant = 'default',
   loading = false,
 }: ConfirmModalProps) {
+  const trapRef = useFocusTrap(isOpen);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -69,6 +72,7 @@ export function ConfirmModal({
       `}</style>
 
       <div
+        ref={trapRef}
         className="max-w-sm w-full mx-4"
         style={{ animation: 'confirm-modal-in 150ms ease-out' }}
         onClick={(e) => e.stopPropagation()}

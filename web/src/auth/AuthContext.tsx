@@ -36,6 +36,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser({ username: session.username });
       }
       setIsLoading(false);
+    }).catch((err) => {
+      console.error('Failed to check auth session:', err);
+      setIsLoading(false);
     });
   }, []);
 

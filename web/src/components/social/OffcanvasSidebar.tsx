@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from 'react';
 import { CloseIcon } from './Icons';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface OffcanvasSidebarProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export function OffcanvasSidebar({
   children,
   className = '',
 }: OffcanvasSidebarProps) {
+  const trapRef = useFocusTrap(isOpen);
   const [visible, setVisible] = useState(false);
   const [animating, setAnimating] = useState(false);
 
@@ -83,6 +85,7 @@ export function OffcanvasSidebar({
 
       {/* Panel */}
       <div
+        ref={trapRef}
         className={`fixed top-0 ${side === 'left' ? 'left-0' : 'right-0'} z-50 h-full ${width} max-w-[85vw] flex flex-col bg-white shadow-2xl dark:bg-gray-900 ${panelTranslate} transition-transform duration-300 ease-in-out ${className}`}
       >
         {/* Header */}

@@ -8,6 +8,7 @@ import {
 import { Avatar } from './Avatar';
 import { CloseIcon, EllipsisIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, ChatIcon } from './Icons';
 import { CommentThread, type Comment } from './CommentThread';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -76,6 +77,7 @@ export function StoryViewer({
   const [commentText, setCommentText] = useState('');
 
   /* ---- refs ---- */
+  const trapRef = useFocusTrap(isOpen);
   const videoRef = useRef<HTMLVideoElement>(null);
   const rafRef = useRef<number>(0);
   const startTimeRef = useRef(0);
@@ -372,7 +374,10 @@ export function StoryViewer({
 
   return (
     <div
-      ref={containerRef}
+      ref={(el) => {
+        containerRef.current = el;
+        (trapRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+      }}
       className={`fixed inset-0 z-50 bg-black transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
     >
       <style>{`
@@ -447,7 +452,7 @@ export function StoryViewer({
           {segment.type === 'image' ? (
             <img
               src={segment.src}
-              alt=""
+              alt={`${user.name} story`}
               className="max-w-full max-h-full object-contain"
             />
           ) : (

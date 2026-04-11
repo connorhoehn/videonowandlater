@@ -170,13 +170,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const apiUrl = getConfig()?.apiUrl;
     if (!apiUrl) return;
     try {
-      await fetch(`${apiUrl}/sessions/${sessionId}/bounce`, {
+      const response = await fetch(`${apiUrl}/sessions/${sessionId}/bounce`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({ userId: targetUserId }),
       });
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+      showToast('User bounced');
     } catch (err) {
-      console.error('Bounce failed:', err);
+      console.error('Failed to bounce user:', err);
     }
   };
 
@@ -185,14 +187,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const apiUrl = getConfig()?.apiUrl;
     if (!apiUrl) return;
     try {
-      await fetch(`${apiUrl}/sessions/${sessionId}/report`, {
+      const response = await fetch(`${apiUrl}/sessions/${sessionId}/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({ msgId, reportedUserId }),
       });
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
       showToast('Message reported');
     } catch (err) {
-      console.error('Report failed:', err);
+      console.error('Failed to report message:', err);
     }
   };
 

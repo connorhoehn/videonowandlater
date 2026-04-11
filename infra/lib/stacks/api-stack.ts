@@ -842,6 +842,20 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // GET /stories/{sessionId}/reactions — get story reactions (owner only)
+    const getStoryReactionsHandler = new NodejsFunction(this, 'GetStoryReactionsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-story-reactions.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getStoryReactionsHandler);
+    const storyReactionsResource = storyIdResource.addResource('reactions');
+    storyReactionsResource.addMethod('GET', new apigateway.LambdaIntegration(getStoryReactionsHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

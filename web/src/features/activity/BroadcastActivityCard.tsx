@@ -73,7 +73,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         {showThumbnail ? (
           <img
             src={thumbnailSrc}
-            alt=""
+            alt={`${session.userId} broadcast thumbnail`}
             data-testid="thumbnail"
             onError={() => setImgError(true)}
             className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"

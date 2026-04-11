@@ -8,7 +8,7 @@ import { getDocumentClient } from '../lib/dynamodb-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 import type { Session } from '../domain/session';
 import { SessionStatus, SessionType } from '../domain/session';
-import type { StorySegment, StoryView, StoryReply } from '../domain/story';
+import type { StorySegment, StoryView, StoryReply, StoryReaction } from '../domain/story';
 
 const logger = new Logger({ serviceName: 'vnl-story-repository' });
 
@@ -155,6 +155,37 @@ export async function updateStorySegmentsWithUrls(
   }));
 
   logger.info('Updated story segments with URLs', { sessionId, segmentCount: segments.length });
+}
+
+/**
+ * Delete a story (set status to ENDED and expire immediately)
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to delete
+ */
+export async function deleteStory(
+  tableName: string,
+  sessionId: string,
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET #status = :ended, storyExpiresAt = :now, GSI1PK = :gsi1pk, #version = #version + :inc',
+    ExpressionAttributeNames: { '#status': 'status', '#version': 'version' },
+    ExpressionAttributeValues: {
+      ':ended': SessionStatus.ENDED,
+      ':now': new Date().toISOString(),
+      ':gsi1pk': `STATUS#${SessionStatus.ENDED}`,
+      ':inc': 1,
+    },
+  }));
+
+  logger.info('Deleted story', { sessionId });
 }
 
 // === Story Views ===
@@ -313,6 +344,40 @@ export async function reactToStory(
   logger.info('Recorded story reaction', { sessionId, segmentId, userId, emoji });
 }
 
+/**
+ * Get all reactions for a story across all segments
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID to get reactions for
+ * @returns Array of story reactions
+ */
+export async function getStoryReactions(
+  tableName: string,
+  sessionId: string,
+): Promise<StoryReaction[]> {
+  const docClient = getDocumentClient();
+
+  // Reactions are keyed as PK = STORY_REACTION#${sessionId}#${segmentId}
+  // Since segmentId varies, we must scan with a begins_with filter
+  const result = await docClient.send(new ScanCommand({
+    TableName: tableName,
+    FilterExpression: 'begins_with(PK, :prefix) AND entityType = :entityType',
+    ExpressionAttributeValues: {
+      ':prefix': `STORY_REACTION#${sessionId}#`,
+      ':entityType': 'STORY_REACTION',
+    },
+    Limit: 200,
+  }));
+
+  return (result.Items || []).map((item) => ({
+    sessionId: item.sessionId,
+    segmentId: item.segmentId,
+    userId: item.userId,
+    emoji: item.emoji,
+    createdAt: item.createdAt,
+  }));
+}
+
 // === Story Replies ===
 
 /**
@@ -442,19 +507,23 @@ export async function expireOldStories(
   const docClient = getDocumentClient();
   const now = new Date().toISOString();
 
-  // Find expired stories that are still live
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  // Find expired LIVE stories AND abandoned CREATING stories (older than 1 hour)
   const result = await docClient.send(new ScanCommand({
     TableName: tableName,
     FilterExpression:
-      'entityType = :entityType AND sessionType = :sessionType AND #status = :status AND storyExpiresAt < :now',
+      'entityType = :entityType AND sessionType = :sessionType AND ((#status = :live AND storyExpiresAt < :now) OR (#status = :creating AND createdAt < :oneHourAgo))',
     ExpressionAttributeNames: {
       '#status': 'status',
     },
     ExpressionAttributeValues: {
       ':entityType': 'SESSION',
       ':sessionType': SessionType.STORY,
-      ':status': SessionStatus.LIVE,
+      ':live': SessionStatus.LIVE,
+      ':creating': SessionStatus.CREATING,
       ':now': now,
+      ':oneHourAgo': oneHourAgo,
     },
   }));
 

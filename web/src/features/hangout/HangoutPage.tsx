@@ -98,7 +98,11 @@ export function HangoutPage() {
   };
 
   const handleReaction = async (emoji: EmojiType) => {
-    await sendReaction(emoji);
+    try {
+      await sendReaction(emoji);
+    } catch (err) {
+      console.error('Failed to send reaction:', err);
+    }
     setFloatingReactions(prev => [...prev, { id: uuidv4(), emoji: EMOJI_MAP[emoji], timestamp: Date.now() }]);
   };
 
@@ -112,7 +116,9 @@ export function HangoutPage() {
       method: 'POST',
       headers: { Authorization: `Bearer ${authToken}` },
       keepalive: true,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to end session:', err);
+    });
   }, [authToken, sessionId, participants]);
 
   // End session when tab is closed or user navigates away

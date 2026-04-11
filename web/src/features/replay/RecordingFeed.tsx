@@ -98,7 +98,7 @@ export function RecordingFeed({ recordings }: RecordingFeedProps) {
                   {recording.thumbnailUrl && isAvailable ? (
                     <img
                       src={recording.thumbnailUrl}
-                      alt=""
+                      alt={`${recording.userId} recording thumbnail`}
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                       className="group-hover:scale-[1.03] transition-transform duration-300"
                     />

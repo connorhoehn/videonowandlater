@@ -1,39 +1,17 @@
 /**
- * POST /stories/{sessionId}/react handler - add emoji reaction to a story segment
+ * GET /stories/{sessionId}/reactions handler - retrieve reactions for a story (owner only)
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById } from '../repositories/session-repository';
-import { reactToStory } from '../repositories/story-repository';
+import { getStoryReactions } from '../repositories/story-repository';
 import { SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
 
-const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'react-to-story' } });
-
-const VALID_EMOJIS = ['😂', '😮', '😍', '😢', '👏', '🔥'];
-
-interface ReactToStoryRequest {
-  segmentId: string;
-  emoji: string;
-}
+const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-story-reactions' } });
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
-
-  // Parse request body
-  let body: ReactToStoryRequest;
-  try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Invalid JSON' }),
-    };
-  }
 
   const sessionId = event.pathParameters?.sessionId;
   if (!sessionId) {
@@ -44,41 +22,6 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
         'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({ error: 'sessionId required' }),
-    };
-  }
-
-  // Validate segmentId
-  if (!body.segmentId) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'segmentId required' }),
-    };
-  }
-
-  // Validate emoji
-  if (!body.emoji) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'emoji required' }),
-    };
-  }
-
-  if (!VALID_EMOJIS.includes(body.emoji)) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: `Invalid emoji. Must be one of: ${VALID_EMOJIS.join(', ')}` }),
     };
   }
 
@@ -131,18 +74,36 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    await reactToStory(tableName, sessionId, body.segmentId, userId, body.emoji);
+    // Only the story owner can view the reaction list
+    if (session.userId !== userId) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Only the story owner can view reactions' }),
+      };
+    }
+
+    const reactions = await getStoryReactions(tableName, sessionId);
+
+    // Build summary: group by emoji and count
+    const summary: Record<string, number> = {};
+    for (const reaction of reactions) {
+      summary[reaction.emoji] = (summary[reaction.emoji] || 0) + 1;
+    }
 
     return {
-      statusCode: 201,
+      statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ ok: true }),
+      body: JSON.stringify({ reactions, summary }),
     };
   } catch (error: any) {
-    logger.error('Error reacting to story', { sessionId, error: error instanceof Error ? error.message : String(error) });
+    logger.error('Error getting story reactions', { sessionId, error: error instanceof Error ? error.message : String(error) });
 
     return {
       statusCode: 500,
@@ -150,7 +111,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'Failed to react to story' }),
+      body: JSON.stringify({ error: 'Failed to get story reactions' }),
     };
   }
 };

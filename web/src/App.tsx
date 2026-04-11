@@ -53,6 +53,9 @@ function App() {
       } else {
         setConfigState('missing');
       }
+    }).catch((err) => {
+      console.error('Failed to load config:', err);
+      setConfigState('missing');
     });
   }, []);
 

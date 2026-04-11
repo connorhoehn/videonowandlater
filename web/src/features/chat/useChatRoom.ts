@@ -37,6 +37,9 @@ export const useChatRoom = ({ sessionId, authToken }: UseChatRoomProps): UseChat
       method: 'POST',
       headers: { Authorization: `Bearer ${authTokenRef.current}` },
     });
+    if (!response.ok) {
+      throw new Error(`Chat token request failed: ${response.status}`);
+    }
     const data = await response.json();
     return data;
   }, []); // no deps — reads via refs

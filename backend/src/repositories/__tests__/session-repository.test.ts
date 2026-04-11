@@ -335,9 +335,12 @@ describe('session-repository', () => {
             TableName: tableName,
             IndexName: 'GSI4',
             KeyConditionExpression: 'stageArn = :stageArn AND SK = :metadata',
+            FilterExpression: '#status <> :ended',
+            ExpressionAttributeNames: { '#status': 'status' },
             ExpressionAttributeValues: {
               ':stageArn': STAGE_ARN,
               ':metadata': 'METADATA',
+              ':ended': 'ended',
             },
           }),
         })

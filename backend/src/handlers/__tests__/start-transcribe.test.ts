@@ -69,7 +69,7 @@ describe('start-transcribe handler', () => {
     expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(1);
     const command = transcribeMock.commandCalls(StartTranscriptionJobCommand)[0].args[0];
     expect(command.input.TranscriptionJobName).toMatch(/^vnl-test-session-123-\d+$/);
-    expect(command.input.Media?.MediaFileUri).toBe('s3://test-bucket/recordings/test-session-123/audio.mp4');
+    expect(command.input.Media?.MediaFileUri).toBe('s3://test-transcription-bucket/test-session-123/masterrecording.mp4');
     expect(command.input.OutputBucketName).toBe('test-transcription-bucket');
     expect(command.input.OutputKey).toBe('test-session-123/transcript.json');
     expect(command.input.LanguageCode).toBe('en-US');
@@ -248,8 +248,8 @@ describe('start-transcribe handler', () => {
     expect(transcribeMock.commandCalls(StartTranscriptionJobCommand)).toHaveLength(1);
     const command = transcribeMock.commandCalls(StartTranscriptionJobCommand)[0].args[0];
 
-    // Should convert HLS URL to audio MP4 URL
-    expect(command.input.Media?.MediaFileUri).toBe('s3://different-bucket/recordings/url-format-test/audio.mp4');
+    // Should use transcription bucket path for audio file
+    expect(command.input.Media?.MediaFileUri).toBe('s3://test-transcription-bucket/url-format-test/masterrecording.mp4');
   });
 
   it('should return batchItemFailures with messageId when JSON body is malformed', async () => {

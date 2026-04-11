@@ -106,7 +106,7 @@ export function ViewerPage() {
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
-  const { videoRef, isPlaying, sessionStatus, error } = usePlayer({
+  const { videoRef, isPlaying, isMuted, toggleMute, sessionStatus, error } = usePlayer({
     sessionId,
     apiBaseUrl,
   });
@@ -188,7 +188,7 @@ export function ViewerPage() {
           <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             {/* Video player with reactions overlay */}
             <div className="relative">
-              <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} />
+              <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} isMuted={isMuted} onToggleMute={toggleMute} />
               {/* Floating reactions overlay */}
               <FloatingReactions reactions={floatingReactions} />
             </div>

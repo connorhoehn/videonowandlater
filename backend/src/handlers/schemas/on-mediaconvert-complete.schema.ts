@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Validates job name and completion status
  */
 export const MediaConvertCompleteDetailSchema = z.object({
-  jobName: z.string().min(1, 'jobName is required'),
+  jobName: z.string().optional(),
   jobId: z.string().min(1, 'jobId is required'),
   status: z.enum(['SUBMITTED', 'PROGRESSING', 'COMPLETE', 'CANCELED', 'ERROR']),
   outputGroupDetails: z.array(

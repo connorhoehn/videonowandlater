@@ -56,10 +56,19 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     }
 
     // Fetch transcript from S3
+    // transcriptS3Path may be a full s3:// URI or just a key
+    let s3Key = session.transcriptS3Path;
+    let bucket = transcriptionBucket;
+    if (s3Key.startsWith('s3://')) {
+      const parsed = s3Key.replace('s3://', '').split('/');
+      bucket = parsed.shift()!;
+      s3Key = parsed.join('/');
+    }
+
     const s3Client = new S3Client({ region: process.env.AWS_REGION });
     const command = new GetObjectCommand({
-      Bucket: transcriptionBucket,
-      Key: session.transcriptS3Path,
+      Bucket: bucket,
+      Key: s3Key,
     });
 
     const response = await s3Client.send(command);

@@ -89,8 +89,8 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
       setError(null);
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: true,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
 
       localStreamRef.current = stream;
@@ -101,10 +101,15 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
 
       client.addVideoInputDevice(stream, 'camera1', { index: 0 });
 
-      const audioTrack = stream.getAudioTracks()[0];
+      const audioTracks = stream.getAudioTracks();
+      console.log('[useBroadcast] audio tracks:', audioTracks.length, audioTracks.map(t => ({ label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
+      const audioTrack = audioTracks[0];
       if (audioTrack) {
         const micStream = new MediaStream([audioTrack]);
         client.addAudioInputDevice(micStream, 'mic1');
+        console.log('[useBroadcast] audio device added');
+      } else {
+        console.warn('[useBroadcast] No audio track found in stream');
       }
 
       const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}/start`, {

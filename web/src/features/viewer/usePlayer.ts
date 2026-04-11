@@ -19,6 +19,7 @@ interface UsePlayerOptions {
 export function usePlayer({ sessionId, apiBaseUrl }: UsePlayerOptions) {
   const [player, setPlayer] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,11 +65,13 @@ export function usePlayer({ sessionId, apiBaseUrl }: UsePlayerOptions) {
           setIsPlaying(false);
         });
 
-        // Load and play
+        // Load and play — start muted to satisfy autoplay policies, then unmute
+        ivsPlayer.setMuted(true);
         ivsPlayer.load(playbackUrl);
         ivsPlayer.play();
 
         setPlayer(ivsPlayer);
+        setIsMuted(true);
       } catch (err: any) {
         setError(err.message);
       }
@@ -84,10 +87,19 @@ export function usePlayer({ sessionId, apiBaseUrl }: UsePlayerOptions) {
     };
   }, [sessionId, apiBaseUrl]);
 
+  const toggleMute = () => {
+    if (!player) return;
+    const newMuted = !isMuted;
+    player.setMuted(newMuted);
+    setIsMuted(newMuted);
+  };
+
   return {
     videoRef,
     player,
     isPlaying,
+    isMuted,
+    toggleMute,
     sessionStatus,
     error,
   };

@@ -81,56 +81,87 @@ export function ReplayViewer() {
     });
   }, []);
 
-  // Fetch session metadata
+  // Check if the pipeline is still processing
+  const isPipelineComplete = (s: Session | null): boolean => {
+    if (!s) return false;
+    const terminalStatuses = ['available', 'failed'];
+    const transcriptDone = !s.transcriptStatus || terminalStatuses.includes(s.transcriptStatus);
+    const summaryDone = !s.aiSummaryStatus || terminalStatuses.includes(s.aiSummaryStatus);
+    const convertDone = !s.convertStatus || terminalStatuses.includes(s.convertStatus);
+    const highlightDone = !s.highlightReelStatus || terminalStatuses.includes(s.highlightReelStatus);
+    return transcriptDone && summaryDone && convertDone && highlightDone;
+  };
+
+  // Fetch session metadata with polling while pipeline is active
   useEffect(() => {
     if (!sessionId || !authToken) return;
 
-    const fetchSession = async () => {
+    let pollTimer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    const fetchSession = async (isInitial: boolean) => {
       const config = getConfig();
       const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
       const url = `${apiBaseUrl}/sessions/${sessionId}`;
 
-      console.log('[ReplayViewer] fetching session', { sessionId, url, hasToken: !!authToken });
+      if (isInitial) {
+        console.log('[ReplayViewer] fetching session', { sessionId, url, hasToken: !!authToken });
+      }
 
       try {
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${authToken}` },
         });
 
-        console.log('[ReplayViewer] session response', { status: response.status, ok: response.ok });
+        if (cancelled) return;
 
         if (!response.ok) {
-          if (response.status === 404) {
-            setError('Recording not found');
-          } else {
-            setError(`Failed to load recording: ${response.status} ${response.statusText}`);
+          if (isInitial) {
+            if (response.status === 404) {
+              setError('Recording not found');
+            } else {
+              setError(`Failed to load recording: ${response.status} ${response.statusText}`);
+            }
           }
-          setLoading(false);
           return;
         }
 
         const data = await response.json();
-        // Ensure sessionType has a default value for backward compatibility
         const sessionWithDefaults: Session = {
           ...data,
           sessionType: data.sessionType || data.type || 'BROADCAST',
         };
-        console.log('[ReplayViewer] session loaded', {
-          sessionId: sessionWithDefaults.sessionId,
-          recordingStatus: sessionWithDefaults.recordingStatus,
-          recordingHlsUrl: sessionWithDefaults.recordingHlsUrl,
-          status: (sessionWithDefaults as any).status,
-        });
+
+        if (isInitial) {
+          console.log('[ReplayViewer] session loaded', {
+            sessionId: sessionWithDefaults.sessionId,
+            recordingStatus: sessionWithDefaults.recordingStatus,
+            recordingHlsUrl: sessionWithDefaults.recordingHlsUrl,
+          });
+        }
+
         setSession(sessionWithDefaults);
+
+        // Schedule next poll if pipeline is still processing
+        if (!cancelled && !isPipelineComplete(sessionWithDefaults)) {
+          pollTimer = setTimeout(() => fetchSession(false), 5000);
+        }
       } catch (err: any) {
-        console.error('[ReplayViewer] fetch error', err);
-        setError(`Error loading recording: ${err.message}`);
+        if (isInitial) {
+          console.error('[ReplayViewer] fetch error', err);
+          setError(`Error loading recording: ${err.message}`);
+        }
       } finally {
-        setLoading(false);
+        if (isInitial) setLoading(false);
       }
     };
 
-    fetchSession();
+    fetchSession(true);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(pollTimer);
+    };
   }, [sessionId, authToken]);
 
   // IVS Player hook

@@ -53,20 +53,10 @@ async function processEvent(
     return;
   }
 
-  // Convert HLS URL to audio MP4 URL
-  // From: s3://bucket/hls/sessionId/master.m3u8
-  // To:   s3://bucket/recordings/sessionId/audio.mp4
-  if (!recordingHlsUrl.includes('/hls/') || !recordingHlsUrl.endsWith('/master.m3u8')) {
-    logger.error('Unexpected recordingHlsUrl format, cannot derive audio path', {
-      sessionId,
-      recordingHlsUrl,
-    });
-    return; // Permanent failure — don't retry
-  }
-
-  const audioFileUri = recordingHlsUrl
-    .replace('/hls/', '/recordings/')
-    .replace('/master.m3u8', '/audio.mp4');
+  // Derive audio file URI from session ID
+  // MediaConvert outputs MP4 to: s3://{transcriptionBucket}/{sessionId}/masterrecording.mp4
+  const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
+  const audioFileUri = `s3://${transcriptionBucket}/${sessionId}/masterrecording.mp4`;
 
   logger.info('Derived audio file URI', { sessionId, audioFileUri });
 

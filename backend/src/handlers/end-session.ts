@@ -7,7 +7,8 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById, updateSessionStatus, updateSpotlight } from '../repositories/session-repository';
-import { SessionStatus } from '../domain/session';
+import { releasePoolResource } from '../repositories/resource-pool-repository';
+import { SessionStatus, SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'end-session' } });
@@ -40,6 +41,29 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (session.status === SessionStatus.ENDING || session.status === SessionStatus.ENDED) {
       return resp(200, { message: 'Session already ending/ended', status: session.status });
+    }
+
+    // Hangout sessions go directly to ENDED since stage recording is not yet configured
+    // Broadcast sessions go to ENDING and wait for recording-ended event
+    if (session.sessionType === SessionType.HANGOUT) {
+      await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
+      logger.info('Hangout session transitioned to ENDED', { sessionId, userId });
+
+      // Release claimed resources (non-blocking)
+      try {
+        if (session.claimedResources?.stage) {
+          await releasePoolResource(tableName, session.claimedResources.stage);
+          logger.info('Released stage resource', { stage: session.claimedResources.stage });
+        }
+        if (session.claimedResources?.chatRoom) {
+          await releasePoolResource(tableName, session.claimedResources.chatRoom);
+          logger.info('Released chat room resource', { chatRoom: session.claimedResources.chatRoom });
+        }
+      } catch (releaseErr) {
+        logger.warn('Resource release failed', { error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr) });
+      }
+
+      return resp(200, { message: 'Session ended', status: 'ended' });
     }
 
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');

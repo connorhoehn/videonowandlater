@@ -3,6 +3,7 @@ import { AuthStack } from '../lib/stacks/auth-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { SessionStack } from '../lib/stacks/session-stack';
+import { WebStack } from '../lib/stacks/web-stack';
 
 const app = new App();
 
@@ -19,3 +20,4 @@ new ApiStack(app, 'VNL-Api', {
   mediaConvertTopic: sessionStack.mediaConvertTopic,
 });
 new MonitoringStack(app, 'VNL-Monitoring', { env });
+new WebStack(app, 'VNL-Web', { env });

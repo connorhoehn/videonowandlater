@@ -379,18 +379,19 @@ export async function findSessionByChannelArn(
   if (statusFilter) {
     filterExpression = '#status = :status';
     expressionAttributeValues[':status'] = statusFilter;
+  } else {
+    // Exclude terminal states so reused channels don't match stale sessions
+    filterExpression = '#status <> :ended';
+    expressionAttributeValues[':ended'] = 'ended';
   }
 
   const result = await docClient.send(new QueryCommand({
     TableName: tableName,
     IndexName: 'GSI3',
     KeyConditionExpression: 'channelArn = :channelArn AND SK = :metadata',
-    ...(filterExpression && {
-      FilterExpression: filterExpression,
-      ExpressionAttributeNames: { '#status': 'status' },
-    }),
+    FilterExpression: filterExpression,
+    ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: expressionAttributeValues,
-    Limit: 1,
   }));
 
   if (!result.Items || result.Items.length === 0) {
@@ -420,11 +421,13 @@ export async function findSessionByStageArn(
     TableName: tableName,
     IndexName: 'GSI4',
     KeyConditionExpression: 'stageArn = :stageArn AND SK = :metadata',
+    FilterExpression: '#status <> :ended',
+    ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: {
       ':stageArn': stageArn,
       ':metadata': 'METADATA',
+      ':ended': 'ended',
     },
-    Limit: 1,
   }));
 
   if (!result.Items || result.Items.length === 0) {

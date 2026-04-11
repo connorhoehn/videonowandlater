@@ -966,12 +966,12 @@ describe('on-mediaconvert-complete handler', () => {
   // Validation Failure Tests (Plan 01)
   // =========================================================================
 
-  it('should handle missing jobName gracefully', async () => {
+  it('should handle missing jobName gracefully when no userMetadata sessionId', async () => {
     const ebEvent = {
       source: 'aws.mediaconvert',
       detailType: 'MediaConvert Job State Change',
       detail: {
-        // Missing required jobName
+        // No jobName and no userMetadata.sessionId — cannot extract sessionId
         jobId: 'job-missing-name',
         status: 'COMPLETE',
       },
@@ -982,10 +982,9 @@ describe('on-mediaconvert-complete handler', () => {
       resources: [],
     } as any;
 
-    // Handler should add invalid event to batchItemFailures due to missing required field
+    // Handler should succeed (no crash) but not process the event — sessionId cannot be extracted
     const result = await handler(makeSqsEvent(ebEvent));
-    expect(result.batchItemFailures).toHaveLength(1);
-    expect(result.batchItemFailures[0].itemIdentifier).toBe('test-message-id');
+    expect(result.batchItemFailures).toHaveLength(0);
   });
 
   it('should handle missing status gracefully', async () => {

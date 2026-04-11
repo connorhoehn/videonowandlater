@@ -43,13 +43,18 @@ async function processEvent(
 
     logger.info('MediaConvert job state change', { jobName, jobId, status });
 
-    // Parse sessionId from jobName (format: vnl-{sessionId}-{epochMs})
-    const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
-    if (!jobNameMatch) {
-      logger.error('Could not parse sessionId from jobName', { jobName });
+    // Extract sessionId from userMetadata (preferred) or parse from jobName (legacy)
+    let sessionId: string | undefined = detail.userMetadata?.sessionId;
+    if (!sessionId && jobName) {
+      const jobNameMatch = jobName.match(/^vnl-([a-z0-9-]+)-\d+$/);
+      if (jobNameMatch) {
+        sessionId = jobNameMatch[1];
+      }
+    }
+    if (!sessionId) {
+      logger.error('Could not extract sessionId from event', { jobName, jobId, userMetadata: detail.userMetadata });
       return;
     }
-    const sessionId = jobNameMatch[1];
 
     tracer.putAnnotation('sessionId', sessionId);
 
@@ -109,20 +114,18 @@ async function processEvent(
     }
 
     if (status === 'COMPLETE') {
-      // MediaConvert job succeeded
-      const recordingHlsUrl = `s3://${bucket}/hls/${sessionId}/master.m3u8`;
+      // MediaConvert job succeeded — update convertStatus only
+      // Do NOT overwrite recordingHlsUrl — recording-ended already set the CloudFront URL
+      logger.info('MediaConvert complete, updating convertStatus', { sessionId });
 
-      logger.info('Updating session with HLS URL', { sessionId, recordingHlsUrl });
-
-      // Update session with all recording metadata atomically
       await updateSessionRecording(tableName, sessionId, {
-        recordingHlsUrl,
-        recordingStatus: 'available',
         convertStatus: 'available',
-        status: SessionStatus.ENDED,
       });
 
-      logger.info('Session updated with HLS URL and marked as ended', { sessionId });
+      logger.info('Session convertStatus updated', { sessionId });
+
+      // Construct S3 HLS URL for transcription pipeline (internal use only)
+      const recordingHlsUrl = `s3://${bucket}/hls/${sessionId}/master.m3u8`;
 
       // Parse thumbnail output group if present
       if (detail.outputGroupDetails && cloudFrontDomain) {

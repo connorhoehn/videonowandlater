@@ -994,16 +994,24 @@ export class SessionStack extends Stack {
       description: 'Handle MediaConvert job completion for upload video encoding',
     });
 
-    mediaConvertCompleteRule.addTarget(new targets.LambdaFunction(onMediaConvertCompleteFunction, {
+    // SQS queue between EventBridge and Lambda (handler expects SQSEvent wrapping EventBridge events)
+    const mediaConvertCompleteQueue = new sqs.Queue(this, 'MediaConvertCompleteQueue', {
+      visibilityTimeout: Duration.seconds(180),
+      deadLetterQueue: {
+        queue: recordingEventsDlq,
+        maxReceiveCount: 3,
+      },
+    });
+
+    mediaConvertCompleteRule.addTarget(new targets.SqsQueue(mediaConvertCompleteQueue, {
       deadLetterQueue: recordingEventsDlq,
       retryAttempts: 2,
     }));
 
-    // Grant EventBridge permission to invoke on-mediaconvert-complete
-    onMediaConvertCompleteFunction.addPermission('AllowEBMediaConvertCompleteInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: mediaConvertCompleteRule.ruleArn,
-    });
+    onMediaConvertCompleteFunction.addEventSource(new SqsEventSource(mediaConvertCompleteQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
 
     // Lambda function for start-transcribe (EventBridge-triggered from Upload Recording Available)
     const startTranscribeFn = new nodejs.NodejsFunction(this, 'StartTranscribe', {

@@ -39,13 +39,15 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
   const participantCount = session.participantCount || 0;
   const messageCount = session.messageCount || 0;
 
+  const isReady = session.recordingStatus === 'available';
+
   return (
     <Card
-      className="group hover:shadow-lg cursor-pointer transition-all duration-300"
-      onClick={() => navigate(`/replay/${session.sessionId}`)}
+      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'}`}
+      onClick={isReady ? () => navigate(`/replay/${session.sessionId}`) : undefined}
     >
       {/* Hangout header band */}
-      <div className="bg-gradient-to-r from-violet-500 to-purple-600 px-4 sm:px-5 py-3 flex items-center gap-3">
+      <div className="relative bg-gradient-to-r from-violet-500 to-purple-600 px-4 sm:px-5 py-3 flex items-center gap-3">
         <Avatar name={session.userId} alt={session.userId || 'Host'} size="sm" className="ring-2 ring-white/30" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-white truncate text-[15px]">{session.userId}</h3>
@@ -65,6 +67,15 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
           <PipelineStatusBadge session={session} />
           <span className="text-[11px] text-white/50">{timestamp}</span>
         </div>
+        {!isReady && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 rounded-t-lg">
+            <svg className="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-white text-sm font-medium">Processing recording...</span>
+          </div>
+        )}
       </div>
 
       {/* Card content */}

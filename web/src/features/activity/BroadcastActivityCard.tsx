@@ -61,23 +61,37 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const thumbnailSrc = session.thumbnailUrl || session.posterFrameUrl;
   const showThumbnail = thumbnailSrc && !imgError;
 
+  const isReady = session.recordingStatus === 'available' || !!session.recordingHlsUrl;
+
   return (
     <Card
-      className="group hover:shadow-lg cursor-pointer transition-all duration-300"
-      onClick={() => navigate(`/replay/${session.sessionId}`)}
+      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'}`}
+      onClick={isReady ? () => navigate(`/replay/${session.sessionId}`) : undefined}
     >
       {/* Thumbnail or placeholder — full-width, aspect-ratio */}
-      {showThumbnail ? (
-        <img
-          src={thumbnailSrc}
-          alt=""
-          data-testid="thumbnail"
-          onError={() => setImgError(true)}
-          className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
-        />
-      ) : (
-        <ThumbnailPlaceholder />
-      )}
+      <div className="relative">
+        {showThumbnail ? (
+          <img
+            src={thumbnailSrc}
+            alt=""
+            data-testid="thumbnail"
+            onError={() => setImgError(true)}
+            className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
+          />
+        ) : (
+          <ThumbnailPlaceholder />
+        )}
+        {!isReady && (
+          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
+            <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-white text-sm font-medium">Processing...</span>
+            <span className="text-white/60 text-xs">Recording will be available soon</span>
+          </div>
+        )}
+      </div>
 
       {/* Card content */}
       <Card.Body>

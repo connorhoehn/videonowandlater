@@ -19,6 +19,7 @@ import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReac
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Card, Avatar } from '../../components/social';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -138,33 +139,49 @@ export function HangoutPage() {
     <ChatRoomProvider value={room}>
     <div className="h-screen flex flex-col">
       {/* Header */}
-      <div className="bg-gray-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold">Hangout</h1>
-          {isJoined && (
-            <span className="inline-flex items-center text-xs bg-green-500/15 text-green-400 font-semibold px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5 animate-pulse"></span>
-              {participants.length} {participants.length === 1 ? 'participant' : 'participants'}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isMobile && (
+      <Card className="!rounded-none !shadow-none bg-gray-900 text-white shrink-0">
+        <Card.Header borderless className="px-4 py-3 border-none">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold">Hangout</h1>
+            {isJoined && (
+              <span className="inline-flex items-center text-xs bg-green-500/15 text-green-400 font-semibold px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5 animate-pulse"></span>
+                {participants.length} {participants.length === 1 ? 'participant' : 'participants'}
+              </span>
+            )}
+            {/* Participant avatars */}
+            {isJoined && participants.length > 0 && (
+              <div className="flex -space-x-2">
+                {participants.slice(0, 5).map((p) => (
+                  <Avatar
+                    key={p.participantId}
+                    alt={p.userId}
+                    name={p.userId}
+                    size="xs"
+                    isOnline
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <button
+                onClick={() => setIsChatOpen(!isChatOpen)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg text-sm font-medium transition-colors duration-150"
+              >
+                Chat
+              </button>
+            )}
             <button
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg text-sm font-medium transition-colors duration-150"
+              onClick={() => setShowLeaveConfirm(true)}
+              className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
             >
-              Chat
+              ← Leave
             </button>
-          )}
-          <button
-            onClick={() => setShowLeaveConfirm(true)}
-            className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
-          >
-            ← Leave
-          </button>
-        </div>
-      </div>
+          </div>
+        </Card.Header>
+      </Card>
 
       {error && (
         <div className="p-4 bg-red-50 border-b border-red-200 text-red-700 text-sm shrink-0">
@@ -173,89 +190,107 @@ export function HangoutPage() {
       )}
 
       {!isJoined && !error && (
-        <div className="p-8 text-center text-gray-500">
-          <div className="text-lg">Joining hangout…</div>
-        </div>
+        <Card className="m-8 bg-gray-800 text-gray-400">
+          <Card.Body className="text-center">
+            <div className="text-lg">Joining hangout...</div>
+          </Card.Body>
+        </Card>
       )}
 
       {isJoined && (
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Video section */}
           <div className="w-full md:w-2/3 flex flex-col relative">
-            <div className="flex-1 overflow-hidden">
-              <VideoGrid participants={participantsWithSpeaking} />
-            </div>
+            <Card className="flex-1 !rounded-none bg-gray-950 !shadow-none overflow-hidden">
+              <Card.Body className="!p-0 h-full">
+                <VideoGrid participants={participantsWithSpeaking} />
+              </Card.Body>
+            </Card>
             <FloatingReactions
               reactions={floatingReactions}
               onExpire={(id) => setFloatingReactions(prev => prev.filter(r => r.id !== id))}
             />
 
             {/* Controls */}
-            <div className="px-4 py-3 sm:py-4 bg-gray-900/95 backdrop-blur-md border-t border-gray-700/50 flex justify-center gap-2 sm:gap-3 shrink-0 animate-slide-up">
-              <button
-                onClick={handleMuteToggle}
-                title={isMuted ? 'Unmute' : 'Mute'}
-                className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
-                  isMuted
-                    ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
-                    : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                  {isMuted ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 19L5 5m14 0l-3.5 3.5M12 18.75a6 6 0 01-6-6v-1.5m6 7.5a6 6 0 006-6v-1.5M12 18.75V21m-4.5 0h9M9.75 3.104A4.5 4.5 0 0112 2.25a4.5 4.5 0 014.5 4.5v4.5" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-                  )}
-                </svg>
-                <span className="hidden sm:inline">{isMuted ? 'Unmute' : 'Mute'}</span>
-              </button>
-              <button
-                onClick={handleCameraToggle}
-                title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-                className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
-                  !isCameraOn
-                    ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
-                    : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                  {!isCameraOn ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                  )}
-                </svg>
-                <span className="hidden sm:inline">{isCameraOn ? 'Camera' : 'Cam Off'}</span>
-              </button>
-              {isJoined && (
-                <ReactionPicker onReaction={handleReaction} />
-              )}
-              <button
-                onClick={() => setShowLeaveConfirm(true)}
-                className="inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm bg-white/10 text-red-400 hover:bg-red-600 hover:text-white active:bg-red-700 transition-all duration-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                </svg>
-                <span className="hidden sm:inline">Leave</span>
-              </button>
-            </div>
+            <Card className="!rounded-none !shadow-none bg-gray-900/95 backdrop-blur-md border-t border-gray-700/50 shrink-0">
+              <Card.Body className="px-4 py-3 sm:py-4 flex justify-center gap-2 sm:gap-3 animate-slide-up">
+                <button
+                  onClick={handleMuteToggle}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                  className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
+                    isMuted
+                      ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
+                      : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    {isMuted ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 19L5 5m14 0l-3.5 3.5M12 18.75a6 6 0 01-6-6v-1.5m6 7.5a6 6 0 006-6v-1.5M12 18.75V21m-4.5 0h9M9.75 3.104A4.5 4.5 0 0112 2.25a4.5 4.5 0 014.5 4.5v4.5" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{isMuted ? 'Unmute' : 'Mute'}</span>
+                </button>
+                <button
+                  onClick={handleCameraToggle}
+                  title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+                  className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
+                    !isCameraOn
+                      ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-lg shadow-red-600/30'
+                      : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    {!isCameraOn ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{isCameraOn ? 'Camera' : 'Cam Off'}</span>
+                </button>
+                {isJoined && (
+                  <ReactionPicker onReaction={handleReaction} />
+                )}
+                <button
+                  onClick={() => setShowLeaveConfirm(true)}
+                  className="inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm bg-white/10 text-red-400 hover:bg-red-600 hover:text-white active:bg-red-700 transition-all duration-200"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                  </svg>
+                  <span className="hidden sm:inline">Leave</span>
+                </button>
+              </Card.Body>
+            </Card>
           </div>
 
           {/* Chat section - Desktop */}
           {!isMobile && userId && (
-            <div className="w-full md:w-1/3">
-              <ChatPanel
-                sessionId={sessionId}
-                sessionOwnerId={userId}
-                currentUserId={userId}
-                authToken={authToken}
-                isMobile={false}
-                isOpen={true}
-                connectionState={chatConnectionState}
-                chatError={chatError}
-              />
+            <div className="w-full md:w-1/3 flex flex-col">
+              <Card className="flex-1 !rounded-none bg-gray-900 !shadow-none flex flex-col overflow-hidden">
+                <Card.Header className="bg-gray-800 border-gray-700 text-white shrink-0">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                    <span className="text-sm font-semibold">Chat</span>
+                  </div>
+                </Card.Header>
+                <Card.Body className="!p-0 flex-1 overflow-hidden">
+                  <ChatPanel
+                    sessionId={sessionId}
+                    sessionOwnerId={userId}
+                    currentUserId={userId}
+                    authToken={authToken}
+                    isMobile={false}
+                    isOpen={true}
+                    connectionState={chatConnectionState}
+                    chatError={chatError}
+                  />
+                </Card.Body>
+              </Card>
             </div>
           )}
         </div>

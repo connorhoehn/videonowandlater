@@ -21,6 +21,7 @@ import { SummaryDisplay } from './SummaryDisplay';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ChapterList } from './ChapterList';
 import { HighlightReelPlayer } from './HighlightReelPlayer';
+import { Card } from '../../components/social';
 import type { Chapter } from './ChapterList';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
 
@@ -352,11 +353,18 @@ export function ReplayViewer() {
       {/* Highlights view */}
       {viewMode === 'highlights' && session?.highlightReelStatus && (
         <div className="max-w-4xl mx-auto p-4">
-          <HighlightReelPlayer
-            landscapeUrl={session.highlightReelLandscapeUrl}
-            verticalUrl={session.highlightReelVerticalUrl}
-            status={session.highlightReelStatus}
-          />
+          <Card>
+            <Card.Header>
+              <h3 className="text-sm font-semibold text-gray-900">Highlight Reel</h3>
+            </Card.Header>
+            <Card.Body>
+              <HighlightReelPlayer
+                landscapeUrl={session.highlightReelLandscapeUrl}
+                verticalUrl={session.highlightReelVerticalUrl}
+                status={session.highlightReelStatus}
+              />
+            </Card.Body>
+          </Card>
         </div>
       )}
 
@@ -367,155 +375,188 @@ export function ReplayViewer() {
           {/* Video column (takes 2/3 width on desktop) */}
           <div className="lg:col-span-2">
             {/* Video container with floating reactions */}
-            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-xl">
-              <video
-                ref={videoRef}
-                controls
-                playsInline
-                className="w-full h-full"
-              />
-              {/* Floating reactions overlay */}
-              <FloatingReactions reactions={floatingReactions} />
-            </div>
-
-            {/* Reaction timeline below video */}
-            {session?.recordingDuration && (
-              <div className="mt-2">
-                <ReactionTimeline
-                  reactions={allReactions}
-                  currentTime={syncTime}
-                  duration={session.recordingDuration}
+            <Card>
+              <div className="relative aspect-video bg-black overflow-hidden">
+                <video
+                  ref={videoRef}
+                  controls
+                  playsInline
+                  className="w-full h-full"
                 />
+                {/* Floating reactions overlay */}
+                <FloatingReactions reactions={floatingReactions} />
               </div>
-            )}
 
-            {/* Reaction picker */}
-            <div className="mt-2 flex justify-center">
-              <ReplayReactionPicker
-                onReaction={handleReaction}
-                disabled={!authToken}
-              />
-            </div>
+              {/* Reaction timeline below video */}
+              {session?.recordingDuration && (
+                <Card.Body>
+                  <ReactionTimeline
+                    reactions={allReactions}
+                    currentTime={syncTime}
+                    duration={session.recordingDuration}
+                  />
+                </Card.Body>
+              )}
+
+              {/* Reaction picker */}
+              <Card.Footer borderless={!!session?.recordingDuration}>
+                <div className="flex justify-center">
+                  <ReplayReactionPicker
+                    onReaction={handleReaction}
+                    disabled={!authToken}
+                  />
+                </div>
+              </Card.Footer>
+            </Card>
 
             {/* Chapter navigation */}
             {session.chapters && session.chapters.length > 0 && (
-              <ChapterList
-                chapters={session.chapters}
-                currentTimeMs={syncTime}
-                thumbnailBaseUrl={session.thumbnailBaseUrl}
-                onSeek={handleSeek}
-              />
+              <Card className="mt-4">
+                <Card.Header>
+                  <h3 className="text-sm font-semibold text-gray-900">Chapters</h3>
+                </Card.Header>
+                <Card.Body>
+                  <ChapterList
+                    chapters={session.chapters}
+                    currentTimeMs={syncTime}
+                    thumbnailBaseUrl={session.thumbnailBaseUrl}
+                    onSeek={handleSeek}
+                  />
+                </Card.Body>
+              </Card>
             )}
 
             {/* Metadata panel */}
-            <div className="mt-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
-              <div className="space-y-3">
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Broadcaster</span>
-                  <p className="text-base text-gray-900 mt-1">
-                    {session.userId}
-                  </p>
-                </div>
-
-                {session.recordingDuration !== undefined && (
+            <Card className="mt-4">
+              <Card.Header>
+                <h3 className="text-sm font-semibold text-gray-900">Details</h3>
+              </Card.Header>
+              <Card.Body>
+                <div className="space-y-3">
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Duration</span>
+                    <span className="text-sm font-medium text-gray-500">Broadcaster</span>
                     <p className="text-base text-gray-900 mt-1">
-                      {formatDuration(session.recordingDuration)}
+                      {session.userId}
                     </p>
                   </div>
-                )}
 
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Recorded</span>
-                  <p className="text-base text-gray-900 mt-1">
-                    {new Date(session.createdAt).toLocaleString()}
-                  </p>
-                </div>
+                  {session.recordingDuration !== undefined && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Duration</span>
+                      <p className="text-base text-gray-900 mt-1">
+                        {formatDuration(session.recordingDuration)}
+                      </p>
+                    </div>
+                  )}
 
-                {session.endedAt && (
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Ended</span>
+                    <span className="text-sm font-medium text-gray-500">Recorded</span>
                     <p className="text-base text-gray-900 mt-1">
-                      {new Date(session.endedAt).toLocaleString()}
+                      {new Date(session.createdAt).toLocaleString()}
                     </p>
                   </div>
-                )}
 
-                {/* AI Summary Section (Phase 20) */}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase mb-2">AI Summary</h3>
-                  <SummaryDisplay
-                    summary={session.aiSummary}
-                    status={session.aiSummaryStatus}
-                    truncate={false}
-                    className="text-gray-800"
-                  />
-                </div>
+                  {session.endedAt && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Ended</span>
+                      <p className="text-base text-gray-900 mt-1">
+                        {new Date(session.endedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
 
-                {/* Processing Timeline Audit Log */}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase mb-3">Processing Timeline</h3>
-                  <SessionAuditLog session={session} compact={false} />
+                  <div className="pt-2 border-t border-gray-200">
+                    <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
+                  </div>
                 </div>
+              </Card.Body>
+            </Card>
 
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase mb-2">Reactions</h3>
-                  <ReactionSummaryPills reactionSummary={session?.reactionSummary} />
-                </div>
+            {/* AI Summary */}
+            <Card className="mt-4">
+              <Card.Header>
+                <h3 className="text-sm font-semibold text-gray-900">AI Summary</h3>
+              </Card.Header>
+              <Card.Body>
+                <SummaryDisplay
+                  summary={session.aiSummary}
+                  status={session.aiSummaryStatus}
+                  truncate={false}
+                  className="text-gray-800"
+                />
+              </Card.Body>
+            </Card>
 
-                <div className="pt-2 border-t border-gray-200">
-                  <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
-                </div>
-              </div>
-            </div>
+            {/* Processing Timeline Audit Log */}
+            <Card className="mt-4">
+              <Card.Header>
+                <h3 className="text-sm font-semibold text-gray-900">Processing Timeline</h3>
+              </Card.Header>
+              <Card.Body>
+                <SessionAuditLog session={session} compact={false} />
+              </Card.Body>
+            </Card>
+
+            {/* Reactions */}
+            <Card className="mt-4">
+              <Card.Header>
+                <h3 className="text-sm font-semibold text-gray-900">Reactions</h3>
+              </Card.Header>
+              <Card.Body>
+                <ReactionSummaryPills reactionSummary={session?.reactionSummary} />
+              </Card.Body>
+            </Card>
           </div>
 
           {/* Chat/Transcript column (takes 1/3 width on desktop) */}
           <div className="lg:col-span-1 h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col">
-            {/* Tab buttons */}
-            <div className="flex bg-white rounded-t-2xl shadow-sm border border-gray-100 border-b-gray-200">
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'chat'
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                💬 Chat Replay
-              </button>
-              <button
-                onClick={() => setActiveTab('transcript')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'transcript'
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                📝 Transcript
-                {session?.transcriptStatus === 'available' && (
-                  <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                    Ready
-                  </span>
-                )}
-                {session?.transcriptStatus === 'processing' && (
-                  <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                    Processing
-                  </span>
-                )}
-              </button>
-            </div>
+            <Card className="flex flex-col h-full">
+              {/* Tab buttons */}
+              <Card.Header borderless className="p-0">
+                <div className="flex w-full">
+                  <button
+                    onClick={() => setActiveTab('chat')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                      activeTab === 'chat'
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    Chat Replay
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('transcript')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                      activeTab === 'transcript'
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    Transcript
+                    {session?.transcriptStatus === 'available' && (
+                      <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                        Ready
+                      </span>
+                    )}
+                    {session?.transcriptStatus === 'processing' && (
+                      <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                        Processing
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </Card.Header>
 
-            {/* Tab content */}
-            <div className="flex-1 overflow-hidden relative">
-              <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'chat' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 pointer-events-none'}`}>
-                <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
+              {/* Tab content */}
+              <div className="flex-1 overflow-hidden relative">
+                <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'chat' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 pointer-events-none'}`}>
+                  <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />
+                </div>
+                <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'transcript' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'}`}>
+                  <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} onSeek={handleSeek} />
+                </div>
               </div>
-              <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'transcript' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'}`}>
-                <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} onSeek={handleSeek} />
-              </div>
-            </div>
+            </Card>
           </div>
         </div>
       </div>

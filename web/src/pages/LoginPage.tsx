@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { installMockFetch } from '../demo/mockFetch';
+import { Card } from '../components/social';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -40,7 +41,8 @@ export function LoginPage() {
           <p className="text-sm text-gray-400 mt-1.5">Sign in to your account</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100/80 p-8">
+        <Card className="shadow-xl shadow-gray-200/50 border border-gray-100/80">
+          <Card.Body className="p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
@@ -104,7 +106,8 @@ export function LoginPage() {
               Sign up
             </Link>
           </p>
-        </div>
+          </Card.Body>
+        </Card>
 
         {/* Demo mode */}
         <div className="mt-6">

@@ -17,6 +17,7 @@ import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReac
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
+import { Card, Avatar } from '../../components/social';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -186,56 +187,66 @@ export function ViewerPage() {
         {/* Video section */}
         <div className={isMobile ? 'w-full flex flex-col' : 'w-[70%] border-r flex flex-col'}>
           <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-            {/* Video player with reactions overlay */}
-            <div className="relative">
-              <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} isMuted={isMuted} onToggleMute={toggleMute} />
-              {/* Floating reactions overlay */}
-              <FloatingReactions reactions={floatingReactions} />
-            </div>
-
-            {/* Broadcaster info + status row + reaction picker */}
-            <div className="flex items-center justify-between text-sm gap-3">
-              <div className="flex items-center gap-3 flex-1 flex-wrap">
-                {session?.userId && (
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white">
-                      {session.userId.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-medium">Broadcaster</span>
-                    <span className="text-gray-400 font-mono text-xs hidden sm:inline" title={session.userId}>
-                      {session.userId.slice(0, 8)}…
-                    </span>
-                  </div>
-                )}
-                {sessionStatus && (
-                  <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 px-2.5 py-0.5 rounded-full font-medium">
-                    {sessionStatus}
-                  </span>
-                )}
-                {/* Featured creator link — shown when broadcaster has spotlighted a creator */}
-                {session?.featuredCreatorId && (
-                  <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
-                    <span className="w-2 h-2 bg-green-500 rounded-full shrink-0" />
-                    <span className="text-sm text-purple-800 font-medium">Featured:</span>
-                    <Link
-                      to={`/viewer/${session.featuredCreatorId}`}
-                      className="text-sm text-purple-600 hover:text-purple-800 font-medium underline"
-                    >
-                      {session.featuredCreatorName || 'Creator'}
-                    </Link>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <ReactionPicker
-                  onReaction={handleReaction}
-                  disabled={sending}
-                />
-                <div className="text-xs text-gray-400 font-mono hidden sm:block" title={sessionId}>
-                  {sessionId.slice(0, 12)}…
+            {/* Video player card with reactions overlay */}
+            <Card className="overflow-visible">
+              <Card.Body className="p-0">
+                <div className="relative">
+                  <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} isMuted={isMuted} onToggleMute={toggleMute} />
+                  {/* Floating reactions overlay */}
+                  <FloatingReactions reactions={floatingReactions} />
                 </div>
-              </div>
-            </div>
+              </Card.Body>
+            </Card>
+
+            {/* Broadcaster info card */}
+            <Card>
+              <Card.Body className="py-2">
+                <div className="flex items-center justify-between text-sm gap-3">
+                  <div className="flex items-center gap-3 flex-1 flex-wrap">
+                    {session?.userId && (
+                      <div className="flex items-center gap-2 text-gray-700">
+                        <Avatar
+                          alt={session.userId}
+                          name={session.userId}
+                          size="sm"
+                        />
+                        <span className="font-medium">Broadcaster</span>
+                        <span className="text-gray-400 font-mono text-xs hidden sm:inline" title={session.userId}>
+                          {session.userId.slice(0, 8)}…
+                        </span>
+                      </div>
+                    )}
+                    {sessionStatus && (
+                      <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 px-2.5 py-0.5 rounded-full font-medium">
+                        {sessionStatus}
+                      </span>
+                    )}
+                    {/* Featured creator link — shown when broadcaster has spotlighted a creator */}
+                    {session?.featuredCreatorId && (
+                      <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                        <span className="w-2 h-2 bg-green-500 rounded-full shrink-0" />
+                        <span className="text-sm text-purple-800 font-medium">Featured:</span>
+                        <Link
+                          to={`/viewer/${session.featuredCreatorId}`}
+                          className="text-sm text-purple-600 hover:text-purple-800 font-medium underline"
+                        >
+                          {session.featuredCreatorName || 'Creator'}
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <ReactionPicker
+                      onReaction={handleReaction}
+                      disabled={sending}
+                    />
+                    <div className="text-xs text-gray-400 font-mono hidden sm:block" title={sessionId}>
+                      {sessionId.slice(0, 12)}…
+                    </div>
+                  </div>
+                </div>
+              </Card.Body>
+            </Card>
 
             {/* Read-only SpotlightBadge for viewers — fixed at top-right */}
             {session?.featuredCreatorId && session?.featuredCreatorName && (
@@ -249,22 +260,32 @@ export function ViewerPage() {
 
         {/* Chat section - Desktop */}
         {!isMobile && (
-          <div className="w-[30%]">
-            {/* Show chat once we have session data or auth; fall back to current userId as owner */}
-            {!sessionLoading ? (
-              <ChatPanel
-                sessionId={sessionId}
-                sessionOwnerId={sessionOwnerId}
-                authToken={authToken}
-                isMobile={false}
-                isOpen={true}
-                connectionState={chatConnectionState}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                Loading chat…
-              </div>
-            )}
+          <div className="w-[30%] flex flex-col">
+            <Card className="flex-1 flex flex-col rounded-none">
+              <Card.Header>
+                <span className="font-semibold text-sm text-gray-700">Live Chat</span>
+                {chatConnectionState && (
+                  <span className="text-xs text-gray-400">{chatConnectionState}</span>
+                )}
+              </Card.Header>
+              <Card.Body className="flex-1 p-0 overflow-hidden">
+                {/* Show chat once we have session data or auth; fall back to current userId as owner */}
+                {!sessionLoading ? (
+                  <ChatPanel
+                    sessionId={sessionId}
+                    sessionOwnerId={sessionOwnerId}
+                    authToken={authToken}
+                    isMobile={false}
+                    isOpen={true}
+                    connectionState={chatConnectionState}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                    Loading chat…
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
           </div>
         )}
       </div>

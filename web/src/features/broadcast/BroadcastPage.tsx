@@ -23,6 +23,7 @@ import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { SpotlightModal } from '../spotlight/SpotlightModal';
 import { useSpotlight } from '../spotlight/useSpotlight';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Card, Avatar } from '../../components/social';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -35,29 +36,27 @@ function ParticipantsPanel({
   isLive: boolean;
 }) {
   return (
-    <div className="flex flex-col h-full bg-gray-50 border-l">
+    <Card className="flex flex-col h-full rounded-none border-l">
       {/* Panel header */}
-      <div className="p-3 border-b bg-white">
+      <Card.Header>
         <h2 className="font-semibold text-gray-800 text-sm">Participants</h2>
-      </div>
+      </Card.Header>
 
       {/* Broadcaster tile */}
-      <div className="p-3">
+      <Card.Body>
         <div className="bg-gray-800 rounded-lg overflow-hidden aspect-video relative">
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-gray-600 flex items-center justify-center text-white text-lg font-bold">
-              {userId ? userId.charAt(0).toUpperCase() : 'B'}
-            </div>
+            <Avatar name={userId} alt={userId || 'Broadcaster'} size="lg" />
           </div>
           <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
             You (Broadcaster)
           </div>
         </div>
-      </div>
+      </Card.Body>
 
       {/* Viewer count */}
       <div className="px-3 pb-3">
-        <div className="bg-white border rounded-lg p-3 flex items-center gap-3">
+        <Card className="p-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
             <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
               <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
@@ -76,19 +75,19 @@ function ParticipantsPanel({
               LIVE
             </span>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Publisher info */}
       <div className="px-3 pb-3">
-        <div className="bg-white border rounded-lg p-3">
+        <Card className="p-3">
           <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Publisher</div>
           <div className="text-sm text-gray-800 font-mono truncate" title={userId}>
             {userId || '—'}
           </div>
-        </div>
+        </Card>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -261,8 +260,8 @@ function BroadcastContent({
         <div className="flex-1 flex overflow-hidden">
 
           {/* ── Left: Camera preview + controls ── */}
-          <div className={`flex flex-col ${isMobile ? 'w-full' : 'w-[50%]'} border-r bg-white overflow-y-auto`}>
-            <div className="p-4 flex flex-col gap-4">
+          <Card className={`flex flex-col ${isMobile ? 'w-full' : 'w-[50%]'} border-r rounded-none overflow-y-auto`}>
+            <Card.Body className="flex flex-col gap-4">
               {/* Camera preview — constrained, not full width */}
               <div className="relative">
                 <CameraPreview videoRef={previewRef} />
@@ -385,8 +384,8 @@ function BroadcastContent({
                   )}
                 </div>
               </div>
-            </div>
-          </div>
+            </Card.Body>
+          </Card>
 
           {/* Spotlight badge — shown when broadcaster has featured a creator */}
           {featuredCreator && (
@@ -410,18 +409,21 @@ function BroadcastContent({
 
           {/* ── Right: Chat (desktop only) ── */}
           {!isMobile && (
-            <div className="w-[30%]">
-              <ChatPanel
-                sessionId={sessionId}
-                sessionOwnerId={userId}
-                currentUserId={userId}
-                authToken={authToken}
-                isMobile={false}
-                isOpen={true}
-                connectionState={chatConnectionState}
-                chatError={chatError}
-              />
-            </div>
+            <Card className="w-[30%] flex flex-col rounded-none overflow-hidden">
+              <Card.Header>Chat</Card.Header>
+              <Card.Body className="flex-1 overflow-hidden p-0">
+                <ChatPanel
+                  sessionId={sessionId}
+                  sessionOwnerId={userId}
+                  currentUserId={userId}
+                  authToken={authToken}
+                  isMobile={false}
+                  isOpen={true}
+                  connectionState={chatConnectionState}
+                  chatError={chatError}
+                />
+              </Card.Body>
+            </Card>
           )}
         </div>
 

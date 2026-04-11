@@ -209,16 +209,10 @@ export function StoryCreator({ isOpen, onClose, onPublished }: StoryCreatorProps
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                {segments.map((seg) => (
-                  <div key={seg.id} className="relative flex-shrink-0 group">
+                {segments.map((seg, i) => (
+                  <div key={seg.localId} className="relative flex-shrink-0 group">
                     <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                      {seg.previewUrl ? (
-                        <img
-                          src={seg.previewUrl}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : isImage(seg.file) ? (
+                      {isImage(seg.file) ? (
                         <PhotoIcon
                           size={24}
                           className="text-gray-400 dark:text-gray-500"
@@ -272,7 +266,7 @@ export function StoryCreator({ isOpen, onClose, onPublished }: StoryCreatorProps
 
                     {/* Remove button */}
                     <button
-                      onClick={() => removeSegment(seg.id)}
+                      onClick={() => removeSegment(i)}
                       className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 dark:bg-gray-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                       aria-label="Remove file"
                     >

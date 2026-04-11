@@ -7,6 +7,7 @@ interface UploadingSegment {
   progress: number; // 0-100
   status: 'pending' | 'uploading' | 'done' | 'error';
   segmentId?: string;
+  localId: string;
 }
 
 interface UseStoryCreatorReturn {
@@ -58,9 +59,9 @@ export function useStoryCreator(): UseStoryCreatorReturn {
 
     for (const file of files) {
       const type = file.type.startsWith('video/') ? 'video' : 'image';
-      const idx = segments.length;
+      const localId = crypto.randomUUID();
 
-      setSegments(prev => [...prev, { file, progress: 0, status: 'pending' }]);
+      setSegments(prev => [...prev, { file, progress: 0, status: 'pending', localId }]);
 
       try {
         const { token } = await fetchToken();
@@ -74,7 +75,7 @@ export function useStoryCreator(): UseStoryCreatorReturn {
         const { segmentId, uploadUrl } = await segRes.json();
 
         // Upload to S3 via presigned URL
-        setSegments(prev => prev.map((s, i) => i === idx ? { ...s, status: 'uploading' as const } : s));
+        setSegments(prev => prev.map(s => s.localId === localId ? { ...s, status: 'uploading' as const } : s));
 
         const uploadRes = await fetch(uploadUrl, {
           method: 'PUT',
@@ -83,13 +84,13 @@ export function useStoryCreator(): UseStoryCreatorReturn {
         });
         if (!uploadRes.ok) throw new Error('Upload failed');
 
-        setSegments(prev => prev.map((s, i) => i === idx ? { ...s, status: 'done' as const, progress: 100, segmentId } : s));
+        setSegments(prev => prev.map(s => s.localId === localId ? { ...s, status: 'done' as const, progress: 100, segmentId } : s));
       } catch (err: any) {
-        setSegments(prev => prev.map((s, i) => i === idx ? { ...s, status: 'error' as const } : s));
+        setSegments(prev => prev.map(s => s.localId === localId ? { ...s, status: 'error' as const } : s));
         setError(err.message);
       }
     }
-  }, [sessionId, segments.length]);
+  }, [sessionId]);
 
   const removeSegment = useCallback((index: number) => {
     setSegments(prev => prev.filter((_, i) => i !== index));

@@ -18,7 +18,7 @@ export function useStoryViewState() {
   const markViewed = useCallback((sessionId: string) => {
     setViewState(prev => {
       const next = { ...prev, [sessionId]: Date.now() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* quota exceeded */ }
       return next;
     });
   }, []);
@@ -35,7 +35,7 @@ export function useStoryViewState() {
       for (const [id, ts] of Object.entries(prev)) {
         if (ts > cutoff) cleaned[id] = ts;
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned)); } catch { /* quota exceeded */ }
       return cleaned;
     });
   }, []);

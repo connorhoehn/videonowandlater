@@ -84,6 +84,8 @@ export function StoryViewer({
   const longPressRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const segmentKeyRef = useRef('');
+  const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   /* ---- derived ---- */
   const user = users[userIndex];
@@ -152,8 +154,11 @@ export function StoryViewer({
     cancelAnimationFrame(rafRef.current);
     startTimeRef.current = performance.now();
     elapsedBeforePauseRef.current = 0;
+    const key = segmentKeyRef.current;
 
     const tick = (now: number) => {
+      // Bail out if segment changed since this timer started
+      if (segmentKeyRef.current !== key) return;
       if (longPressRef.current) {
         // while long-pressing, just keep looping without advancing
         rafRef.current = requestAnimationFrame(tick);
@@ -176,6 +181,7 @@ export function StoryViewer({
   // Pause / resume effect
   useEffect(() => {
     if (!isOpen || !segment) return;
+    const key = segmentKeyRef.current;
 
     if (isPaused) {
       // save elapsed time
@@ -185,6 +191,7 @@ export function StoryViewer({
     } else {
       startTimeRef.current = performance.now();
       const tick = (now: number) => {
+        if (segmentKeyRef.current !== key) return;
         if (longPressRef.current) {
           rafRef.current = requestAnimationFrame(tick);
           return;
@@ -210,22 +217,38 @@ export function StoryViewer({
   useEffect(() => {
     if (!isOpen || !segment) return;
 
+    // Update segment key so stale ticks bail out
+    const key = `${userIndex}-${segmentIndex}-${segment.id}`;
+    segmentKeyRef.current = key;
+
+    // Cancel any running animation and reset progress immediately
+    cancelAnimationFrame(rafRef.current);
+    setProgress(0);
     elapsedBeforePauseRef.current = 0;
 
     if (segment.type === 'image') {
       durationRef.current = segment.duration ?? DEFAULT_IMAGE_DURATION;
-      startTimer();
+      // Don't start timer until image is loaded
+      const img = new Image();
+      img.onload = () => {
+        // Only start if segment hasn't changed while loading
+        if (segmentKeyRef.current === key) {
+          startTimer();
+        }
+      };
+      img.src = segment.src;
     }
     // for video, timer starts on loadedmetadata
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [isOpen, userIndex, segmentIndex, segment?.id, startTimer]);
+  }, [isOpen, userIndex, segmentIndex, segment?.id, startTimer, segment?.type, segment?.duration, segment?.src]);
 
   /* ---- video metadata handler ---- */
   const handleVideoLoaded = useCallback(() => {
     const vid = videoRef.current;
     if (!vid) return;
     durationRef.current = segment?.duration ?? vid.duration * 1000;
+    // Only start if the segment hasn't changed while video was loading
     startTimer();
   }, [segment?.duration, startTimer]);
 
@@ -238,9 +261,11 @@ export function StoryViewer({
           onClose();
           break;
         case 'ArrowLeft':
+          longPressRef.current = false;
           goPrev();
           break;
         case 'ArrowRight':
+          longPressRef.current = false;
           goNext();
           break;
         case ' ':
@@ -280,13 +305,21 @@ export function StoryViewer({
     }
   }, [goNext]);
 
+  /* ---- cleanup reaction timeout on unmount ---- */
+  useEffect(() => {
+    return () => {
+      if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
+    };
+  }, []);
+
   /* ---- reactions ---- */
   const handleReact = useCallback(
     (emoji: string) => {
       if (!user || !segment) return;
       onReact?.(user.id, segment.id, emoji);
       setReactingEmoji(emoji);
-      setTimeout(() => setReactingEmoji(null), 600);
+      if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
+      reactionTimeoutRef.current = setTimeout(() => setReactingEmoji(null), 600);
     },
     [user, segment, onReact],
   );

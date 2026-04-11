@@ -72,10 +72,14 @@ export function useStories(): UseStoriesReturn {
         headers: { Authorization: `Bearer ${token}` },
       });
       // Optimistic update: mark as seen locally
-      setStoryUsers(prev => prev.map(group => ({
-        ...group,
-        hasUnseenStories: group.stories.some(s => s.sessionId !== sessionId) ? group.hasUnseenStories : false,
-      })));
+      setStoryUsers(prev => prev.map(group => {
+        // Check if ALL stories in this group have been viewed
+        const allViewed = group.stories.every(s => s.sessionId === sessionId);
+        return {
+          ...group,
+          hasUnseenStories: allViewed ? false : group.hasUnseenStories,
+        };
+      }));
     } catch (err) {
       console.error('Error marking story viewed:', err);
     }

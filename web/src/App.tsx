@@ -18,6 +18,7 @@ import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
 import { DemoPage } from './demo/DemoPage';
 import { AuthenticatedShell } from './components/AuthenticatedShell';
+import { ToastProvider } from './components/social';
 
 function BrandedLoader() {
   return (
@@ -70,6 +71,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -84,6 +86,7 @@ function App() {
             <Route path="/video/:sessionId" element={<VideoPage />} />
           </Route>
         </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

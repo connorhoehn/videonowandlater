@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
-import { useAuth } from '../auth/useAuth';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { useNavbarActions } from '../hooks/useNavbarActions';
+import { useSidebarData } from '../hooks/useSidebarData';
 import { PageTransition } from './PageTransition';
 import {
   AppShell,
@@ -20,7 +21,8 @@ import {
 import { ChatIcon, MenuIcon } from './social/Icons';
 
 export function AuthenticatedShell() {
-  const { user, signOut } = useAuth();
+  const { user, handleSignOut } = useNavbarActions();
+  const { profileStats, suggestions, newsItems } = useSidebarData();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -46,7 +48,7 @@ export function AuthenticatedShell() {
             user={{ name: user?.username ?? '' }}
             onProfile={() => navigate('/')}
             onSettings={() => navigate('/')}
-            onSignOut={() => signOut()}
+            onSignOut={handleSignOut}
             darkMode={isDark}
             onToggleDarkMode={toggleDarkMode}
           />
@@ -58,7 +60,10 @@ export function AuthenticatedShell() {
   const leftSidebar = (
     <>
       <ProfileSidebar
-        user={{ name: user?.username ?? '' }}
+        user={{
+          name: user?.username ?? '',
+          stats: profileStats,
+        }}
         navItems={[
           { label: 'Feed', href: '/' },
           { label: 'Settings' },
@@ -73,9 +78,9 @@ export function AuthenticatedShell() {
 
   const rightSidebar = (
     <>
-      <SuggestionWidget users={[]} />
+      <SuggestionWidget title="Who to watch" users={suggestions} />
       <div className="mt-4">
-        <NewsWidget items={[]} />
+        <NewsWidget title="Recent recordings" items={newsItems} />
       </div>
     </>
   );
@@ -102,7 +107,10 @@ export function AuthenticatedShell() {
         side="left"
       >
         <ProfileSidebar
-          user={{ name: user?.username ?? '' }}
+          user={{
+            name: user?.username ?? '',
+            stats: profileStats,
+          }}
           navItems={[
             { label: 'Feed', href: '/' },
             { label: 'Settings' },

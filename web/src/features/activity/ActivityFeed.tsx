@@ -3,11 +3,22 @@
  * Shows broadcast, hangout, and upload sessions with loading skeletons and empty state
  */
 
+import { motion } from 'motion/react';
 import { Card } from '../../components/social';
 import { BroadcastActivityCard } from './BroadcastActivityCard';
 import { HangoutActivityCard } from './HangoutActivityCard';
 import { UploadActivityCard } from './UploadActivityCard';
 import type { ActivitySession } from './RecordingSlider';
+
+const feedVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' } },
+};
 
 interface ActivityFeedProps {
   sessions: ActivitySession[];
@@ -86,21 +97,34 @@ export function ActivityFeed({ sessions, loading = false }: ActivityFeedProps) {
 
   return (
     <div className="py-6">
-      <div className="space-y-5">
+      <motion.div
+        className="space-y-5"
+        variants={feedVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {sortedSessions.map((session) => {
+          let card: React.ReactNode;
           switch (session.sessionType) {
             case 'BROADCAST':
-              return <BroadcastActivityCard key={session.sessionId} session={session} />;
+              card = <BroadcastActivityCard session={session} />;
+              break;
             case 'HANGOUT':
-              return <HangoutActivityCard key={session.sessionId} session={session} />;
+              card = <HangoutActivityCard session={session} />;
+              break;
             case 'UPLOAD':
-              return <UploadActivityCard key={session.sessionId} session={session} />;
+              card = <UploadActivityCard session={session} />;
+              break;
             default:
-              // Fallback for unknown session types
               return null;
           }
+          return (
+            <motion.div key={session.sessionId} variants={cardVariants}>
+              {card}
+            </motion.div>
+          );
         })}
-      </div>
+      </motion.div>
     </div>
   );
 }

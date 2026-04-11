@@ -6,6 +6,7 @@ import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResul
 import { v4 as uuid } from 'uuid';
 import { getSessionById } from '../repositories/session-repository';
 import { createStoryReply } from '../repositories/story-repository';
+import { SessionType } from '../domain/session';
 import type { StoryReply } from '../domain/story';
 import { Logger } from '@aws-lambda-powertools/logger';
 
@@ -110,7 +111,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    if (session.sessionType !== 'STORY') {
+    if (session.sessionType !== SessionType.STORY) {
       return {
         statusCode: 400,
         headers: {

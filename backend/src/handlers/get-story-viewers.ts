@@ -5,6 +5,7 @@
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById } from '../repositories/session-repository';
 import { getStoryViewers } from '../repositories/story-repository';
+import { SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'get-story-viewers' } });
@@ -51,7 +52,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    if (session.sessionType !== 'STORY') {
+    if (session.sessionType !== SessionType.STORY) {
       return {
         statusCode: 400,
         headers: {

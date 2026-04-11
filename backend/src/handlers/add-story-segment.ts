@@ -102,6 +102,29 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
+  // Validate duration for video segments
+  if (body.type === 'video' && (!body.duration || body.duration <= 0)) {
+    return {
+      statusCode: 400,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: 'Duration required for video segments (positive number in ms)' }),
+    };
+  }
+
+  if (body.duration && (body.duration < 1000 || body.duration > 60000)) {
+    return {
+      statusCode: 400,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: 'Duration must be between 1 and 60 seconds' }),
+    };
+  }
+
   if (!body.filename) {
     return {
       statusCode: 400,

@@ -3,7 +3,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 import type { Session } from '../domain/session';
@@ -81,10 +81,12 @@ export async function addStorySegment(
       PK: `SESSION#${sessionId}`,
       SK: 'METADATA',
     },
-    UpdateExpression: 'SET storySegments = list_append(storySegments, :segment)',
+    UpdateExpression: 'SET storySegments = list_append(storySegments, :segment), #version = #version + :inc',
     ConditionExpression: 'attribute_exists(PK) AND attribute_exists(SK)',
+    ExpressionAttributeNames: { '#version': 'version' },
     ExpressionAttributeValues: {
       ':segment': [segment],
+      ':inc': 1,
     },
   }));
 
@@ -109,17 +111,50 @@ export async function publishStory(
       PK: `SESSION#${sessionId}`,
       SK: 'METADATA',
     },
-    UpdateExpression: 'SET #status = :newStatus, GSI1PK = :gsi',
+    UpdateExpression: 'SET #status = :newStatus, GSI1PK = :gsi, #version = #version + :inc',
     ExpressionAttributeNames: {
       '#status': 'status',
+      '#version': 'version',
     },
     ExpressionAttributeValues: {
       ':newStatus': SessionStatus.LIVE,
       ':gsi': `STATUS#${SessionStatus.LIVE.toUpperCase()}`,
+      ':inc': 1,
     },
   }));
 
   logger.info('Published story', { sessionId });
+}
+
+/**
+ * Update story segments with resolved URLs
+ *
+ * @param tableName DynamoDB table name
+ * @param sessionId Session ID
+ * @param segments Segments with populated url fields
+ */
+export async function updateStorySegmentsWithUrls(
+  tableName: string,
+  sessionId: string,
+  segments: StorySegment[],
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: 'METADATA',
+    },
+    UpdateExpression: 'SET storySegments = :segments, #version = #version + :inc',
+    ExpressionAttributeNames: { '#version': 'version' },
+    ExpressionAttributeValues: {
+      ':segments': segments,
+      ':inc': 1,
+    },
+  }));
+
+  logger.info('Updated story segments with URLs', { sessionId, segmentCount: segments.length });
 }
 
 // === Story Views ===
@@ -141,37 +176,43 @@ export async function recordStoryView(
   const viewedAt = new Date().toISOString();
 
   try {
-    // Insert view record — fails silently if already exists
-    await docClient.send(new PutCommand({
-      TableName: tableName,
-      Item: {
-        PK: `STORY_VIEW#${sessionId}`,
-        SK: `#${userId}`,
-        entityType: 'STORY_VIEW',
-        sessionId,
-        userId,
-        viewedAt,
-      },
-      ConditionExpression: 'attribute_not_exists(PK)',
-    }));
-
-    // Atomic increment view count on session
-    await docClient.send(new UpdateCommand({
-      TableName: tableName,
-      Key: {
-        PK: `SESSION#${sessionId}`,
-        SK: 'METADATA',
-      },
-      UpdateExpression: 'SET storyViewCount = if_not_exists(storyViewCount, :zero) + :inc',
-      ExpressionAttributeValues: {
-        ':zero': 0,
-        ':inc': 1,
-      },
+    // Atomic transaction: insert view record + increment count in one operation
+    // Prevents race condition where two requests could both insert and double-count
+    await docClient.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: tableName,
+            Item: {
+              PK: `STORY_VIEW#${sessionId}`,
+              SK: `#${userId}`,
+              entityType: 'STORY_VIEW',
+              sessionId,
+              userId,
+              viewedAt,
+            },
+            ConditionExpression: 'attribute_not_exists(SK)',
+          },
+        },
+        {
+          Update: {
+            TableName: tableName,
+            Key: {
+              PK: `SESSION#${sessionId}`,
+              SK: 'METADATA',
+            },
+            UpdateExpression: 'ADD storyViewCount :inc',
+            ExpressionAttributeValues: {
+              ':inc': 1,
+            },
+          },
+        },
+      ],
     }));
 
     logger.info('Recorded story view', { sessionId, userId });
   } catch (error: any) {
-    if (error.name === 'ConditionalCheckFailedException') {
+    if (error.name === 'TransactionCanceledException') {
       logger.info('Story already viewed by user', { sessionId, userId });
       return;
     }
@@ -198,6 +239,7 @@ export async function getStoryViewers(
     ExpressionAttributeValues: {
       ':pk': `STORY_VIEW#${sessionId}`,
     },
+    Limit: 100,
   }));
 
   return (result.Items || []).map((item) => ({
@@ -334,6 +376,7 @@ export async function getStoryReplies(
       ':pk': `STORY_REPLY#${sessionId}`,
     },
     ScanIndexForward: true,
+    Limit: 100,
   }));
 
   return (result.Items || []).map((item) => ({

@@ -5,6 +5,7 @@
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SessionType } from '../domain/session';
 import { createNewSession } from '../services/session-service';
+import { createStorySession } from '../repositories/story-repository';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -44,6 +45,19 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
         'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({ error: 'sessionType required (BROADCAST, HANGOUT, or STORY)' }),
+    };
+  }
+
+  // STORY sessions don't need IVS resources — use dedicated story path
+  if (body.sessionType === SessionType.STORY) {
+    const session = await createStorySession(tableName, userId);
+    return {
+      statusCode: 201,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify(session),
     };
   }
 

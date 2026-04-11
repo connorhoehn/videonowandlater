@@ -6,7 +6,7 @@ import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResul
 import { Logger } from '@aws-lambda-powertools/logger';
 import { SessionType, SessionStatus } from '../domain/session';
 import { getSessionById } from '../repositories/session-repository';
-import { publishStory } from '../repositories/story-repository';
+import { publishStory, updateStorySegmentsWithUrls } from '../repositories/story-repository';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'publish-story' } });
 
@@ -97,12 +97,14 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    // Generate CloudFront URLs for all segments
-    if (cloudFrontDomain) {
-      segments.forEach(s => {
-        s.url = `https://${cloudFrontDomain}/${s.s3Key}`;
-      });
-    }
+    // Generate CloudFront URLs for all segments (immutable — no domain object mutation)
+    const updatedSegments = segments.map(s => ({
+      ...s,
+      url: cloudFrontDomain ? `https://${cloudFrontDomain}/${s.s3Key}` : undefined,
+    }));
+
+    // Persist updated segments with URLs
+    await updateStorySegmentsWithUrls(tableName, sessionId, updatedSegments);
 
     // Publish story (sets status to LIVE)
     await publishStory(tableName, sessionId);
@@ -115,7 +117,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       },
       body: JSON.stringify({
         status: 'published',
-        segments,
+        segments: updatedSegments,
       }),
     };
   } catch (error) {

@@ -4,6 +4,7 @@
  */
 
 import type { StreamMetrics } from './metrics';
+import type { StorySegment } from './story';
 
 /**
  * AI-generated chapter representing a logical section of a video
@@ -34,6 +35,7 @@ export enum SessionType {
   BROADCAST = 'BROADCAST',
   HANGOUT = 'HANGOUT',
   UPLOAD = 'UPLOAD',
+  STORY = 'STORY',
 }
 
 /**
@@ -135,6 +137,15 @@ export interface Session {
    * Used to track freshness of streamMetrics data
    */
   lastMetricsUpdate?: number;
+  // Story-specific fields (only populated when sessionType === 'STORY')
+  /** ISO 8601 timestamp when story expires (createdAt + 24h) */
+  storyExpiresAt?: string;
+  /** Ordered array of story content segments */
+  storySegments?: StorySegment[];
+  /** Total unique story views */
+  storyViewCount?: number;
+  /** Total replies received on story */
+  storyReplyCount?: number;
   // AI-generated chapters (derived from speaker-diarized transcript)
   /** Logical sections of the video with titles and timestamps */
   chapters?: Chapter[];

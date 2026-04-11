@@ -17,6 +17,7 @@ import { HangoutPage } from './features/hangout/HangoutPage';
 import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
 import { DemoPage } from './demo/DemoPage';
+import { AuthenticatedShell } from './components/AuthenticatedShell';
 
 function BrandedLoader() {
   return (
@@ -73,62 +74,15 @@ function App() {
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/broadcast/:sessionId"
-            element={
-              <ProtectedRoute>
-                <BroadcastPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/viewer/:sessionId"
-            element={
-              <ProtectedRoute>
-                <ViewerPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/replay/:sessionId"
-            element={
-              <ProtectedRoute>
-                <ReplayViewer />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/hangout/:sessionId"
-            element={
-              <ProtectedRoute>
-                <HangoutPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/upload/:sessionId"
-            element={
-              <ProtectedRoute>
-                <UploadViewer />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/video/:sessionId"
-            element={
-              <ProtectedRoute>
-                <VideoPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route element={<ProtectedRoute><AuthenticatedShell /></ProtectedRoute>}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/broadcast/:sessionId" element={<BroadcastPage />} />
+            <Route path="/viewer/:sessionId" element={<ViewerPage />} />
+            <Route path="/replay/:sessionId" element={<ReplayViewer />} />
+            <Route path="/hangout/:sessionId" element={<HangoutPage />} />
+            <Route path="/upload/:sessionId" element={<UploadViewer />} />
+            <Route path="/video/:sessionId" element={<VideoPage />} />
+          </Route>
         </Routes>
       </AuthProvider>
     </BrowserRouter>

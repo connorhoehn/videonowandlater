@@ -7,6 +7,8 @@ import { RecordingSlider, type ActivitySession } from '../features/activity/Reco
 import { LiveBroadcastsSlider } from '../features/activity/LiveBroadcastsSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
+import { CreatePostCard } from '../components/social/CreatePostCard';
+import { CameraIcon, UsersIcon, UploadIcon } from '../components/social/Icons';
 
 function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
   return sessions.some(
@@ -21,7 +23,7 @@ function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -105,11 +107,6 @@ export function HomePage() {
     initAuth();
   }, []);
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
-  };
-
   const handleCreateBroadcast = async () => {
     const config = getConfig();
     if (!config?.apiUrl) return;
@@ -157,87 +154,32 @@ export function HomePage() {
   const busy = isCreating || isCreatingHangout;
 
   return (
-    <div className="min-h-screen bg-gray-50 animate-page-enter">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-2xl mx-auto flex items-center justify-between px-4 sm:px-6 h-14">
-          {/* Brand */}
-          <span className="font-semibold text-gray-900 tracking-tight text-sm select-none">
-            videonow
-          </span>
-
-          {/* Actions */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={handleCreateBroadcast}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500 text-white hover:bg-red-600 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-red-500/20"
-            >
-              {isCreating ? (
-                <svg className="branded-spinner w-3 h-3" viewBox="0 0 50 50">
-                  <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="6" />
-                </svg>
-              ) : (
-                <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />
-              )}
-              {isCreating ? 'Creating' : 'Go Live'}
-            </button>
-            <button
-              onClick={handleCreateHangout}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-violet-600/20"
-            >
-              {isCreatingHangout ? (
-                <>
-                  <svg className="branded-spinner w-3 h-3" viewBox="0 0 50 50">
-                    <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="6" />
-                  </svg>
-                  Creating
-                </>
-              ) : 'Hangout'}
-            </button>
-            <button
-              onClick={() => setShowUploadModal(true)}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 active:scale-[0.96] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-green-600/20"
-            >
-              Upload
-            </button>
-          </div>
-
-          {/* User */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 hidden sm:block truncate max-w-[100px]">
-              {user?.username}
-            </span>
-            <button
-              onClick={handleSignOut}
-              className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
-
+    <>
+      <div className="space-y-4">
         {error && (
-          <div className="px-4 pb-2 animate-fade-in">
-            <div className="max-w-2xl mx-auto flex items-center justify-center gap-1.5 text-xs text-red-500">
-              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              {error}
-            </div>
+          <div className="flex items-center gap-1.5 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            {error}
           </div>
         )}
-      </header>
 
-      {/* Feed */}
-      <main>
+        <CreatePostCard
+          userName={user?.username}
+          placeholder="What's on your mind?"
+          actions={[
+            { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast },
+            { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleCreateHangout },
+            { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
+          ]}
+        />
+
         {loadingActivity ? (
           <>
             {/* Skeleton for recording slider */}
             <div className="border-b border-gray-100">
-              <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+              <div className="py-6">
                 <div className="animate-shimmer h-4 w-28 rounded mb-4" />
                 <div className="flex gap-4 overflow-hidden">
                   {[0, 1, 2, 3].map((i) => (
@@ -262,7 +204,7 @@ export function HomePage() {
             <ActivityFeed sessions={sessions} />
           </>
         )}
-      </main>
+      </div>
 
       {/* Upload Modal */}
       {showUploadModal && (
@@ -278,6 +220,6 @@ export function HomePage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -4,6 +4,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { Card, Avatar } from '../../components/social';
 import { formatHumanDuration } from './BroadcastActivityCard';
 import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
@@ -99,32 +100,18 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
   };
 
   return (
-    <div
+    <Card
+      className={`group ${
+        isViewable ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'
+      } transition-all duration-300`}
       onClick={handleClick}
-      className={`group bg-white rounded-2xl border border-gray-100 ${
-        isViewable ? 'hover:border-gray-200 hover:shadow-lg cursor-pointer' : 'cursor-default'
-      } transition-all duration-300 overflow-hidden`}
     >
-      <div className="p-4 sm:p-5">
+      <Card.Body>
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1">
-          {/* Upload Icon */}
+          {/* Upload Avatar */}
           <div className="flex-shrink-0 mt-0.5">
-            <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center">
-              <svg
-                className="w-4.5 h-4.5 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
-            </div>
+            <Avatar name={session.userId} alt={session.userId || 'Uploader'} size="sm" />
           </div>
 
           <div className="flex-1">
@@ -230,7 +217,7 @@ export function UploadActivityCard({ session, compact = false }: UploadActivityC
 
       {/* Audit Log - Processing Timeline */}
       {!compact && <SessionAuditLog session={session} compact={true} />}
-      </div>
-    </div>
+      </Card.Body>
+    </Card>
   );
 }

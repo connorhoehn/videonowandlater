@@ -3,6 +3,7 @@
  * Shows broadcast, hangout, and upload sessions with loading skeletons and empty state
  */
 
+import { Card } from '../../components/social';
 import { BroadcastActivityCard } from './BroadcastActivityCard';
 import { HangoutActivityCard } from './HangoutActivityCard';
 import { UploadActivityCard } from './UploadActivityCard';
@@ -15,11 +16,10 @@ interface ActivityFeedProps {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+    <Card>
       {/* Thumbnail skeleton */}
       <div className="animate-shimmer h-48 sm:h-56" />
-      {/* Content */}
-      <div className="p-4 sm:p-5">
+      <Card.Body>
         {/* Header row */}
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="animate-shimmer w-8 h-8 rounded-full flex-shrink-0" />
@@ -36,14 +36,14 @@ function SkeletonCard() {
         </div>
         {/* Summary block */}
         <div className="animate-shimmer h-12 w-full rounded-xl" />
-      </div>
-    </div>
+      </Card.Body>
+    </Card>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center">
+    <div className="py-16 text-center">
       <div className="flex flex-col items-center gap-4">
         {/* Empty state icon */}
         <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
@@ -70,7 +70,7 @@ export function ActivityFeed({ sessions, loading = false }: ActivityFeedProps) {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+      <div className="py-6">
         <div className="space-y-5">
           <SkeletonCard />
           <SkeletonCard />
@@ -85,7 +85,7 @@ export function ActivityFeed({ sessions, loading = false }: ActivityFeedProps) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+    <div className="py-6">
       <div className="space-y-5">
         {sortedSessions.map((session) => {
           switch (session.sessionType) {

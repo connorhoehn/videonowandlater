@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card, Avatar } from '../../components/social';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
 import { PipelineStatusBadge } from './PipelineStatusBadge';
 import { SessionAuditLog } from './SessionAuditLog';
@@ -61,9 +62,9 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const showThumbnail = thumbnailSrc && !imgError;
 
   return (
-    <div
+    <Card
+      className="group hover:shadow-lg cursor-pointer transition-all duration-300"
       onClick={() => navigate(`/replay/${session.sessionId}`)}
-      className="group bg-white rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-lg cursor-pointer transition-all duration-300 overflow-hidden"
     >
       {/* Thumbnail or placeholder — full-width, aspect-ratio */}
       {showThumbnail ? (
@@ -79,13 +80,11 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
       )}
 
       {/* Card content */}
-      <div className="p-4 sm:p-5">
+      <Card.Body>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                {session.userId?.charAt(0).toUpperCase() || 'B'}
-              </div>
+              <Avatar name={session.userId} alt={session.userId || 'Broadcaster'} size="sm" />
               <h3 className="font-semibold text-gray-900 truncate text-[15px]">{session.userId}</h3>
               {session.sessionType === 'UPLOAD' && (
                 <span className="text-[10px] font-semibold uppercase tracking-wider bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
@@ -148,7 +147,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         <div className="ml-[42px]">
           <SessionAuditLog session={session} compact={true} />
         </div>
-      </div>
-    </div>
+      </Card.Body>
+    </Card>
   );
 }

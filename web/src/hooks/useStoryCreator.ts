@@ -3,11 +3,14 @@ import { getConfig } from '../config/aws-config';
 import { fetchToken } from '../auth/fetchToken';
 
 interface UploadingSegment {
-  file: File;
-  progress: number; // 0-100
+  file?: File;              // Optional now - not present for platform content
+  progress: number;
   status: 'pending' | 'uploading' | 'done' | 'error';
   segmentId?: string;
   localId: string;
+  sourceSessionId?: string; // Set when added from platform content
+  thumbnailUrl?: string;    // For display in the picker
+  label?: string;           // Display label (e.g. session userId or filename)
 }
 
 interface UseStoryCreatorReturn {
@@ -18,6 +21,7 @@ interface UseStoryCreatorReturn {
   error: string | null;
   startStory: () => Promise<void>;
   addFiles: (files: File[]) => Promise<void>;
+  addFromSession: (sourceSessionId: string, type: 'image' | 'video', thumbnailUrl: string, label: string) => Promise<void>;
   removeSegment: (index: number) => void;
   publish: () => Promise<boolean>;
   reset: () => void;
@@ -92,6 +96,52 @@ export function useStoryCreator(): UseStoryCreatorReturn {
     }
   }, [sessionId]);
 
+  const addFromSession = useCallback(async (
+    sourceSessionId: string,
+    type: 'image' | 'video',
+    thumbnailUrl: string,
+    label: string,
+  ) => {
+    if (!sessionId) return;
+    const config = getConfig();
+    if (!config?.apiUrl) return;
+
+    const localId = crypto.randomUUID();
+
+    setSegments(prev => [...prev, {
+      progress: 0,
+      status: 'pending',
+      localId,
+      sourceSessionId,
+      thumbnailUrl,
+      label,
+    }]);
+
+    try {
+      const { token } = await fetchToken();
+      const segRes = await fetch(`${config.apiUrl}/stories/${sessionId}/segments`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, sourceSessionId }),
+      });
+      if (!segRes.ok) throw new Error(`Failed to add segment: ${segRes.status}`);
+      const { segmentId } = await segRes.json();
+
+      setSegments(prev => prev.map(s =>
+        s.localId === localId
+          ? { ...s, status: 'done' as const, progress: 100, segmentId }
+          : s
+      ));
+    } catch (err: any) {
+      setSegments(prev => prev.map(s =>
+        s.localId === localId
+          ? { ...s, status: 'error' as const }
+          : s
+      ));
+      setError(err.message);
+    }
+  }, [sessionId]);
+
   const removeSegment = useCallback((index: number) => {
     setSegments(prev => prev.filter((_, i) => i !== index));
   }, []);
@@ -125,5 +175,5 @@ export function useStoryCreator(): UseStoryCreatorReturn {
     setPublishing(false);
   }, []);
 
-  return { sessionId, segments, creating, publishing, error, startStory, addFiles, removeSegment, publish, reset };
+  return { sessionId, segments, creating, publishing, error, startStory, addFiles, addFromSession, removeSegment, publish, reset };
 }

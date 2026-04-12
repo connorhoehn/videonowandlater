@@ -5,6 +5,7 @@ import {
   useCallback,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
+import Hls from 'hls.js';
 import { Avatar } from './Avatar';
 import { CloseIcon, EllipsisIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, ChatIcon } from './Icons';
 import { CommentThread, type Comment } from './CommentThread';
@@ -87,7 +88,7 @@ export function StoryViewer({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const segmentKeyRef = useRef('');
-  const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   /* ---- derived ---- */
   const user = users[userIndex];
@@ -245,12 +246,50 @@ export function StoryViewer({
     return () => cancelAnimationFrame(rafRef.current);
   }, [isOpen, userIndex, segmentIndex, segment?.id, startTimer, segment?.type, segment?.duration, segment?.src]);
 
+  /* ---- HLS setup for .m3u8 URLs ---- */
+  const hlsRef = useRef<Hls | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !segment || segment.type !== 'video') return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const isHlsUrl = segment.src?.endsWith('.m3u8');
+
+    // Cleanup previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    if (isHlsUrl && Hls.isSupported()) {
+      const hls = new Hls({ startLevel: -1 });
+      hlsRef.current = hls;
+      hls.loadSource(segment.src);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+    } else if (isHlsUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      video.src = segment.src;
+      video.play().catch(() => {});
+    }
+    // Non-HLS videos use src attribute directly (handled in JSX)
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [isOpen, segment?.id, segment?.type, segment?.src]);
+
   /* ---- video metadata handler ---- */
   const handleVideoLoaded = useCallback(() => {
     const vid = videoRef.current;
     if (!vid) return;
     durationRef.current = segment?.duration ?? vid.duration * 1000;
-    // Only start if the segment hasn't changed while video was loading
     startTimer();
   }, [segment?.duration, startTimer]);
 
@@ -459,7 +498,7 @@ export function StoryViewer({
             <video
               ref={videoRef}
               key={segment.id}
-              src={segment.src}
+              src={segment.src?.endsWith('.m3u8') ? undefined : segment.src}
               autoPlay
               muted
               playsInline

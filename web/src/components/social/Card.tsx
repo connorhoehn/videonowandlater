@@ -29,7 +29,7 @@ interface FooterProps {
 function CardRoot({ className = '', children, ...rest }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-xl shadow-sm overflow-hidden ${className}`.trim()}
+      className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden ${className}`.trim()}
       {...rest}
     >
       {children}

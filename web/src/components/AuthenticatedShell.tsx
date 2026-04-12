@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -21,6 +21,9 @@ import {
 } from './social';
 import { ChatIcon, MenuIcon } from './social/Icons';
 
+// Routes that should use full-width layout (no sidebars)
+const FULL_WIDTH_PATTERNS = ['/replay/', '/broadcast/', '/viewer/', '/hangout/', '/upload/', '/video/'];
+
 export function AuthenticatedShell() {
   const { user, handleSignOut } = useNavbarActions();
   const { profileStats, suggestions, newsItems } = useSidebarData();
@@ -28,6 +31,11 @@ export function AuthenticatedShell() {
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
+
+  const isFullWidth = useMemo(
+    () => FULL_WIDTH_PATTERNS.some(p => location.pathname.startsWith(p)),
+    [location.pathname]
+  );
 
   const navbar = (
     <Navbar
@@ -90,8 +98,9 @@ export function AuthenticatedShell() {
     <ActivityProvider>
       <AppShell
         navbar={navbar}
-        leftSidebar={leftSidebar}
-        rightSidebar={rightSidebar}
+        leftSidebar={isFullWidth ? undefined : leftSidebar}
+        rightSidebar={isFullWidth ? undefined : rightSidebar}
+        fullWidth={isFullWidth}
       >
         <AnimatePresence mode="wait">
           <PageTransition key={location.pathname}>

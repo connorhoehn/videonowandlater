@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card } from './Card';
 
 export interface NewsItem {
@@ -22,7 +21,7 @@ export function NewsWidget({
   return (
     <Card>
       <Card.Header borderless>
-        <h6 className="font-bold text-base">{title}</h6>
+        <h6 className="font-bold text-base text-gray-900 dark:text-white">{title}</h6>
       </Card.Header>
 
       <Card.Body className="pt-0">
@@ -33,12 +32,12 @@ export function NewsWidget({
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-sm text-gray-900 hover:text-blue-600 transition-colors"
+                className="font-semibold text-sm text-gray-900 dark:text-white hover:text-blue-600 transition-colors"
               >
                 {item.title}
               </a>
             ) : (
-              <p className="font-semibold text-sm text-gray-900">{item.title}</p>
+              <p className="font-semibold text-sm text-gray-900 dark:text-white">{item.title}</p>
             )}
             <p className="text-xs text-gray-500 mt-0.5">{item.timeAgo}</p>
           </div>

@@ -97,12 +97,12 @@ export function StoriesSlider({
             role="button"
             tabIndex={0}
             onClick={() =>
-              onStoryView ? onStoryView(storyIdx) : story.onClick?.()
+              story.onClick ? story.onClick() : onStoryView?.(storyIdx)
             }
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onStoryView ? onStoryView(storyIdx) : story.onClick?.();
+                story.onClick ? story.onClick() : onStoryView?.(storyIdx);
               }
             }}
             className="h-[150px] w-[120px] flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer"
@@ -127,7 +127,7 @@ export function StoriesSlider({
         <button
           type="button"
           onClick={() => scroll('left')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 cursor-pointer z-10"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gray-800 shadow-md flex items-center justify-center hover:bg-gray-700 cursor-pointer z-10 text-white"
           aria-label="Scroll left"
         >
           <ChevronLeftIcon size={16} />
@@ -139,7 +139,7 @@ export function StoriesSlider({
         <button
           type="button"
           onClick={() => scroll('right')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 cursor-pointer z-10"
+          className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gray-800 shadow-md flex items-center justify-center hover:bg-gray-700 cursor-pointer z-10 text-white"
           aria-label="Scroll right"
         >
           <ChevronRightIcon size={16} />

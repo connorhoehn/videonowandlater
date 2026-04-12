@@ -50,7 +50,15 @@ export function useStories(): UseStoriesReturn {
       });
       if (!response.ok) throw new Error(`${response.status}`);
       const data = await response.json();
-      setStoryUsers(data.storyUsers || []);
+      // Backend returns storySegments, normalize to segments for frontend
+      const normalized = (data.storyUsers || []).map((group: any) => ({
+        ...group,
+        stories: group.stories.map((story: any) => ({
+          ...story,
+          segments: story.storySegments || story.segments || [],
+        })),
+      }));
+      setStoryUsers(normalized);
       setError(null);
     } catch (err: any) {
       console.error('Error fetching stories:', err);

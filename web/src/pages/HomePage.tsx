@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { fetchToken } from '../auth/fetchToken';
 import { useAuth } from '../auth/useAuth';
 import { getConfig } from '../config/aws-config';
-import { RecordingSlider } from '../features/activity/RecordingSlider';
 import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 import { CreatePostCard } from '../components/social/CreatePostCard';
@@ -28,10 +27,10 @@ export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { sessions, loading: loadingActivity, loadMore, hasMore, loadingMore } = useActivityData();
-  const { storyUsers, markViewed, reactToStory, replyToStory, refresh: refreshStories } = useStories();
-  const { markViewed: markViewedLocal, hasViewed } = useStoryViewState();
-  const [isCreating, setIsCreating] = useState(false);
-  const [isCreatingHangout, setIsCreatingHangout] = useState(false);
+  const { storyUsers, reactToStory, replyToStory, refresh: refreshStories } = useStories();
+  useStoryViewState();
+  const [, setIsCreating] = useState(false);
+  const [, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
@@ -95,8 +94,6 @@ export function HomePage() {
     }
   };
 
-  const busy = isCreating || isCreatingHangout;
-
   return (
     <>
       <div className="space-y-4">
@@ -144,26 +141,17 @@ export function HomePage() {
           </>
         ) : (
           <>
-            {/* Stories + Live Broadcasts combined slider */}
+            {/* Combined stories + recordings slider */}
             {(() => {
               const liveBroadcasts = sessions.filter(
                 (s) => s.sessionType === 'BROADCAST' && s.recordingStatus === 'processing'
               );
-              const hasContent = storyUsers.length > 0 || liveBroadcasts.length > 0;
-              if (!hasContent) return null;
+              const recordings = sessions.filter(
+                (s) => (s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD') &&
+                  s.recordingStatus === 'available' && s.recordingHlsUrl
+              );
               return (
                 <div className="mb-4">
-                  {liveBroadcasts.length > 0 && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                      <h2 className="text-sm font-semibold text-gray-900">Stories & Live</h2>
-                    </div>
-                  )}
-                  {liveBroadcasts.length === 0 && storyUsers.length > 0 && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <h2 className="text-sm font-semibold text-gray-900">Stories</h2>
-                    </div>
-                  )}
                   <StoriesSlider
                     stories={[
                       ...storyUsers.map(group => ({
@@ -177,6 +165,12 @@ export function HomePage() {
                         thumbnail: session.thumbnailUrl || '',
                         onClick: () => navigate(`/viewer/${session.sessionId}`),
                       })),
+                      ...recordings.map(session => ({
+                        id: session.sessionId,
+                        name: session.userId,
+                        thumbnail: session.thumbnailUrl || session.posterFrameUrl || '',
+                        onClick: () => navigate(`/replay/${session.sessionId}`),
+                      })),
                     ]}
                     onCreateStory={() => setShowStoryCreator(true)}
                     createLabel="Add Story"
@@ -185,13 +179,11 @@ export function HomePage() {
                         setStoryViewerStartIndex(index);
                         setStoryViewerOpen(true);
                       }
-                      // Live broadcasts use their own onClick handler
                     }}
                   />
                 </div>
               );
             })()}
-            <RecordingSlider sessions={sessions} />
             <ActivityFeed
               sessions={sessions}
               onLoadMore={loadMore}
@@ -216,7 +208,7 @@ export function HomePage() {
           const group = storyUsers.find(g => g.userId === userId);
           if (!group) return [];
           return group.stories.flatMap(story =>
-            story.segments.map(seg => ({
+            (story.segments || []).map(seg => ({
               id: seg.segmentId,
               type: seg.type as 'image' | 'video',
               src: seg.url,

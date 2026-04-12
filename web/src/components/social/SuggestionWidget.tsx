@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card } from './Card';
 import { Avatar } from './Avatar';
 
@@ -26,7 +25,7 @@ export function SuggestionWidget({
   return (
     <Card>
       <Card.Header borderless>
-        <h6 className="font-bold text-base">{title}</h6>
+        <h6 className="font-bold text-base text-gray-900 dark:text-white">{title}</h6>
       </Card.Header>
 
       <Card.Body className="pt-0">
@@ -40,7 +39,7 @@ export function SuggestionWidget({
             />
 
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm leading-tight truncate">
+              <p className="font-semibold text-sm leading-tight truncate text-gray-900 dark:text-white">
                 {user.name}
               </p>
               {user.subtitle && (

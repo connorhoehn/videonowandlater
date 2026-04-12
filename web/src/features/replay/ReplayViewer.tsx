@@ -311,30 +311,51 @@ export function ReplayViewer() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-gray-900">Replay</h1>
-          <button
-            onClick={() => navigate('/')}
-            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-          >
-            ← Back
-          </button>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Full-width video player */}
+      <div className="w-full bg-black">
+        <div className="relative aspect-video max-h-[75vh] mx-auto">
+          <video
+            ref={videoRef}
+            controls
+            playsInline
+            className="w-full h-full"
+          />
+          <FloatingReactions reactions={floatingReactions} />
+        </div>
+      </div>
+
+      {/* Reaction timeline + picker bar */}
+      <div className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 py-2">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              {session?.recordingDuration && (
+                <ReactionTimeline
+                  reactions={allReactions}
+                  currentTime={syncTime}
+                  duration={session.recordingDuration}
+                />
+              )}
+            </div>
+            <ReplayReactionPicker
+              onReaction={handleReaction}
+              disabled={!authToken}
+            />
+          </div>
         </div>
       </div>
 
       {/* View mode tabs (Replay / Highlights) */}
       {session?.highlightReelStatus && (
-        <div className="max-w-6xl mx-auto px-4 pt-4">
-          <div className="flex bg-gray-100 rounded-lg p-0.5 w-fit">
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 w-fit">
             <button
               onClick={() => setViewMode('replay')}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
                 viewMode === 'replay'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               Replay
@@ -343,8 +364,8 @@ export function ReplayViewer() {
               onClick={() => setViewMode('highlights')}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
                 viewMode === 'highlights'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               Highlights
@@ -355,10 +376,10 @@ export function ReplayViewer() {
 
       {/* Highlights view */}
       {viewMode === 'highlights' && session?.highlightReelStatus && (
-        <div className="max-w-4xl mx-auto p-4">
+        <div className="max-w-7xl mx-auto p-4">
           <Card>
             <Card.Header>
-              <h3 className="text-sm font-semibold text-gray-900">Highlight Reel</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Highlight Reel</h3>
             </Card.Header>
             <Card.Body>
               <HighlightReelPlayer
@@ -371,114 +392,52 @@ export function ReplayViewer() {
         </div>
       )}
 
-      {/* Main content */}
-      <div className="max-w-6xl mx-auto p-4" style={{ display: viewMode === 'replay' ? undefined : 'none' }}>
-        {/* Responsive grid layout: video + metadata on left, chat on right */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Video column (takes 2/3 width on desktop) */}
-          <div className="lg:col-span-2">
-            {/* Video container with floating reactions */}
-            <Card>
-              <div className="relative aspect-video bg-black overflow-hidden">
-                <video
-                  ref={videoRef}
-                  controls
-                  playsInline
-                  className="w-full h-full"
-                />
-                {/* Floating reactions overlay */}
-                <FloatingReactions reactions={floatingReactions} />
-              </div>
-
-              {/* Reaction timeline below video */}
-              {session?.recordingDuration && (
-                <Card.Body>
-                  <ReactionTimeline
-                    reactions={allReactions}
-                    currentTime={syncTime}
-                    duration={session.recordingDuration}
-                  />
-                </Card.Body>
+      {/* Below-video content: split layout */}
+      <div className="max-w-7xl mx-auto px-4 py-4" style={{ display: viewMode === 'replay' ? undefined : 'none' }}>
+        {/* Title bar with back button */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {session.userId}'s {session.sessionType === 'UPLOAD' ? 'Video' : 'Broadcast'}
+            </h1>
+            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {session.recordingDuration !== undefined && (
+                <span>{formatDuration(session.recordingDuration)}</span>
               )}
+              <span>{new Date(session.createdAt).toLocaleDateString()}</span>
+              {session.reactionSummary && (
+                <ReactionSummaryPills reactionSummary={session.reactionSummary} />
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/')}
+            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all"
+          >
+            ← Back
+          </button>
+        </div>
 
-              {/* Reaction picker */}
-              <Card.Footer borderless={!!session?.recordingDuration}>
-                <div className="flex justify-center">
-                  <ReplayReactionPicker
-                    onReaction={handleReaction}
-                    disabled={!authToken}
-                  />
-                </div>
-              </Card.Footer>
-            </Card>
+        {/* Chapter navigation */}
+        {session.chapters && session.chapters.length > 0 && (
+          <div className="mb-4">
+            <ChapterList
+              chapters={session.chapters}
+              currentTimeMs={syncTime}
+              thumbnailBaseUrl={session.thumbnailBaseUrl}
+              onSeek={handleSeek}
+            />
+          </div>
+        )}
 
-            {/* Chapter navigation */}
-            {session.chapters && session.chapters.length > 0 && (
-              <Card className="mt-4">
-                <Card.Header>
-                  <h3 className="text-sm font-semibold text-gray-900">Chapters</h3>
-                </Card.Header>
-                <Card.Body>
-                  <ChapterList
-                    chapters={session.chapters}
-                    currentTimeMs={syncTime}
-                    thumbnailBaseUrl={session.thumbnailBaseUrl}
-                    onSeek={handleSeek}
-                  />
-                </Card.Body>
-              </Card>
-            )}
-
-            {/* Metadata panel */}
-            <Card className="mt-4">
-              <Card.Header>
-                <h3 className="text-sm font-semibold text-gray-900">Details</h3>
-              </Card.Header>
-              <Card.Body>
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Broadcaster</span>
-                    <p className="text-base text-gray-900 mt-1">
-                      {session.userId}
-                    </p>
-                  </div>
-
-                  {session.recordingDuration !== undefined && (
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">Duration</span>
-                      <p className="text-base text-gray-900 mt-1">
-                        {formatDuration(session.recordingDuration)}
-                      </p>
-                    </div>
-                  )}
-
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Recorded</span>
-                    <p className="text-base text-gray-900 mt-1">
-                      {new Date(session.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-
-                  {session.endedAt && (
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">Ended</span>
-                      <p className="text-base text-gray-900 mt-1">
-                        {new Date(session.endedAt).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-gray-200">
-                    <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
-                  </div>
-                </div>
-              </Card.Body>
-            </Card>
-
+        {/* Two-column split: Details left, Chat/Transcript right */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
+          {/* Left: Details, AI Summary, Processing */}
+          <div className="space-y-4">
             {/* AI Summary */}
-            <Card className="mt-4">
+            <Card>
               <Card.Header>
-                <h3 className="text-sm font-semibold text-gray-900">AI Summary</h3>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">AI Summary</h3>
               </Card.Header>
               <Card.Body>
                 <SummaryDisplay
@@ -486,44 +445,67 @@ export function ReplayViewer() {
                   status={session.aiSummaryStatus}
                   visualAnalysis={session.visualAnalysis}
                   truncate={false}
-                  className="text-gray-800"
+                  className="text-gray-800 dark:text-gray-200"
                 />
               </Card.Body>
             </Card>
 
-            {/* Processing Timeline Audit Log */}
-            <Card className="mt-4">
+            {/* Details */}
+            <Card>
               <Card.Header>
-                <h3 className="text-sm font-semibold text-gray-900">Processing Timeline</h3>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Details</h3>
+              </Card.Header>
+              <Card.Body>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Broadcaster</span>
+                    <p className="text-sm text-gray-900 dark:text-white mt-0.5">{session.userId}</p>
+                  </div>
+                  {session.recordingDuration !== undefined && (
+                    <div>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Duration</span>
+                      <p className="text-sm text-gray-900 dark:text-white mt-0.5">{formatDuration(session.recordingDuration)}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Recorded</span>
+                    <p className="text-sm text-gray-900 dark:text-white mt-0.5">{new Date(session.createdAt).toLocaleString()}</p>
+                  </div>
+                  {session.endedAt && (
+                    <div>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Ended</span>
+                      <p className="text-sm text-gray-900 dark:text-white mt-0.5">{new Date(session.endedAt).toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <span className="text-xs text-gray-400">Session ID: {session.sessionId}</span>
+                </div>
+              </Card.Body>
+            </Card>
+
+            {/* Processing Timeline */}
+            <Card>
+              <Card.Header>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Processing Timeline</h3>
               </Card.Header>
               <Card.Body>
                 <SessionAuditLog session={session} compact={false} />
               </Card.Body>
             </Card>
-
-            {/* Reactions */}
-            <Card className="mt-4">
-              <Card.Header>
-                <h3 className="text-sm font-semibold text-gray-900">Reactions</h3>
-              </Card.Header>
-              <Card.Body>
-                <ReactionSummaryPills reactionSummary={session?.reactionSummary} />
-              </Card.Body>
-            </Card>
           </div>
 
-          {/* Chat/Transcript column (takes 1/3 width on desktop) */}
-          <div className="lg:col-span-1 h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col">
+          {/* Right: Chat/Transcript tabbed panel */}
+          <div className="h-[500px] lg:h-[600px] flex flex-col">
             <Card className="flex flex-col h-full">
-              {/* Tab buttons */}
               <Card.Header borderless className="p-0">
                 <div className="flex w-full">
                   <button
                     onClick={() => setActiveTab('chat')}
                     className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                       activeTab === 'chat'
-                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                   >
                     Chat Replay
@@ -532,8 +514,8 @@ export function ReplayViewer() {
                     onClick={() => setActiveTab('transcript')}
                     className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                       activeTab === 'transcript'
-                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                   >
                     Transcript
@@ -551,7 +533,6 @@ export function ReplayViewer() {
                 </div>
               </Card.Header>
 
-              {/* Tab content */}
               <div className="flex-1 overflow-hidden relative">
                 <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'chat' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 pointer-events-none'}`}>
                   <ReplayChat sessionId={sessionId!} currentSyncTime={syncTime} authToken={authToken} />

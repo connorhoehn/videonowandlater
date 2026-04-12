@@ -30,9 +30,12 @@ const CONTENT_TYPE_TO_EXT: Record<string, string> = {
 
 interface AddSegmentRequest {
   type: 'image' | 'video';
-  filename: string;
-  contentType: string;
+  // For file upload (existing flow):
+  filename?: string;
+  contentType?: string;
   duration?: number;
+  // For platform content (new flow):
+  sourceSessionId?: string;
 }
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -90,54 +93,58 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
-  // Validate contentType
-  if (!body.contentType || !VALID_CONTENT_TYPES.includes(body.contentType)) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: `contentType must be one of: ${VALID_CONTENT_TYPES.join(', ')}` }),
-    };
-  }
+  const isSourceSession = !!body.sourceSessionId;
 
-  // Validate duration for video segments
-  if (body.type === 'video' && (!body.duration || body.duration <= 0)) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Duration required for video segments (positive number in ms)' }),
-    };
-  }
+  // Validate file-upload fields only when NOT using sourceSessionId
+  if (!isSourceSession) {
+    if (!body.contentType || !VALID_CONTENT_TYPES.includes(body.contentType)) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: `contentType must be one of: ${VALID_CONTENT_TYPES.join(', ')}` }),
+      };
+    }
 
-  if (body.duration && (body.duration < 1000 || body.duration > 60000)) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Duration must be between 1 and 60 seconds' }),
-    };
-  }
+    // Validate duration for video segments
+    if (body.type === 'video' && (!body.duration || body.duration <= 0)) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Duration required for video segments (positive number in ms)' }),
+      };
+    }
 
-  if (!body.filename) {
-    return {
-      statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'filename required' }),
-    };
+    if (body.duration && (body.duration < 1000 || body.duration > 60000)) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Duration must be between 1 and 60 seconds' }),
+      };
+    }
+
+    if (!body.filename) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'filename required' }),
+      };
+    }
   }
 
   try {
-    // Fetch session and validate ownership
+    // Fetch story session and validate ownership
     const session = await getSessionById(tableName, sessionId);
     if (!session) {
       return {
@@ -196,9 +203,73 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       };
     }
 
-    // Generate segment details
     const segmentId = uuid();
-    const ext = CONTENT_TYPE_TO_EXT[body.contentType];
+
+    // --- Source session flow: reference an existing platform recording ---
+    if (isSourceSession) {
+      const sourceSession = await getSessionById(tableName, body.sourceSessionId!);
+      if (!sourceSession) {
+        return {
+          statusCode: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Source session not found' }),
+        };
+      }
+
+      // Determine segment URL based on type
+      let segmentUrl: string | undefined;
+      if (body.type === 'video') {
+        segmentUrl = sourceSession.recordingHlsUrl || sourceSession.posterFrameUrl;
+      } else {
+        segmentUrl = sourceSession.posterFrameUrl || sourceSession.thumbnailUrl;
+      }
+
+      if (!segmentUrl) {
+        return {
+          statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: 'Source session has no available recording content' }),
+        };
+      }
+
+      // For video, derive duration from source (cap at 60s)
+      const duration = body.type === 'video'
+        ? Math.min(sourceSession.recordingDuration || 15000, 60000)
+        : body.duration;
+
+      const segment: StorySegment = {
+        segmentId,
+        type: body.type,
+        s3Key: `ref:sessions/${body.sourceSessionId}`,
+        url: segmentUrl,
+        duration,
+        order: currentSegments.length,
+        createdAt: new Date().toISOString(),
+      };
+
+      await addStorySegment(tableName, sessionId, segment);
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({
+          segmentId,
+          sourceSessionId: body.sourceSessionId,
+        }),
+      };
+    }
+
+    // --- File upload flow (existing behavior) ---
+    const ext = CONTENT_TYPE_TO_EXT[body.contentType!];
     const s3Key = `stories/${sessionId}/${segmentId}.${ext}`;
 
     // Create presigned URL

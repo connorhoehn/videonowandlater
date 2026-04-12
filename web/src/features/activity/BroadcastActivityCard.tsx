@@ -3,7 +3,7 @@
  * Displays userId, duration, reaction summary pills, AI summary (2-line truncated), and relative timestamp
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Avatar } from '../../components/social';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
@@ -53,6 +53,10 @@ function ThumbnailPlaceholder() {
 export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const timestamp = formatDate(session.endedAt || session.createdAt);
   const duration = session.recordingDuration
     ? formatHumanDuration(session.recordingDuration)
@@ -60,27 +64,103 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
 
   const thumbnailSrc = session.thumbnailUrl || session.posterFrameUrl;
   const showThumbnail = thumbnailSrc && !imgError;
+  const hlsUrl = session.recordingHlsUrl;
 
-  const isReady = session.recordingStatus === 'available' || !!session.recordingHlsUrl;
+  const isReady = session.recordingStatus === 'available' || !!hlsUrl;
+
+  const handleMouseEnter = useCallback(() => {
+    if (!hlsUrl || !isReady) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovering(true);
+      const video = videoRef.current;
+      if (video) {
+        video.muted = isMuted;
+        video.play().catch(() => {});
+      }
+    }, 400);
+  }, [hlsUrl, isReady, isMuted]);
+
+  const handleMouseLeave = useCallback(() => {
+    clearTimeout(hoverTimeoutRef.current);
+    setIsHovering(false);
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+  }, []);
+
+  const toggleMute = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !isMuted;
+    setIsMuted(next);
+    if (videoRef.current) videoRef.current.muted = next;
+  }, [isMuted]);
 
   return (
     <Card
       className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'}`}
       onClick={isReady ? () => navigate(`/replay/${session.sessionId}`) : undefined}
     >
-      {/* Thumbnail or placeholder — full-width, aspect-ratio */}
-      <div className="relative">
+      {/* Thumbnail with hover-to-play video preview */}
+      <div
+        className="relative"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
         {showThumbnail ? (
           <img
             src={thumbnailSrc}
             alt={`${session.userId} broadcast thumbnail`}
             data-testid="thumbnail"
             onError={() => setImgError(true)}
-            className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            className={`w-full aspect-video object-cover transition-opacity duration-300 ${isHovering ? 'opacity-0' : 'opacity-100'}`}
           />
         ) : (
           <ThumbnailPlaceholder />
         )}
+
+        {/* Video preview on hover */}
+        {hlsUrl && isReady && (
+          <video
+            ref={videoRef}
+            src={hlsUrl}
+            muted={isMuted}
+            playsInline
+            loop
+            preload="none"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isHovering ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          />
+        )}
+
+        {/* Mute toggle button — visible on hover */}
+        {isHovering && hlsUrl && (
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors cursor-pointer"
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted ? (
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            )}
+          </button>
+        )}
+
+        {/* Duration badge */}
+        {duration && !isHovering && (
+          <span className="absolute bottom-2 right-2 px-1.5 py-0.5 text-xs font-medium text-white bg-black/70 rounded">
+            {duration}
+          </span>
+        )}
+
         {!isReady && (
           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
             <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
@@ -99,7 +179,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <Avatar name={session.userId} alt={session.userId || 'Broadcaster'} size="sm" />
-              <h3 className="font-semibold text-gray-900 truncate text-[15px]">{session.userId}</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white truncate text-[15px]">{session.userId}</h3>
               {session.sessionType === 'UPLOAD' && (
                 <span className="text-[10px] font-semibold uppercase tracking-wider bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                   Upload
@@ -107,7 +187,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
               )}
               <PipelineStatusBadge session={session} />
             </div>
-            <p className="text-xs text-gray-400 mt-1.5 ml-[42px] flex items-center gap-1.5">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 ml-[42px] flex items-center gap-1.5">
               {session.sourceFileName && (
                 <>
                   <span className="truncate max-w-[140px]">{session.sourceFileName}</span>
@@ -136,7 +216,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
             status={session.aiSummaryStatus}
             visualAnalysis={session.visualAnalysis}
             truncate={true}
-            className="text-gray-700"
+            className="text-gray-700 dark:text-gray-300"
           />
         </div>
 

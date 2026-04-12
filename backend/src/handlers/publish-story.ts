@@ -100,7 +100,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     // Generate CloudFront URLs for all segments (immutable — no domain object mutation)
     const updatedSegments = segments.map(s => ({
       ...s,
-      url: cloudFrontDomain ? `https://${cloudFrontDomain}/${s.s3Key}` : undefined,
+      url: s.url || (cloudFrontDomain ? `https://${cloudFrontDomain}/${s.s3Key}` : undefined),
     }));
 
     // Persist updated segments with URLs

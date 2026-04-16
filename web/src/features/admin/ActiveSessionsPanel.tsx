@@ -10,6 +10,7 @@ interface ActiveSession {
   createdAt: string;
   participantCount: number;
   messageCount: number;
+  isPinned?: boolean;
 }
 
 interface ActiveSessionsPanelProps {
@@ -59,10 +60,12 @@ function LoadingSkeleton() {
 function SessionTableRow({
   session,
   onKill,
+  onPin,
   onClick,
 }: {
   session: ActiveSession;
   onKill: (s: ActiveSession) => void;
+  onPin: (sessionId: string, pinned: boolean) => void;
   onClick: (s: ActiveSession) => void;
 }) {
   return (
@@ -99,14 +102,33 @@ function SessionTableRow({
         {session.messageCount}
       </td>
       <td className="py-3 px-4">
-        <button
-          onClick={(e) => { e.stopPropagation(); onKill(session); }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
-          title="Kill session"
-        >
-          <StopIcon />
-          Kill
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPin(session.sessionId, !session.isPinned);
+            }}
+            title={session.isPinned ? 'Unpin from feed' : 'Pin to feed'}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
+              session.isPinned
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30'
+                : 'bg-gray-700/50 text-gray-400 border-gray-600/50 hover:bg-gray-700'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.8L9 4.323V3a1 1 0 011-1z" />
+            </svg>
+            {session.isPinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onKill(session); }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
+            title="Kill session"
+          >
+            <StopIcon />
+            Kill
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -116,10 +138,12 @@ function SessionTableRow({
 function SessionCard({
   session,
   onKill,
+  onPin,
   onClick,
 }: {
   session: ActiveSession;
   onKill: (s: ActiveSession) => void;
+  onPin: (sessionId: string, pinned: boolean) => void;
   onClick: (s: ActiveSession) => void;
 }) {
   return (
@@ -144,14 +168,33 @@ function SessionCard({
             </div>
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onKill(session); }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
-          title="Kill session"
-        >
-          <StopIcon />
-          Kill
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPin(session.sessionId, !session.isPinned);
+            }}
+            title={session.isPinned ? 'Unpin from feed' : 'Pin to feed'}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
+              session.isPinned
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30'
+                : 'bg-gray-700/50 text-gray-400 border-gray-600/50 hover:bg-gray-700'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.8L9 4.323V3a1 1 0 011-1z" />
+            </svg>
+            {session.isPinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onKill(session); }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
+            title="Kill session"
+          >
+            <StopIcon />
+            Kill
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div>
@@ -203,6 +246,20 @@ export function ActiveSessionsPanel({ authToken, apiBaseUrl }: ActiveSessionsPan
     const interval = setInterval(fetchSessions, 10_000);
     return () => clearInterval(interval);
   }, [fetchSessions]);
+
+  const handlePin = async (sessionId: string, pinned: boolean) => {
+    try {
+      await fetch(`${apiBaseUrl}/admin/sessions/${sessionId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned }),
+      });
+      // Refresh sessions list
+      fetchSessions();
+    } catch (err) {
+      console.error('Failed to pin/unpin session', err);
+    }
+  };
 
   const handleKill = async () => {
     if (!killTarget || !authToken || !apiBaseUrl) return;
@@ -278,7 +335,7 @@ export function ActiveSessionsPanel({ authToken, apiBaseUrl }: ActiveSessionsPan
               </thead>
               <tbody>
                 {sessions.map((s) => (
-                  <SessionTableRow key={s.sessionId} session={s} onKill={setKillTarget} onClick={(sess) => setSelectedSessionId(sess.sessionId)} />
+                  <SessionTableRow key={s.sessionId} session={s} onKill={setKillTarget} onPin={handlePin} onClick={(sess) => setSelectedSessionId(sess.sessionId)} />
                 ))}
               </tbody>
             </table>
@@ -287,7 +344,7 @@ export function ActiveSessionsPanel({ authToken, apiBaseUrl }: ActiveSessionsPan
           {/* Mobile cards */}
           <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700/50">
             {sessions.map((s) => (
-              <SessionCard key={s.sessionId} session={s} onKill={setKillTarget} onClick={(sess) => setSelectedSessionId(sess.sessionId)} />
+              <SessionCard key={s.sessionId} session={s} onKill={setKillTarget} onPin={handlePin} onClick={(sess) => setSelectedSessionId(sess.sessionId)} />
             ))}
           </div>
         </>

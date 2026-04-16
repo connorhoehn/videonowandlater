@@ -1088,6 +1088,27 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // POST /admin/sessions/{sessionId}/pin — pin or unpin a session
+    const pinResource = adminSessionById.addResource('pin');
+
+    const adminPinSessionFn = new NodejsFunction(this, 'AdminPinSession', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-pin-session.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(adminPinSessionFn);
+
+    pinResource.addMethod('POST', new apigateway.LambdaIntegration(adminPinSessionFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // GET /admin/sessions/{sessionId}/detail — comprehensive session data
     const detailResource = adminSessionById.addResource('detail');
 

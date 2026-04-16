@@ -172,6 +172,10 @@ export interface Session {
   // Webhook delivery configuration
   webhookUrl?: string;
   webhookSecret?: string;
+  // Pinned session support
+  isPinned?: boolean;
+  pinnedAt?: string;
+  pinnedBy?: string;
 }
 
 /**

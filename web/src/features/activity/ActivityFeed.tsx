@@ -65,11 +65,13 @@ export function ActivityFeed({
   hasMore = false,
   loadingMore = false,
 }: ActivityFeedProps) {
-  // Sort by endedAt DESC (most recent first)
+  // Sort pinned first, then by endedAt DESC (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
-    const dateA = new Date(a.endedAt || a.createdAt).getTime();
-    const dateB = new Date(b.endedAt || b.createdAt).getTime();
-    return dateB - dateA;
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    const aTime = new Date(a.endedAt || a.createdAt).getTime();
+    const bTime = new Date(b.endedAt || b.createdAt).getTime();
+    return bTime - aTime;
   });
 
   if (loading) {

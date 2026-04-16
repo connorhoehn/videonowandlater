@@ -39,15 +39,29 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
   const participantCount = session.participantCount || 0;
   const messageCount = session.messageCount || 0;
 
-  const isReady = session.recordingStatus === 'available';
+  const isLive = session.status === 'live';
+  const isReady = isLive || session.recordingStatus === 'available';
 
   return (
     <Card
-      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'}`}
-      onClick={isReady ? () => navigate(`/replay/${session.sessionId}`) : undefined}
+      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'} ${isLive ? 'ring-2 ring-purple-500/50' : ''}`}
+      onClick={isReady ? () => navigate(isLive ? `/hangout/${session.sessionId}` : `/replay/${session.sessionId}`) : undefined}
     >
       {/* Hangout header band */}
       <div className="relative bg-gradient-to-r from-violet-500 to-purple-600 px-4 sm:px-5 py-3 flex items-center gap-3">
+        {isLive && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-purple-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg shadow-purple-600/30">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            LIVE
+          </div>
+        )}
+        {session.isPinned && (
+          <div className="absolute top-3 right-3 z-10 bg-amber-500/90 text-white p-1.5 rounded-full">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.8L9 4.323V3a1 1 0 011-1z" />
+            </svg>
+          </div>
+        )}
         <Avatar name={session.userId} alt={session.userId || 'Host'} size="sm" className="ring-2 ring-white/30" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-white truncate text-[15px]">{session.userId}</h3>
@@ -67,7 +81,7 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
           <PipelineStatusBadge session={session} />
           <span className="text-[11px] text-white/50">{timestamp}</span>
         </div>
-        {!isReady && (
+        {!isReady && !isLive && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 rounded-t-lg">
             <svg className="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

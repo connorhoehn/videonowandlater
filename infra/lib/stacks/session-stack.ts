@@ -1415,5 +1415,32 @@ export class SessionStack extends Stack {
       targets: [new targets.LambdaFunction(checkBudgetFn)],
       description: 'Check monthly spend against budget thresholds every hour',
     });
+
+    // ============================================================
+    // Auto-Unpin Sessions (hourly)
+    // Removes pin from sessions pinned longer than 24 hours
+    // ============================================================
+    const autoUnpinSessionsFn = new nodejs.NodejsFunction(this, 'AutoUnpinSessions', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/auto-unpin-sessions.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'AutoUnpinSessionsLogGroup', {
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    this.table.grantReadWriteData(autoUnpinSessionsFn);
+
+    new events.Rule(this, 'AutoUnpinSessionsSchedule', {
+      schedule: events.Schedule.rate(Duration.hours(1)),
+      targets: [new targets.LambdaFunction(autoUnpinSessionsFn)],
+      description: 'Auto-unpin sessions pinned longer than 24 hours',
+    });
   }
 }

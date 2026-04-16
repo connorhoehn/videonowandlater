@@ -34,9 +34,14 @@ const ActivityContext = createContext<ActivityContextValue>({
   loadingMore: false,
 });
 
+function hasLiveSessions(sessions: ActivitySession[]): boolean {
+  return sessions.some((s) => s.status === 'live');
+}
+
 function hasNonTerminalSessions(sessions: ActivitySession[]): boolean {
   return sessions.some(
     (s) =>
+      s.status === 'live' ||
       s.transcriptStatus === 'processing' ||
       s.transcriptStatus === 'pending' ||
       s.aiSummaryStatus === 'pending' ||
@@ -102,9 +107,14 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const nonTerminal = hasNonTerminalSessions(sessions);
 
+    const live = hasLiveSessions(sessions);
+
     // Reset poll interval when transitioning from all-terminal to having non-terminal sessions
+    // Use 5s for live sessions, 15s for other non-terminal states
     if (nonTerminal && !prevHasNonTerminalRef.current) {
-      setPollInterval(15000);
+      setPollInterval(live ? 5000 : 15000);
+    } else if (live) {
+      setPollInterval(5000);
     }
     prevHasNonTerminalRef.current = nonTerminal;
 
@@ -127,7 +137,11 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error('Error polling activity:', err);
       }
-      setPollInterval((prev) => Math.min(prev * 2, 60000));
+      const live = hasLiveSessions(sessions);
+      // Don't back off beyond 5s when live sessions exist
+      if (!live) {
+        setPollInterval((prev) => Math.min(prev * 2, 60000));
+      }
     }, pollInterval);
 
     pollIntervalRef.current = intervalId;

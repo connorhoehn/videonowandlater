@@ -66,7 +66,8 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const showThumbnail = thumbnailSrc && !imgError;
   const hlsUrl = session.recordingHlsUrl;
 
-  const isReady = session.recordingStatus === 'available' || !!hlsUrl;
+  const isLive = session.status === 'live';
+  const isReady = isLive || session.recordingStatus === 'available' || !!hlsUrl;
 
   const handleMouseEnter = useCallback(() => {
     if (!hlsUrl || !isReady) return;
@@ -99,8 +100,8 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
 
   return (
     <Card
-      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'}`}
-      onClick={isReady ? () => navigate(`/replay/${session.sessionId}`) : undefined}
+      className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'} ${isLive ? 'ring-2 ring-red-500/50' : ''}`}
+      onClick={isReady ? () => navigate(isLive ? `/viewer/${session.sessionId}` : `/replay/${session.sessionId}`) : undefined}
     >
       {/* Thumbnail with hover-to-play video preview */}
       <div
@@ -108,6 +109,19 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
+        {isLive && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg shadow-red-600/30">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            LIVE
+          </div>
+        )}
+        {session.isPinned && (
+          <div className="absolute top-3 right-3 z-10 bg-amber-500/90 text-white p-1.5 rounded-full">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.8L9 4.323V3a1 1 0 011-1z" />
+            </svg>
+          </div>
+        )}
         {showThumbnail ? (
           <img
             src={thumbnailSrc}

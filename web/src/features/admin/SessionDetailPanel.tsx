@@ -20,6 +20,7 @@ interface SessionDetail {
   channelArn?: string;
   stageArn?: string;
   claimedResources?: Record<string, string>;
+  isPinned?: boolean;
 }
 
 interface CostSummary {
@@ -273,6 +274,21 @@ export function SessionDetailPanel({
       setError(err instanceof Error ? err.message : 'Kill failed');
     } finally {
       setKilling(false);
+    }
+  };
+
+  const handlePin = async (pinned: boolean) => {
+    if (!authToken || !apiBaseUrl || !sessionId) return;
+    try {
+      await fetch(`${apiBaseUrl}/admin/sessions/${sessionId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned }),
+      });
+      // Refetch detail
+      fetchDetail();
+    } catch (err) {
+      console.error('Failed to pin/unpin', err);
     }
   };
 
@@ -659,16 +675,26 @@ export function SessionDetailPanel({
             </Card>
 
             {/* 8. Actions */}
-            {isLiveOrEnding && (
-              <div className="pt-2">
+            <div className="pt-2 space-y-2">
+              <button
+                onClick={() => handlePin(!session.isPinned)}
+                className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  session.isPinned
+                    ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {session.isPinned ? 'Unpin from Feed' : 'Pin to Feed'}
+              </button>
+              {isLiveOrEnding && (
                 <button
                   onClick={() => setKillTarget(true)}
                   className="w-full px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer"
                 >
                   Kill Session
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </OffcanvasSidebar>

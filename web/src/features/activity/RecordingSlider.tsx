@@ -30,6 +30,8 @@ export interface ActivitySession {
   sourceFileName?: string;
   uploadStatus?: 'pending' | 'uploading' | 'processing' | 'available' | 'failed';
   posterFrameUrl?: string;
+  status?: 'creating' | 'live' | 'ending' | 'ended';
+  isPinned?: boolean;
 }
 
 interface RecordingSliderProps {

@@ -9,8 +9,11 @@
   ],
   "scripts": {
     "deploy": "./scripts/deploy.sh",
-    "destroy": "./scripts/destroy.sh",
+    "destroy": "./scripts/destroy-all.sh",
     "dev": "./scripts/dev.sh",
     "dev:direct": "cd web && npm run dev"
+  },
+  "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1030.0"
   }
 }

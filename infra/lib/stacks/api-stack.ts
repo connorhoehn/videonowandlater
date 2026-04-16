@@ -305,7 +305,7 @@ export class ApiStack extends Stack {
     const sessionTranscriptResource = sessionIdResource.addResource('transcript');
 
     // GET /sessions/{sessionId}/transcript (get transcript)
-    const transcriptionBucketName = props.recordingsBucket?.bucketName ?? 'vnl-transcription-vnl-session';
+    const transcriptionBucketName = 'vnl-transcription-vnl-session';
     const getTranscriptHandler = new NodejsFunction(this, 'GetTranscriptHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-transcript.ts'),
       handler: 'handler',
@@ -320,16 +320,12 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadData(getTranscriptHandler);
 
     // Grant S3 read access to transcription bucket
-    if (props.recordingsBucket) {
-      props.recordingsBucket.grantRead(getTranscriptHandler);
-    } else {
-      getTranscriptHandler.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ['s3:GetObject'],
-          resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
-        })
-      );
-    }
+    getTranscriptHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+      })
+    );
 
     sessionTranscriptResource.addMethod('GET', new apigateway.LambdaIntegration(getTranscriptHandler), {
       authorizer,
@@ -353,16 +349,12 @@ export class ApiStack extends Stack {
 
     props.sessionsTable.grantReadData(getSpeakerSegmentsHandler);
 
-    if (props.recordingsBucket) {
-      props.recordingsBucket.grantRead(getSpeakerSegmentsHandler);
-    } else {
-      getSpeakerSegmentsHandler.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ['s3:GetObject'],
-          resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
-        })
-      );
-    }
+    getSpeakerSegmentsHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+      })
+    );
 
     sessionSpeakerSegmentsResource.addMethod('GET', new apigateway.LambdaIntegration(getSpeakerSegmentsHandler), {
       authorizer,
@@ -401,6 +393,21 @@ export class ApiStack extends Stack {
     });
     props.sessionsTable.grantReadWriteData(reportMessageHandler);
     reportResource.addMethod('POST', new apigateway.LambdaIntegration(reportMessageHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/appeal — submit appeal for a killed session
+    const appealResource = sessionIdResource.addResource('appeal');
+    const submitAppealHandler = new NodejsFunction(this, 'SubmitAppealHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/submit-appeal.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(submitAppealHandler);
+    appealResource.addMethod('POST', new apigateway.LambdaIntegration(submitAppealHandler), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -509,6 +516,38 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // POST /sessions/{sessionId}/moderation-frame (client-side hangout moderation)
+    const moderationFrameResource = sessionIdResource.addResource('moderation-frame');
+    const receiveModerationFrameHandler = new NodejsFunction(this, 'ReceiveModerationFrameHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/receive-moderation-frame.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(30),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(receiveModerationFrameHandler);
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['rekognition:DetectModerationLabels'],
+      resources: ['*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:StopStream'],
+      resources: ['*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:DisconnectParticipant'],
+      resources: ['*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['*'],
+    }));
+    moderationFrameResource.addMethod('POST', new apigateway.LambdaIntegration(receiveModerationFrameHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // Phase 24: Creator Spotlight — set/clear featured creator
     const spotlightResource = sessionIdResource.addResource('spotlight');
     const updateSpotlightHandler = new NodejsFunction(this, 'UpdateSpotlightHandler', {
@@ -522,6 +561,149 @@ export class ApiStack extends Stack {
     });
     props.sessionsTable.grantReadWriteData(updateSpotlightHandler);
     spotlightResource.addMethod('PUT', new apigateway.LambdaIntegration(updateSpotlightHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Context Events API Routes
+    // ============================================================
+    const contextResource = sessionIdResource.addResource('context');
+
+    // POST /sessions/{sessionId}/context (push context event)
+    const pushContextEventHandler = new NodejsFunction(this, 'PushContextEventHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/push-context-event.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(pushContextEventHandler);
+    contextResource.addMethod('POST', new apigateway.LambdaIntegration(pushContextEventHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/context (get context events)
+    const getContextEventsHandler = new NodejsFunction(this, 'GetContextEventsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-context-events.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getContextEventsHandler);
+    contextResource.addMethod('GET', new apigateway.LambdaIntegration(getContextEventsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Intent Flow API Routes
+    // ============================================================
+    const intentFlowResource = sessionIdResource.addResource('intent-flow');
+
+    // POST /sessions/{sessionId}/intent-flow (create intent flow)
+    const createIntentFlowHandler = new NodejsFunction(this, 'CreateIntentFlowHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-intent-flow.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(createIntentFlowHandler);
+    intentFlowResource.addMethod('POST', new apigateway.LambdaIntegration(createIntentFlowHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/intent-flow (get intent flow + results)
+    const getIntentFlowHandler = new NodejsFunction(this, 'GetIntentFlowHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-intent-flow.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getIntentFlowHandler);
+    intentFlowResource.addMethod('GET', new apigateway.LambdaIntegration(getIntentFlowHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Timeline API Route
+    // ============================================================
+    const timelineResource = sessionIdResource.addResource('timeline');
+
+    const getTimelineHandler = new NodejsFunction(this, 'GetTimelineHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-timeline.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucketName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getTimelineHandler);
+    getTimelineHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+      })
+    );
+    timelineResource.addMethod('GET', new apigateway.LambdaIntegration(getTimelineHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Agent Control API Routes
+    // ============================================================
+    const agentResource = sessionIdResource.addResource('agent');
+
+    // POST /sessions/{sessionId}/agent/join
+    const agentJoinResource = agentResource.addResource('join');
+    const agentJoinSessionHandler = new NodejsFunction(this, 'AgentJoinSessionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/agent-join-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(agentJoinSessionHandler);
+    agentJoinResource.addMethod('POST', new apigateway.LambdaIntegration(agentJoinSessionHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/agent/speak
+    const agentSpeakResource = agentResource.addResource('speak');
+    const agentSpeakHandler = new NodejsFunction(this, 'AgentSpeakHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/agent-speak.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(agentSpeakHandler);
+    agentSpeakResource.addMethod('POST', new apigateway.LambdaIntegration(agentSpeakHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/agent/status
+    const agentStatusResource = agentResource.addResource('status');
+    const agentStatusHandler = new NodejsFunction(this, 'AgentStatusHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/agent-status.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(agentStatusHandler);
+    agentStatusResource.addMethod('GET', new apigateway.LambdaIntegration(agentStatusHandler), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -854,6 +1036,236 @@ export class ApiStack extends Stack {
     const storyReactionsResource = storyIdResource.addResource('reactions');
     storyReactionsResource.addMethod('GET', new apigateway.LambdaIntegration(getStoryReactionsHandler), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Admin API Routes
+    // ============================================================
+
+    const admin = api.root.addResource('admin');
+    const adminSessions = admin.addResource('sessions');
+    const adminSessionById = adminSessions.addResource('{sessionId}');
+    const killResource = adminSessionById.addResource('kill');
+
+    const adminKillSessionFn = new NodejsFunction(this, 'AdminKillSession', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-kill-session.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(adminKillSessionFn);
+
+    adminKillSessionFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:StopStream'],
+        resources: ['*'],
+      })
+    );
+
+    adminKillSessionFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:DisconnectParticipant'],
+        resources: ['*'],
+      })
+    );
+
+    adminKillSessionFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['*'],
+      })
+    );
+
+    killResource.addMethod('POST', new apigateway.LambdaIntegration(adminKillSessionFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/sessions/{sessionId}/detail — comprehensive session data
+    const detailResource = adminSessionById.addResource('detail');
+
+    const adminGetSessionDetailFn = new NodejsFunction(this, 'AdminGetSessionDetail', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-get-session-detail.ts'),
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(adminGetSessionDetailFn);
+
+    detailResource.addMethod('GET', new apigateway.LambdaIntegration(adminGetSessionDetailFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/moderation/{sessionId}/review — review moderation flag
+    const adminModeration = admin.addResource('moderation');
+    const adminModerationSession = adminModeration.addResource('{sessionId}');
+    const reviewResource = adminModerationSession.addResource('review');
+
+    const adminReviewModerationFn = new NodejsFunction(this, 'AdminReviewModeration', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-review-moderation.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadWriteData(adminReviewModerationFn);
+
+    adminReviewModerationFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:StopStream'],
+        resources: ['*'],
+      })
+    );
+
+    adminReviewModerationFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:DisconnectParticipant'],
+        resources: ['*'],
+      })
+    );
+
+    adminReviewModerationFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['*'],
+      })
+    );
+
+    reviewResource.addMethod('POST', new apigateway.LambdaIntegration(adminReviewModerationFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/sessions — list active sessions
+    const adminListSessionsFn = new NodejsFunction(this, 'AdminListSessions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-sessions.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminListSessionsFn);
+
+    adminSessions.addMethod('GET', new apigateway.LambdaIntegration(adminListSessionsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/audit-log — recent moderation actions
+    const adminAuditLog = admin.addResource('audit-log');
+    const adminAuditLogFn = new NodejsFunction(this, 'AdminAuditLog', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-audit-log.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminAuditLogFn);
+
+    adminAuditLog.addMethod('GET', new apigateway.LambdaIntegration(adminAuditLogFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/appeals/{sessionId}/review — review an appeal
+    const adminAppeals = admin.addResource('appeals');
+    const adminAppealSession = adminAppeals.addResource('{sessionId}');
+    const appealReviewResource = adminAppealSession.addResource('review');
+
+    const adminReviewAppealFn = new NodejsFunction(this, 'AdminReviewAppeal', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-review-appeal.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminReviewAppealFn);
+
+    appealReviewResource.addMethod('POST', new apigateway.LambdaIntegration(adminReviewAppealFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/costs/summary — aggregate cost data
+    const adminCosts = admin.addResource('costs');
+    const adminCostsSummary = adminCosts.addResource('summary');
+    const adminCostSummaryFn = new NodejsFunction(this, 'AdminCostSummary', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-cost-summary.ts'),
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminCostSummaryFn);
+
+    adminCostsSummary.addMethod('GET', new apigateway.LambdaIntegration(adminCostSummaryFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/costs/session/{sessionId} — session cost detail
+    const adminCostsSession = adminCosts.addResource('session');
+    const adminCostsSessionById = adminCostsSession.addResource('{sessionId}');
+    const adminGetSessionCostFn = new NodejsFunction(this, 'AdminGetSessionCost', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-get-session-cost.ts'),
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminGetSessionCostFn);
+    adminCostsSessionById.addMethod('GET', new apigateway.LambdaIntegration(adminGetSessionCostFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/costs/user/{userId} — per-user cost detail
+    const adminCostsUser = adminCosts.addResource('user');
+    const adminCostsUserById = adminCostsUser.addResource('{userId}');
+    const adminGetUserCostsFn = new NodejsFunction(this, 'AdminGetUserCosts', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-get-user-costs.ts'),
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminGetUserCostsFn);
+    adminCostsUserById.addMethod('GET', new apigateway.LambdaIntegration(adminGetUserCostsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
     new CfnOutput(this, 'ApiUrl', {

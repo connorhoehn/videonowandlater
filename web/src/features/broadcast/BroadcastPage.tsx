@@ -17,6 +17,7 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { StreamQualityOverlay } from './StreamQualityOverlay';
 import { useStreamMetrics } from './useStreamMetrics';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
@@ -108,6 +109,7 @@ function BroadcastContent({
   const [floatingReactions, setFloatingReactions] = React.useState<FloatingEmoji[]>([]);
   const [linkCopied, setLinkCopied] = React.useState(false);
   const [showStopConfirm, setShowStopConfirm] = React.useState(false);
+  const [killError, setKillError] = React.useState<string | null>(null);
 
   const viewerUrl = `${window.location.origin}/viewer/${sessionId}`;
 
@@ -198,6 +200,11 @@ function BroadcastContent({
     ]);
   };
 
+  useSessionKillListener(room, React.useCallback((reason: string) => {
+    setKillError(`Session ended: ${reason}`);
+    setTimeout(() => navigate('/'), 3000);
+  }, [navigate]));
+
   // Listen for reactions from IVS Chat
   useReactionListener(room, (reaction) => {
     const emoji = EMOJI_MAP[reaction.emojiType];
@@ -254,9 +261,9 @@ function BroadcastContent({
           </div>
         </div>
 
-        {error && (
+        {(error || killError) && (
           <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-red-700 text-sm shrink-0">
-            {error}
+            {killError || error}
           </div>
         )}
 

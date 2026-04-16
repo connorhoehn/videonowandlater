@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useNavbarActions } from '../hooks/useNavbarActions';
 import { useSidebarData } from '../hooks/useSidebarData';
+import { useAuth } from '../auth/useAuth';
 import { ActivityProvider } from '../hooks/useActivityData';
 import { PageTransition } from './PageTransition';
 import {
@@ -22,10 +23,11 @@ import {
 import { ChatIcon, MenuIcon } from './social/Icons';
 
 // Routes that should use full-width layout (no sidebars)
-const FULL_WIDTH_PATTERNS = ['/replay/', '/broadcast/', '/viewer/', '/hangout/', '/upload/', '/video/'];
+const FULL_WIDTH_PATTERNS = ['/replay/', '/broadcast/', '/viewer/', '/hangout/', '/upload/', '/video/', '/admin'];
 
 export function AuthenticatedShell() {
   const { user, handleSignOut } = useNavbarActions();
+  const { isAdmin } = useAuth();
   const { profileStats, suggestions, newsItems } = useSidebarData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,6 +53,17 @@ export function AuthenticatedShell() {
           >
             <MenuIcon size={18} />
           </button>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              title="Admin"
+            >
+              <svg className="w-[18px] h-[18px] text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </Link>
+          )}
           <NavIconButton icon={<ChatIcon size={18} />} label="Messages" />
           <NotificationDropdown notifications={[]} unreadCount={0} />
           <UserAvatarDropdown

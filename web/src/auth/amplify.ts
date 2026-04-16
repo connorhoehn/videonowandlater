@@ -18,20 +18,30 @@ export async function handleSignUp(username: string, password: string) {
 }
 
 export async function handleSignIn(username: string, password: string) {
-  return await signIn({ username, password });
+  try {
+    return await signIn({ username, password });
+  } catch (err: any) {
+    if (err.name === 'UserAlreadyAuthenticatedException') {
+      await signOut();
+      return await signIn({ username, password });
+    }
+    throw err;
+  }
 }
 
 export async function handleSignOut() {
   await signOut();
 }
 
-export async function checkSession(): Promise<{ username: string; tokens: any } | null> {
+export async function checkSession(): Promise<{ username: string; tokens: any; groups: string[] } | null> {
   try {
     const user = await getCurrentUser();
     const session = await fetchAuthSession();
+    const groups = (session.tokens?.idToken?.payload?.['cognito:groups'] as string[] | undefined) ?? [];
     return {
       username: user.username,
       tokens: session.tokens,
+      groups,
     };
   } catch (error) {
     return null;

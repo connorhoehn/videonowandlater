@@ -1135,9 +1135,13 @@ describe('store-summary handler', () => {
       })),
     });
 
-    // After summary stored, getSessionById is called again for chapters
+    // getSessionById call sequence:
+    // 1. idempotency check (returns null = not yet processed)
+    // 2. cost recording after summary Bedrock call (non-blocking, returns session for cost attribution)
+    // 3. chapter generation (returns session with diarizedTranscriptS3Path)
     mockGetSessionById
       .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({ sessionId: 'session-chapters', sessionType: 'BROADCAST', userId: 'test-user' } as any) // cost recording
       .mockResolvedValueOnce({
         sessionId: 'session-chapters',
         diarizedTranscriptS3Path: 's3://transcription-bucket/session-chapters/diarized.json',
@@ -1202,6 +1206,7 @@ describe('store-summary handler', () => {
     // Session has no diarizedTranscriptS3Path
     mockGetSessionById
       .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({ sessionId: 'session-no-diarized', sessionType: 'BROADCAST', userId: 'test-user' } as any) // cost recording
       .mockResolvedValueOnce({
         sessionId: 'session-no-diarized',
         // no diarizedTranscriptS3Path
@@ -1250,6 +1255,7 @@ describe('store-summary handler', () => {
     // Session has diarized transcript
     mockGetSessionById
       .mockResolvedValueOnce(null) // idempotency check
+      .mockResolvedValueOnce({ sessionId: 'session-chapter-fail', sessionType: 'BROADCAST', userId: 'test-user' } as any) // cost recording
       .mockResolvedValueOnce({
         sessionId: 'session-chapter-fail',
         diarizedTranscriptS3Path: 's3://transcription-bucket/session-chapter-fail/diarized.json',
@@ -1315,6 +1321,7 @@ describe('store-summary handler', () => {
 
     mockGetSessionById
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ sessionId: 'session-thumb-calc', sessionType: 'BROADCAST', userId: 'test-user' } as any) // cost recording
       .mockResolvedValueOnce({
         sessionId: 'session-thumb-calc',
         diarizedTranscriptS3Path: 's3://transcription-bucket/session-thumb-calc/diarized.json',

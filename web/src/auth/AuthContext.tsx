@@ -7,6 +7,7 @@ export interface AuthState {
   user: { username: string } | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,6 +23,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     // Demo mode: skip Amplify entirely
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     checkSession().then((session) => {
       if (session) {
         setUser({ username: session.username });
+        setIsAdmin(session.groups.includes('admin'));
       }
       setIsLoading(false);
     }).catch((err) => {
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const session = await checkSession();
     if (session) {
       setUser({ username: session.username });
+      setIsAdmin(session.groups.includes('admin'));
     }
   };
 
@@ -57,6 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const session = await checkSession();
     if (session) {
       setUser({ username: session.username });
+      setIsAdmin(session.groups.includes('admin'));
     }
   };
 
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     await handleSignOut();
     setUser(null);
+    setIsAdmin(false);
   };
 
   const enterDemoMode = () => {
@@ -81,6 +87,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        isAdmin,
         signIn,
         signUp,
         signOut,

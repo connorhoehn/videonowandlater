@@ -16,6 +16,9 @@ import type { Subsegment } from 'aws-xray-sdk-core';
 import { getSessionById, updateSessionAiSummary, updateSessionChapters } from '../repositories/session-repository';
 import type { Chapter } from '../domain/session';
 import { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './schemas/store-summary.schema';
+import { calculateBedrockCost, CostService, PRICING_RATES } from '../domain/cost';
+import { writeCostLineItem, upsertCostSummary } from '../repositories/cost-repository';
+import { emitCostMetric } from '../lib/cost-metrics';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -169,12 +172,32 @@ async function processEvent(
 
     // Log token usage for cost tracking (COST-03)
     // Note: usage field is Nova-specific; Claude uses different field names (input_tokens with underscores)
-    const usage = (responseBody as any).usage as { inputTokens?: number; outputTokens?: number } | undefined;
+    const usageRaw = (responseBody as any).usage;
+    const inputTokens = usageRaw?.inputTokens ?? usageRaw?.input_tokens ?? 0;
+    const outputTokens = usageRaw?.outputTokens ?? usageRaw?.output_tokens ?? 0;
     logger.info('Bedrock invocation metrics', {
       modelId,
-      inputTokens: usage?.inputTokens,
-      outputTokens: usage?.outputTokens,
+      inputTokens,
+      outputTokens,
     });
+
+    // Record Bedrock cost for summary (non-blocking)
+    try {
+      const bedrockCostUsd = calculateBedrockCost(modelId, inputTokens, outputTokens);
+      const bedrockService = modelId.toLowerCase().includes('nova') ? CostService.BEDROCK_NOVA : CostService.BEDROCK_SONNET;
+      const sessionForCost = await getSessionById(tableName, sessionId);
+      await writeCostLineItem(tableName, {
+        sessionId, service: bedrockService, costUsd: bedrockCostUsd, quantity: inputTokens + outputTokens, unit: 'tokens',
+        rateApplied: modelId.toLowerCase().includes('nova') ? PRICING_RATES.BEDROCK_NOVA_INPUT : PRICING_RATES.BEDROCK_SONNET_INPUT,
+        sessionType: sessionForCost?.sessionType || '', userId: sessionForCost?.userId || '',
+        createdAt: new Date().toISOString(),
+      });
+      await upsertCostSummary(tableName, sessionId, bedrockService, bedrockCostUsd, sessionForCost?.sessionType || '', sessionForCost?.userId || '');
+      logger.info('Cost recorded', { service: bedrockService, costUsd: bedrockCostUsd, sessionId });
+      await emitCostMetric(bedrockService, bedrockCostUsd, sessionForCost?.sessionType || '', sessionId);
+    } catch (costError: any) {
+      logger.warn('Failed to record cost (non-blocking)', { error: costError.message });
+    }
 
     // Store summary on session record (non-blocking — don't fail entire handler on error)
     try {
@@ -244,6 +267,29 @@ ${speakerSegmentsJson}`;
               chapterText = chapterBody?.content?.[0]?.text;
             } else {
               chapterText = chapterBody?.output?.message?.content?.[0]?.text;
+            }
+
+            // Record Bedrock cost for chapters (non-blocking)
+            try {
+              const chapterUsageRaw = chapterBody?.usage;
+              const chapterInputTokens = chapterUsageRaw?.inputTokens ?? chapterUsageRaw?.input_tokens ?? 0;
+              const chapterOutputTokens = chapterUsageRaw?.outputTokens ?? chapterUsageRaw?.output_tokens ?? 0;
+              if (chapterInputTokens > 0 || chapterOutputTokens > 0) {
+                const chapterCostUsd = calculateBedrockCost(modelId, chapterInputTokens, chapterOutputTokens);
+                const chapterBedrockService = modelId.toLowerCase().includes('nova') ? CostService.BEDROCK_NOVA : CostService.BEDROCK_SONNET;
+                const sessionForChapterCost = await getSessionById(tableName, sessionId);
+                await writeCostLineItem(tableName, {
+                  sessionId, service: chapterBedrockService, costUsd: chapterCostUsd, quantity: chapterInputTokens + chapterOutputTokens, unit: 'tokens',
+                  rateApplied: modelId.toLowerCase().includes('nova') ? PRICING_RATES.BEDROCK_NOVA_INPUT : PRICING_RATES.BEDROCK_SONNET_INPUT,
+                  sessionType: sessionForChapterCost?.sessionType || '', userId: sessionForChapterCost?.userId || '',
+                  createdAt: new Date().toISOString(),
+                });
+                await upsertCostSummary(tableName, sessionId, chapterBedrockService, chapterCostUsd, sessionForChapterCost?.sessionType || '', sessionForChapterCost?.userId || '');
+                logger.info('Cost recorded', { service: chapterBedrockService, costUsd: chapterCostUsd, sessionId, phase: 'chapters' });
+                await emitCostMetric(chapterBedrockService, chapterCostUsd, sessionForChapterCost?.sessionType || '', sessionId);
+              }
+            } catch (costError: any) {
+              logger.warn('Failed to record chapter cost (non-blocking)', { error: costError.message });
             }
 
             if (!chapterText) {
@@ -380,6 +426,28 @@ Be specific and descriptive but brief.`,
             if (visualAnalysis) {
               await updateSessionAiSummary(tableName, sessionId, { visualAnalysis });
               logger.info('Visual analysis stored', { sessionId, length: visualAnalysis.length });
+            }
+
+            // Record Bedrock cost for visual analysis (non-blocking)
+            try {
+              const visionUsageRaw = visionBody?.usage;
+              const visionInputTokens = visionUsageRaw?.inputTokens ?? visionUsageRaw?.input_tokens ?? 0;
+              const visionOutputTokens = visionUsageRaw?.outputTokens ?? visionUsageRaw?.output_tokens ?? 0;
+              if (visionInputTokens > 0 || visionOutputTokens > 0) {
+                const visionCostUsd = calculateBedrockCost(visionModelId, visionInputTokens, visionOutputTokens);
+                const sessionForVisionCost = await getSessionById(tableName, sessionId);
+                await writeCostLineItem(tableName, {
+                  sessionId, service: CostService.BEDROCK_SONNET, costUsd: visionCostUsd, quantity: visionInputTokens + visionOutputTokens, unit: 'tokens',
+                  rateApplied: PRICING_RATES.BEDROCK_SONNET_INPUT,
+                  sessionType: sessionForVisionCost?.sessionType || '', userId: sessionForVisionCost?.userId || '',
+                  createdAt: new Date().toISOString(),
+                });
+                await upsertCostSummary(tableName, sessionId, CostService.BEDROCK_SONNET, visionCostUsd, sessionForVisionCost?.sessionType || '', sessionForVisionCost?.userId || '');
+                logger.info('Cost recorded', { service: 'BEDROCK_SONNET', costUsd: visionCostUsd, sessionId, phase: 'visual-analysis' });
+                await emitCostMetric('BEDROCK_SONNET', visionCostUsd, sessionForVisionCost?.sessionType || '', sessionId);
+              }
+            } catch (costError: any) {
+              logger.warn('Failed to record visual analysis cost (non-blocking)', { error: costError.message });
             }
           }
         }

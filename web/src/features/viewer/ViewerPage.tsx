@@ -16,6 +16,7 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { Card, Avatar } from '../../components/social';
 
@@ -39,6 +40,7 @@ export function ViewerPage() {
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   const [floatingReactions, setFloatingReactions] = React.useState<FloatingEmoji[]>([]);
+  const [killError, setKillError] = React.useState<string | null>(null);
 
   // Fetch session data to get sessionOwnerId — guard against empty authToken
   React.useEffect(() => {
@@ -128,6 +130,11 @@ export function ViewerPage() {
     ]);
   };
 
+  useSessionKillListener(room, React.useCallback((reason: string) => {
+    setKillError(`Session ended: ${reason}`);
+    setTimeout(() => navigate('/'), 3000);
+  }, [navigate]));
+
   // Listen for reactions from IVS Chat
   useReactionListener(room, (reaction) => {
     const emoji = EMOJI_MAP[reaction.emojiType];
@@ -176,7 +183,13 @@ export function ViewerPage() {
         </div>
       </div>
 
-      {error && (
+      {killError && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-red-700 text-sm shrink-0">
+          {killError}
+        </div>
+      )}
+
+      {error && !killError && (
         <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-yellow-700 text-sm shrink-0">
           {error}
         </div>

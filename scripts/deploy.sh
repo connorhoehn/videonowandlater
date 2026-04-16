@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # scripts/deploy.sh
-# Deploys all CDK stacks and generates frontend config from CDK outputs
+# Runs pre-deploy checks, deploys all CDK stacks, and generates frontend config
 
 set -euo pipefail
+
+SKIP_CHECKS="${1:-}"
+
+# Run pre-deploy checks (skip with --no-checks)
+if [[ "$SKIP_CHECKS" != "--no-checks" ]]; then
+  echo "Running pre-deploy checks..."
+  echo ""
+  ./scripts/predeploy-check.sh
+  echo ""
+fi
 
 echo "Deploying CDK stacks..."
 npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json

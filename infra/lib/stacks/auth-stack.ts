@@ -49,6 +49,14 @@ export class AuthStack extends Stack {
       refreshTokenValidity: Duration.days(30),
     });
 
+    // Admin group for platform administrators
+    new cognito.CfnUserPoolGroup(this, 'AdminGroup', {
+      userPoolId: this.userPool.userPoolId,
+      groupName: 'admin',
+      description: 'Platform administrators with moderation rights',
+      precedence: 1,
+    });
+
     new CfnOutput(this, 'UserPoolId', {
       value: this.userPool.userPoolId,
       exportName: 'VNL-UserPoolId',

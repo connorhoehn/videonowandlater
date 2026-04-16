@@ -19,7 +19,7 @@ export const MediaConvertCompleteDetailSchema = z.object({
       type: z.string().optional(),
     })
   ).optional(),
-  userMetadata: z.record(z.string()).optional(),
+  userMetadata: z.record(z.string().min(1)).optional(),
 });
 
 export type MediaConvertCompleteDetail = z.infer<typeof MediaConvertCompleteDetailSchema>;

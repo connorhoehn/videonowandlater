@@ -22,6 +22,7 @@ const logger = new Logger({
 });
 
 const STUCK_THRESHOLD_MS = 45 * 60 * 1000; // 45 minutes
+const HANGOUT_STUCK_THRESHOLD_MS = 90 * 60 * 1000; // 90 minutes — hangouts need more time for N participant recordings
 const PROCESSING_STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DEFAULT_MAX_RECOVERY_PER_RUN = 25;
 const RECOVERY_ATTEMPT_CAP = 3;
@@ -158,10 +159,25 @@ export const handler: Handler = async (): Promise<void> => {
   const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS).toISOString();
   const staleProcessingCutoff = new Date(Date.now() - PROCESSING_STALE_THRESHOLD_MS).toISOString();
 
+  const hangoutCutoff = new Date(Date.now() - HANGOUT_STUCK_THRESHOLD_MS).toISOString();
+
   // In-Lambda filter: endedAt threshold, transcriptStatus gate, count cap
   const eligibleSessions = allItems.filter((item) => {
-    if (!item.endedAt || item.endedAt >= cutoff) {
-      return false; // Not old enough or no endedAt
+    const isHangout = item.sessionType === 'HANGOUT';
+
+    if (!item.endedAt) {
+      return false; // No endedAt — can't determine age
+    }
+
+    // Hangouts get an extended grace period (90 min) since they wait for N participant recordings
+    if (isHangout) {
+      if (item.endedAt >= hangoutCutoff) {
+        return false; // Not old enough for hangout threshold
+      }
+    } else {
+      if (item.endedAt >= cutoff) {
+        return false; // Not old enough for standard threshold
+      }
     }
 
     const ts = item.transcriptStatus;
@@ -182,6 +198,36 @@ export const handler: Handler = async (): Promise<void> => {
     if (count >= RECOVERY_ATTEMPT_CAP) {
       return false; // Permanently excluded
     }
+
+    // For hangout sessions, check if they're legitimately waiting for per-participant recordings/transcripts
+    if (isHangout) {
+      const endedAt = new Date(item.endedAt).getTime();
+      const elapsedMs = Date.now() - endedAt;
+      const recordingsReceived: number = item.recordingsReceived ?? 0;
+      const pendingTranscripts: number = item.pendingTranscripts ?? 0;
+      const transcriptsReceived: number = item.transcriptsReceived ?? 0;
+
+      // Still waiting for Recording End events from participants
+      if (recordingsReceived === 0) {
+        logger.info('Hangout still waiting for participant recordings, skipping recovery', {
+          sessionId: item.sessionId,
+          elapsedMinutes: Math.floor(elapsedMs / 60000),
+        });
+        return false;
+      }
+
+      // MediaConvert/Transcribe pipeline still in progress
+      if (pendingTranscripts > 0 && transcriptsReceived < pendingTranscripts) {
+        logger.info('Hangout transcription pipeline in progress, skipping recovery', {
+          sessionId: item.sessionId,
+          transcriptsReceived,
+          pendingTranscripts,
+        });
+        return false;
+      }
+      // All recordings and transcripts received — fall through to recovery
+    }
+
     return true;
   });
 

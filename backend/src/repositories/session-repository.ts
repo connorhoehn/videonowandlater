@@ -21,6 +21,14 @@ export interface HangoutParticipant {
   displayName: string;
   participantId: string;
   joinedAt: string;
+  // Recording fields (populated by recording-ended handler)
+  recordingS3KeyPrefix?: string;
+  recordingHlsUrl?: string;
+  recordingDuration?: number;
+  recordingStatus?: string;
+  // Transcript fields (populated by transcribe-completed handler)
+  transcriptStatus?: string;
+  transcriptS3Path?: string;
 }
 
 /**
@@ -534,6 +542,115 @@ export async function updateParticipantCount(
       ':count': participantCount,
       ':inc': 1,
     },
+  }));
+}
+
+/**
+ * Update a hangout participant record with recording metadata
+ * Called by recording-ended handler when a per-participant recording completes
+ */
+export async function updateParticipantRecording(
+  tableName: string,
+  sessionId: string,
+  participantId: string,
+  recording: {
+    recordingS3KeyPrefix: string;
+    recordingHlsUrl: string;
+    recordingDuration: number;
+    recordingStatus: 'available' | 'failed';
+  }
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  // Find participant by IVS participantId
+  const participants = await getHangoutParticipants(tableName, sessionId);
+  const participant = participants.find(p => p.participantId === participantId);
+  if (!participant) {
+    logger.warn('Participant not found for recording update', { sessionId, participantId });
+    return;
+  }
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: `PARTICIPANT#${participant.userId}`,
+    },
+    UpdateExpression: 'SET #recS3 = :s3, #recHls = :hls, #recDur = :dur, #recStatus = :status',
+    ExpressionAttributeNames: {
+      '#recS3': 'recordingS3KeyPrefix',
+      '#recHls': 'recordingHlsUrl',
+      '#recDur': 'recordingDuration',
+      '#recStatus': 'recordingStatus',
+    },
+    ExpressionAttributeValues: {
+      ':s3': recording.recordingS3KeyPrefix,
+      ':hls': recording.recordingHlsUrl,
+      ':dur': recording.recordingDuration,
+      ':status': recording.recordingStatus,
+    },
+  }));
+}
+
+/**
+ * Get hangout participants that have completed recordings
+ */
+export async function getParticipantsWithRecordings(
+  tableName: string,
+  sessionId: string,
+): Promise<(HangoutParticipant & { recordingS3KeyPrefix?: string; recordingHlsUrl?: string; recordingDuration?: number; recordingStatus?: string; transcriptStatus?: string; transcriptS3Path?: string })[]> {
+  const docClient = getDocumentClient();
+
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': `SESSION#${sessionId}`,
+      ':skPrefix': 'PARTICIPANT#',
+    },
+  }));
+
+  if (!result.Items || result.Items.length === 0) {
+    return [];
+  }
+
+  return result.Items.map(item => {
+    const { PK, SK, entityType, ...participant } = item;
+    return participant as any;
+  });
+}
+
+/**
+ * Update a participant's transcript status
+ */
+export async function updateParticipantTranscript(
+  tableName: string,
+  sessionId: string,
+  userId: string,
+  status: 'processing' | 'available' | 'failed',
+  transcriptS3Path?: string,
+): Promise<void> {
+  const docClient = getDocumentClient();
+
+  const updateExpr = transcriptS3Path
+    ? 'SET #tStatus = :status, #tPath = :path'
+    : 'SET #tStatus = :status';
+  const exprNames: Record<string, string> = { '#tStatus': 'transcriptStatus' };
+  const exprValues: Record<string, any> = { ':status': status };
+  if (transcriptS3Path) {
+    exprNames['#tPath'] = 'transcriptS3Path';
+    exprValues[':path'] = transcriptS3Path;
+  }
+
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: `PARTICIPANT#${userId}`,
+    },
+    UpdateExpression: updateExpr,
+    ExpressionAttributeNames: exprNames,
+    ExpressionAttributeValues: exprValues,
   }));
 }
 

@@ -3,11 +3,14 @@
  * Mirrors BroadcastPage.tsx structure for consistency
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useAiAgentListener } from './useAiAgentListener';
+import { AiIntentProgress } from './AiIntentProgress';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { useHangout } from './useHangout';
+import { useFrameReporter } from './useFrameReporter';
 import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
 import { ChatPanel } from '../chat/ChatPanel';
@@ -18,6 +21,7 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { ConfirmModal } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 
@@ -44,6 +48,13 @@ export function HangoutPage() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
+  const [killError, setKillError] = useState<string | null>(null);
+  const [agentState, setAgentState] = useState<{
+    active: boolean;
+    speaking: boolean;
+    currentStep?: { stepName: string; prompt: string; stepIndex: number; totalSteps: number };
+    filledSlots: Record<string, string>;
+  }>({ active: false, speaking: false, filledSlots: {} });
 
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
@@ -52,14 +63,19 @@ export function HangoutPage() {
     localVideoRef,
     participants,
     isJoined,
+    isScreenSharing,
     error,
     toggleMute,
     toggleCamera,
+    startScreenShare,
+    stopScreenShare,
   } = useHangout({
     sessionId: sessionId || '',
     apiBaseUrl,
     authToken,
   });
+
+  useFrameReporter(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined);
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
   const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId: sessionId || '', authToken });
@@ -68,6 +84,33 @@ export function HangoutPage() {
   useReactionListener(room, (reaction) => {
     const emoji = EMOJI_MAP[reaction.emojiType as EmojiType];
     setFloatingReactions(prev => [...prev, { id: uuidv4(), emoji, timestamp: Date.now() }]);
+  });
+
+  useSessionKillListener(room, useCallback((reason: string) => {
+    setKillError(`Session ended: ${reason}`);
+    setTimeout(() => navigate('/'), 3000);
+  }, [navigate]));
+
+  useAiAgentListener(room, {
+    onJoining: useCallback(() => {
+      setAgentState(prev => ({ ...prev, active: true }));
+    }, []),
+    onSpeaking: useCallback((meta) => {
+      setAgentState(prev => ({ ...prev, speaking: true, currentStep: meta }));
+      toggleMute(true); // Auto-mute while AI speaks
+      setIsMuted(true);
+    }, [toggleMute]),
+    onDoneSpeaking: useCallback(() => {
+      setAgentState(prev => ({ ...prev, speaking: false }));
+      toggleMute(false); // Auto-unmute
+      setIsMuted(false);
+    }, [toggleMute]),
+    onCompleted: useCallback((meta) => {
+      setAgentState({ active: false, speaking: false, filledSlots: meta.slots || {}, currentStep: undefined });
+    }, []),
+    onError: useCallback(() => {
+      setAgentState(prev => ({ ...prev, active: false, speaking: false }));
+    }, []),
   });
 
   // Merge activeSpeakerId into participants array
@@ -189,9 +232,9 @@ export function HangoutPage() {
         </Card.Header>
       </Card>
 
-      {error && (
+      {(error || killError) && (
         <div className="p-4 bg-red-50 border-b border-red-200 text-red-700 text-sm shrink-0">
-          {error}
+          {killError || error}
         </div>
       )}
 
@@ -214,7 +257,12 @@ export function HangoutPage() {
             </Card>
             <FloatingReactions
               reactions={floatingReactions}
-              onExpire={(id) => setFloatingReactions(prev => prev.filter(r => r.id !== id))}
+            />
+            <AiIntentProgress
+              isActive={agentState.active}
+              currentStep={agentState.currentStep}
+              filledSlots={agentState.filledSlots}
+              agentSpeaking={agentState.speaking}
             />
 
             {/* Controls */}
@@ -255,6 +303,24 @@ export function HangoutPage() {
                     )}
                   </svg>
                   <span className="hidden sm:inline">{isCameraOn ? 'Camera' : 'Cam Off'}</span>
+                </button>
+                <button
+                  onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                  title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                  className={`inline-flex items-center justify-center w-12 h-12 sm:w-auto sm:h-auto sm:gap-2 sm:px-5 sm:py-3 rounded-full sm:rounded-xl font-semibold text-sm transition-all duration-200 ${
+                    isScreenSharing
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-lg shadow-blue-600/30'
+                      : 'bg-white/15 text-white hover:bg-white/25 active:bg-white/35'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    {isScreenSharing ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25zM6 6l12 12" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{isScreenSharing ? 'Stop Share' : 'Share'}</span>
                 </button>
                 {isJoined && (
                   <ReactionPicker onReaction={handleReaction} />

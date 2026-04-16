@@ -21,10 +21,15 @@ import {
   computeAndStoreReactionSummary,
   getHangoutParticipants,
   updateParticipantCount,
+  updateParticipantRecording,
+  getParticipantsWithRecordings,
 } from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import type { Session } from '../domain/session';
+import { calculateIvsRealtimeCost, calculateIvsLowLatencyCost, calculateMediaConvertCost, CostService, PRICING_RATES } from '../domain/cost';
+import { writeCostLineItem, upsertCostSummary } from '../repositories/cost-repository';
+import { emitCostMetric } from '../lib/cost-metrics';
 
 export const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 
@@ -226,66 +231,222 @@ async function processEvent(
   logger.appendPersistentKeys({ sessionId });
   logger.info('Pipeline stage entered', { resourceArn, resourceType });
 
-  logger.info('Found session, transitioning to ENDED', { sessionId });
+  logger.info('Found session, processing recording event', { sessionId });
 
   try {
+    // Validate required event fields
+    if (!isBroadcastOrHangoutEvent(event.detail)) {
+      throw new Error('Invalid event detail: not a broadcast or hangout event');
+    }
+
+    const recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
+    const recordingsBucket = event.detail.recording_s3_bucket_name;
+    let recordingDuration = event.detail.recording_duration_ms;
+
+    if (!recordingS3KeyPrefix || !recordingsBucket || typeof recordingDuration !== 'number') {
+      throw new Error('Invalid event detail: missing required recording metadata');
+    }
+
+    // Validate recording duration (0 to 24 hours)
+    const MAX_RECORDING_DURATION_MS = 24 * 60 * 60 * 1000;
+    if (recordingDuration < 0 || recordingDuration > MAX_RECORDING_DURATION_MS) {
+      logger.warn('Recording duration out of expected range, clamping', { sessionId, rawDuration: recordingDuration });
+      recordingDuration = Math.max(0, Math.min(recordingDuration, MAX_RECORDING_DURATION_MS));
+    }
+
+    if (recordingS3KeyPrefix.includes('..') || recordingS3KeyPrefix.startsWith('/')) {
+      throw new Error('Invalid S3 key prefix format');
+    }
+
+    const detail = event.detail as any;
+    const finalStatus: 'available' | 'failed' = detail.recording_status === 'Recording End Failure' ? 'failed' : 'available';
+
+    // ─── HANGOUT: per-participant recording collection ───────────────────
+    if (session.sessionType === SessionType.HANGOUT) {
+      const stageDetail = event.detail as StageParticipantRecordingEndDetail;
+      const participantIvsId = stageDetail.participant_id;
+      const recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/multivariant.m3u8`;
+      const thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/latest_thumbnail/high/thumb.jpg`;
+
+      logger.info('Hangout participant recording ended', { sessionId, participantIvsId, recordingStatus: finalStatus });
+
+      // Store this participant's recording metadata
+      await updateParticipantRecording(tableName, sessionId, participantIvsId, {
+        recordingS3KeyPrefix,
+        recordingHlsUrl,
+        recordingDuration,
+        recordingStatus: finalStatus,
+      });
+
+      // Atomically increment recordingsReceived counter to avoid race conditions
+      // when multiple Recording End events arrive simultaneously
+      const allParticipants = await getParticipantsWithRecordings(tableName, sessionId);
+      const totalParticipants = allParticipants.length;
+
+      const counterResult = await docClient.send(new UpdateCommandDirect({
+        TableName: tableName,
+        Key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
+        UpdateExpression: 'SET recordingsReceived = if_not_exists(recordingsReceived, :zero) + :inc',
+        ExpressionAttributeValues: { ':zero': 0, ':inc': 1 },
+        ReturnValues: 'ALL_NEW',
+      }));
+      const recordingsReceived = (counterResult.Attributes?.recordingsReceived as number) ?? 0;
+
+      logger.info('Participant recording progress (atomic)', {
+        sessionId,
+        recordingsReceived,
+        totalParticipants,
+      });
+
+      if (recordingsReceived < totalParticipants) {
+        logger.info('Waiting for remaining participant recordings', { sessionId });
+        return;
+      }
+
+      // All participants recorded — this invocation won the race
+      logger.info('All participant recordings received, processing hangout', { sessionId });
+      const availableRecordings = allParticipants.filter(p => p.recordingStatus === 'available');
+
+      // Update participant count
+      await updateParticipantCount(tableName, sessionId, totalParticipants);
+
+      // Use the first available participant's recording for session-level metadata (feed display)
+      const firstAvailable = availableRecordings[0];
+      if (firstAvailable) {
+        await updateRecordingMetadata(tableName, sessionId, {
+          recordingDuration: Math.max(...availableRecordings.map(p => p.recordingDuration || 0)),
+          recordingHlsUrl: firstAvailable.recordingHlsUrl!,
+          thumbnailUrl,
+          recordingStatus: 'available',
+        });
+      }
+
+      // Record IVS Realtime cost (non-blocking)
+      try {
+        const maxDuration = Math.max(...availableRecordings.map(p => p.recordingDuration || 0));
+        const participantMinutes = (maxDuration / 60000) * totalParticipants;
+        const costUsd = calculateIvsRealtimeCost(participantMinutes);
+        await writeCostLineItem(tableName, {
+          sessionId, service: CostService.IVS_REALTIME, costUsd, quantity: participantMinutes, unit: 'participant-minutes',
+          rateApplied: PRICING_RATES.IVS_REALTIME, sessionType: session.sessionType, userId: session.userId,
+          createdAt: new Date().toISOString(),
+        });
+        await upsertCostSummary(tableName, sessionId, CostService.IVS_REALTIME, costUsd, session.sessionType, session.userId);
+        logger.info('Cost recorded', { service: 'IVS_REALTIME', costUsd, sessionId });
+        await emitCostMetric('IVS_REALTIME', costUsd, session.sessionType, sessionId);
+      } catch (costError: any) {
+        logger.warn('Failed to record cost (non-blocking)', { error: costError.message });
+      }
+
+      // Compute reaction summary (best-effort)
+      try {
+        await computeAndStoreReactionSummary(tableName, sessionId);
+      } catch (summaryError: any) {
+        logger.error('Failed to compute reaction summary (non-blocking):', { errorMessage: summaryError.message });
+      }
+
+      // Submit a MediaConvert job per participant with available recordings
+      try {
+        for (const participant of availableRecordings) {
+          const userId = participant.userId;
+          const hlsInputPath = `s3://${recordingsBucket}/${participant.recordingS3KeyPrefix}/media/hls/multivariant.m3u8`;
+          const mp4OutputPath = `s3://${transcriptionBucket}/${sessionId}/participants/${userId}/`;
+
+          const result = await mediaConvertClient.send(new CreateJobCommand({
+            Role: mediaConvertRoleArn,
+            Queue: `arn:aws:mediaconvert:${awsRegion}:${awsAccountId}:queues/Default`,
+            Settings: {
+              Inputs: [{
+                FileInput: hlsInputPath,
+                AudioSelectors: { default: { DefaultSelection: 'DEFAULT' } },
+              }],
+              OutputGroups: [{
+                Name: 'File Group',
+                OutputGroupSettings: {
+                  Type: 'FILE_GROUP_SETTINGS',
+                  FileGroupSettings: { Destination: mp4OutputPath },
+                },
+                Outputs: [{
+                  NameModifier: 'recording',
+                  ContainerSettings: { Container: 'MP4' },
+                  VideoDescription: {
+                    CodecSettings: {
+                      Codec: 'H_264',
+                      H264Settings: { Bitrate: 5000000, MaxBitrate: 5000000, RateControlMode: 'VBR', CodecProfile: 'MAIN' },
+                    },
+                  },
+                  AudioDescriptions: [{
+                    AudioSourceName: 'default',
+                    CodecSettings: {
+                      Codec: 'AAC',
+                      AacSettings: { Bitrate: 128000, CodingMode: 'CODING_MODE_2_0', SampleRate: 48000 },
+                    },
+                  }],
+                }],
+              }],
+            },
+            Tags: { sessionId, phase: '19-transcription', userId },
+            UserMetadata: { sessionId, phase: '19-transcription', userId },
+          }));
+
+          logger.info('MediaConvert job submitted for participant', {
+            sessionId, userId, jobId: result.Job?.Id,
+          });
+
+          // Record MediaConvert cost per participant (non-blocking)
+          try {
+            const mcMinutes = (participant.recordingDuration || 0) / 60000;
+            const mcCostUsd = calculateMediaConvertCost(mcMinutes);
+            await writeCostLineItem(tableName, {
+              sessionId, service: CostService.MEDIACONVERT, costUsd: mcCostUsd, quantity: mcMinutes, unit: 'minutes',
+              rateApplied: PRICING_RATES.MEDIACONVERT, sessionType: session.sessionType, userId: session.userId,
+              createdAt: new Date().toISOString(),
+            });
+            await upsertCostSummary(tableName, sessionId, CostService.MEDIACONVERT, mcCostUsd, session.sessionType, session.userId);
+            logger.info('Cost recorded', { service: 'MEDIACONVERT', costUsd: mcCostUsd, sessionId, participantUserId: userId });
+            await emitCostMetric('MEDIACONVERT', mcCostUsd, session.sessionType, sessionId);
+          } catch (costError: any) {
+            logger.warn('Failed to record cost (non-blocking)', { error: costError.message });
+          }
+        }
+
+        // Mark session as processing transcription
+        await docClient.send(new UpdateCommandDirect({
+          TableName: tableName,
+          Key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
+          UpdateExpression: 'SET transcriptStatus = :status, pendingTranscripts = :count, #version = #version + :inc',
+          ExpressionAttributeNames: { '#version': 'version' },
+          ExpressionAttributeValues: {
+            ':status': 'processing',
+            ':count': availableRecordings.length,
+            ':inc': 1,
+          },
+        }));
+      } finally {
+        // Release pool resources after all MediaConvert jobs submitted
+        if (session.claimedResources?.stage) {
+          await releasePoolResource(tableName, session.claimedResources.stage);
+          logger.info('Released stage resource:', { stage: session.claimedResources.stage });
+        }
+        if (session.claimedResources?.chatRoom) {
+          await releasePoolResource(tableName, session.claimedResources.chatRoom);
+          logger.info('Released chat room resource:', { chatRoom: session.claimedResources.chatRoom });
+        }
+      }
+
+      logger.info('Pipeline stage completed (hangout)', { status: 'success', durationMs: Date.now() - startMs });
+      return;
+    }
+
+    // ─── BROADCAST: existing single-recording flow ──────────────────────
     // Update session: ENDING -> ENDED
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
     logger.info('Session transitioned to ENDED:', { sessionId });
 
     // Update recording metadata
-    let finalStatus: 'available' | 'failed' = 'failed';
-    let recordingS3KeyPrefix: string = '';
-    let recordingsBucket: string = '';
-    let recordingDuration: number = 0;
-
     try {
-      // Validate required event fields
-      if (!isBroadcastOrHangoutEvent(event.detail)) {
-        throw new Error('Invalid event detail: not a broadcast or hangout event');
-      }
-
-      recordingS3KeyPrefix = event.detail.recording_s3_key_prefix;
-      recordingsBucket = event.detail.recording_s3_bucket_name;
-      recordingDuration = event.detail.recording_duration_ms;
-
-      if (!recordingS3KeyPrefix || !recordingsBucket || typeof recordingDuration !== 'number') {
-        throw new Error('Invalid event detail: missing required recording metadata');
-      }
-
-      // Validate recording duration is reasonable (0 to 24 hours)
-      const MAX_RECORDING_DURATION_MS = 24 * 60 * 60 * 1000;
-      if (recordingDuration < 0 || recordingDuration > MAX_RECORDING_DURATION_MS) {
-        logger.warn('Recording duration out of expected range, clamping', {
-          sessionId,
-          rawDuration: recordingDuration,
-        });
-        recordingDuration = Math.max(0, Math.min(recordingDuration, MAX_RECORDING_DURATION_MS));
-      }
-
-      // Validate S3 path doesn't contain suspicious patterns (basic injection prevention)
-      if (recordingS3KeyPrefix.includes('..') || recordingS3KeyPrefix.startsWith('/')) {
-        throw new Error('Invalid S3 key prefix format');
-      }
-
-      let recordingHlsUrl: string;
-      let thumbnailUrl: string;
-
-      if (resourceType === 'channel') {
-        // IVS Low-Latency broadcast recording structure
-        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
-        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/thumbnails/thumb0.jpg`;
-      } else {
-        // IVS RealTime Stage participant recording structure
-        recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/multivariant.m3u8`;
-        thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/latest_thumbnail/high/thumb.jpg`;
-      }
-
-      // recording_status field only exists on broadcast events; Stage "Recording End" events are always successful
-      const detail = event.detail as any;
-      finalStatus = detail.recording_status === 'Recording End Failure'
-        ? 'failed'
-        : 'available';
+      const recordingHlsUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
+      const thumbnailUrl = `https://${cloudFrontDomain}/${recordingS3KeyPrefix}/media/thumbnails/thumb0.jpg`;
 
       await updateRecordingMetadata(tableName, sessionId, {
         recordingDuration,
@@ -294,14 +455,25 @@ async function processEvent(
         recordingStatus: finalStatus,
       });
 
-      logger.info('Recording metadata updated:', {
-        sessionId,
-        recordingDuration: recordingDuration,
-        recordingStatus: finalStatus,
-      });
+      logger.info('Recording metadata updated:', { sessionId, recordingDuration, recordingStatus: finalStatus });
+
+      // Record IVS Low-Latency cost (non-blocking)
+      try {
+        const hours = recordingDuration / 3600000;
+        const costUsd = calculateIvsLowLatencyCost(hours);
+        await writeCostLineItem(tableName, {
+          sessionId, service: CostService.IVS_LOW_LATENCY, costUsd, quantity: hours, unit: 'hours',
+          rateApplied: PRICING_RATES.IVS_LOW_LATENCY, sessionType: session.sessionType, userId: session.userId,
+          createdAt: new Date().toISOString(),
+        });
+        await upsertCostSummary(tableName, sessionId, CostService.IVS_LOW_LATENCY, costUsd, session.sessionType, session.userId);
+        logger.info('Cost recorded', { service: 'IVS_LOW_LATENCY', costUsd, sessionId });
+        await emitCostMetric('IVS_LOW_LATENCY', costUsd, session.sessionType, sessionId);
+      } catch (costError: any) {
+        logger.warn('Failed to record cost (non-blocking)', { error: costError.message });
+      }
     } catch (metadataError: any) {
       logger.error('Failed to update recording metadata (non-blocking):', { errorMessage: metadataError.message });
-      // Don't throw - metadata update is best-effort, don't block session cleanup
     }
 
     // Compute and store reaction summary (best-effort, non-blocking)
@@ -309,120 +481,60 @@ async function processEvent(
       await computeAndStoreReactionSummary(tableName, sessionId);
     } catch (summaryError: any) {
       logger.error('Failed to compute reaction summary (non-blocking):', { errorMessage: summaryError.message });
-      // Don't throw - summary computation is best-effort, don't block session cleanup
     }
 
-    // Compute participant count for hangout sessions -- best-effort (PTCP-02)
-    if (session.sessionType === SessionType.HANGOUT) {
-      try {
-        const participants = await getHangoutParticipants(tableName, sessionId);
-        if (participants.length > 0) {
-          await updateParticipantCount(tableName, sessionId, participants.length);
-          logger.info('Participant count updated:', { sessionId, count: participants.length });
-        }
-      } catch (participantCountError: any) {
-        logger.error('Failed to update participant count (non-blocking):', { errorMessage: participantCountError.message });
-      }
-    }
-
-    // Critical: release pool resources even if MediaConvert throws
+    // Submit MediaConvert job for broadcast
     try {
-      // Submit MediaConvert job to convert HLS → MP4 for transcription
-      // Throws on failure so SQS can retry via batchItemFailures
       if (finalStatus === 'available') {
-        const epochMs = Date.now();
-        const jobName = `vnl-${sessionId}-${epochMs}`;
-
-        // Build HLS input path (master.m3u8 location from IVS recording structure)
         const hlsInputPath = `s3://${recordingsBucket}/${recordingS3KeyPrefix}/media/hls/master.m3u8`;
         const mp4OutputPath = `s3://${transcriptionBucket}/${sessionId}/`;
 
-        // Validate constructed paths
-        if (!hlsInputPath.match(/^s3:\/\/[\w\-\.]+\/[\w\-\.\/]+\.m3u8$/)) {
-          throw new Error(`Invalid HLS input path format: ${hlsInputPath}`);
-        }
-        if (!mp4OutputPath.match(/^s3:\/\/[\w\-\.]+\/[\w\-\.\/]+\/$/)) {
-          throw new Error(`Invalid MP4 output path format: ${mp4OutputPath}`);
-        }
-
-        const createJobCommand = new CreateJobCommand({
+        const result = await mediaConvertClient.send(new CreateJobCommand({
           Role: mediaConvertRoleArn,
           Queue: `arn:aws:mediaconvert:${awsRegion}:${awsAccountId}:queues/Default`,
           Settings: {
-            Inputs: [
-              {
-                FileInput: hlsInputPath,
-                AudioSelectors: {
-                  default: {
-                    DefaultSelection: 'DEFAULT',
-                  },
-                },
-              },
-            ],
+            Inputs: [{
+              FileInput: hlsInputPath,
+              AudioSelectors: { default: { DefaultSelection: 'DEFAULT' } },
+            }],
             OutputGroups: [
               {
                 Name: 'File Group',
                 OutputGroupSettings: {
                   Type: 'FILE_GROUP_SETTINGS',
-                  FileGroupSettings: {
-                    Destination: mp4OutputPath,
-                  },
+                  FileGroupSettings: { Destination: mp4OutputPath },
                 },
-                Outputs: [
-                  {
-                    NameModifier: 'recording',
-                    ContainerSettings: {
-                      Container: 'MP4',
+                Outputs: [{
+                  NameModifier: 'recording',
+                  ContainerSettings: { Container: 'MP4' },
+                  VideoDescription: {
+                    CodecSettings: {
+                      Codec: 'H_264',
+                      H264Settings: { Bitrate: 5000000, MaxBitrate: 5000000, RateControlMode: 'VBR', CodecProfile: 'MAIN' },
                     },
-                    VideoDescription: {
-                      CodecSettings: {
-                        Codec: 'H_264',
-                        H264Settings: {
-                          Bitrate: 5000000,
-                          MaxBitrate: 5000000,
-                          RateControlMode: 'VBR',
-                          CodecProfile: 'MAIN',
-                        },
-                      },
-                    },
-                    AudioDescriptions: [
-                      {
-                        AudioSourceName: 'default',
-                        CodecSettings: {
-                          Codec: 'AAC',
-                          AacSettings: {
-                            Bitrate: 128000,
-                            CodingMode: 'CODING_MODE_2_0',
-                            SampleRate: 48000,
-                          },
-                        },
-                      },
-                    ],
                   },
-                ],
+                  AudioDescriptions: [{
+                    AudioSourceName: 'default',
+                    CodecSettings: {
+                      Codec: 'AAC',
+                      AacSettings: { Bitrate: 128000, CodingMode: 'CODING_MODE_2_0', SampleRate: 48000 },
+                    },
+                  }],
+                }],
               },
               {
                 Name: 'Thumbnails',
                 OutputGroupSettings: {
                   Type: 'FILE_GROUP_SETTINGS',
-                  FileGroupSettings: {
-                    Destination: `s3://${transcriptionBucket}/${sessionId}/thumbnails/`,
-                  },
+                  FileGroupSettings: { Destination: `s3://${transcriptionBucket}/${sessionId}/thumbnails/` },
                 },
                 Outputs: [{
                   ContainerSettings: { Container: 'RAW' },
                   VideoDescription: {
-                    Width: 640,
-                    Height: 360,
-                    ScalingBehavior: 'DEFAULT',
+                    Width: 640, Height: 360, ScalingBehavior: 'DEFAULT',
                     CodecSettings: {
                       Codec: 'FRAME_CAPTURE',
-                      FrameCaptureSettings: {
-                        FramerateNumerator: 1,
-                        FramerateDenominator: 5,
-                        MaxCaptures: 500,
-                        Quality: 80,
-                      },
+                      FrameCaptureSettings: { FramerateNumerator: 1, FramerateDenominator: 5, MaxCaptures: 500, Quality: 80 },
                     },
                   },
                   Extension: 'jpg',
@@ -431,59 +543,49 @@ async function processEvent(
               },
             ],
           },
-          Tags: {
-            sessionId,
-            phase: '19-transcription',
-          },
-          UserMetadata: {
-            sessionId,
-            phase: '19-transcription',
-          },
-        });
-
-        const result = await mediaConvertClient.send(createJobCommand);
-        const jobId = result.Job?.Id;
-
-        if (!jobId) {
-          throw new Error('MediaConvert did not return a job ID');
-        }
-
-        // Store MediaConvert job ID in session for tracking
-        await docClient.send(new UpdateCommandDirect({
-          TableName: tableName,
-          Key: {
-            PK: `SESSION#${sessionId}`,
-            SK: 'METADATA',
-          },
-          UpdateExpression: 'SET mediaconvertJobId = :jobId, transcriptStatus = :status, #version = #version + :inc',
-          ExpressionAttributeNames: {
-            '#version': 'version',
-          },
-          ExpressionAttributeValues: {
-            ':jobId': jobId,
-            ':status': 'processing',
-            ':inc': 1,
-          },
+          Tags: { sessionId, phase: '19-transcription' },
+          UserMetadata: { sessionId, phase: '19-transcription' },
         }));
 
-        logger.info('MediaConvert job submitted:', {
-          jobId,
-          jobName,
-          sessionId,
-        });
+        const jobId = result.Job?.Id;
+        if (!jobId) throw new Error('MediaConvert did not return a job ID');
+
+        await docClient.send(new UpdateCommandDirect({
+          TableName: tableName,
+          Key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
+          UpdateExpression: 'SET mediaconvertJobId = :jobId, transcriptStatus = :status, #version = #version + :inc',
+          ExpressionAttributeNames: { '#version': 'version' },
+          ExpressionAttributeValues: { ':jobId': jobId, ':status': 'processing', ':inc': 1 },
+        }));
+
+        logger.info('MediaConvert job submitted:', { jobId, sessionId });
+
+        // Record MediaConvert cost (non-blocking)
+        try {
+          const mcMinutes = recordingDuration / 60000;
+          const mcCostUsd = calculateMediaConvertCost(mcMinutes);
+          await writeCostLineItem(tableName, {
+            sessionId, service: CostService.MEDIACONVERT, costUsd: mcCostUsd, quantity: mcMinutes, unit: 'minutes',
+            rateApplied: PRICING_RATES.MEDIACONVERT, sessionType: session.sessionType, userId: session.userId,
+            createdAt: new Date().toISOString(),
+          });
+          await upsertCostSummary(tableName, sessionId, CostService.MEDIACONVERT, mcCostUsd, session.sessionType, session.userId);
+          logger.info('Cost recorded', { service: 'MEDIACONVERT', costUsd: mcCostUsd, sessionId });
+          await emitCostMetric('MEDIACONVERT', mcCostUsd, session.sessionType, sessionId);
+        } catch (costError: any) {
+          logger.warn('Failed to record cost (non-blocking)', { error: costError.message });
+        }
       }
     } finally {
-      // Pool resource release always executes, even if MediaConvert throws
+      // Pool resource release always executes
       if (session.claimedResources?.channel) {
         await releasePoolResource(tableName, session.claimedResources.channel);
         logger.info('Released channel resource:', { channel: session.claimedResources.channel });
       }
-
       if (session.claimedResources?.stage) {
         await releasePoolResource(tableName, session.claimedResources.stage);
         logger.info('Released stage resource:', { stage: session.claimedResources.stage });
       }
-
       if (session.claimedResources?.chatRoom) {
         await releasePoolResource(tableName, session.claimedResources.chatRoom);
         logger.info('Released chat room resource:', { chatRoom: session.claimedResources.chatRoom });
@@ -491,11 +593,10 @@ async function processEvent(
     }
 
     logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
-    logger.info('Session cleanup complete:', { sessionId });
   } catch (error: any) {
-    logger.error('Failed to clean up session:', { errorMessage: error.message });
+    logger.error('Failed to process recording event:', { errorMessage: error.message });
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error.message });
-    throw error; // Let SQS outer handler catch this and report batchItemFailure
+    throw error;
   }
 }
 

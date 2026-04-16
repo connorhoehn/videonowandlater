@@ -264,9 +264,16 @@ async function createStage(tableName: string, recordingConfigArn: string): Promi
   const docClient = getDocumentClient();
 
   try {
+    const storageConfigurationArn = process.env.STORAGE_CONFIGURATION_ARN;
     const response = await ivsRealTimeClient.send(
       new CreateStageCommand({
         name: `vnl-pool-${uuidv4()}`,
+        ...(storageConfigurationArn && {
+          autoParticipantRecordingConfiguration: {
+            storageConfigurationArn,
+            mediaTypes: ['AUDIO_VIDEO'],
+          },
+        }),
       })
     );
 

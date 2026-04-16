@@ -6,8 +6,6 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ivs from 'aws-cdk-lib/aws-ivs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -20,23 +18,36 @@ import * as path from 'path';
 import { Construct } from 'constructs';
 import { IvsCleanupResource } from '../constructs/ivs-cleanup-resource';
 
+interface SessionStackProps extends StackProps {
+  recordingsBucket: s3.IBucket;
+  transcriptionBucket: s3.IBucket;
+  cloudfrontDomainName: string;
+}
+
 /**
  * SessionStack - DynamoDB table for session management and resource pool
  *
  * Single-table design with:
  * - PK/SK for primary access patterns
  * - GSI1 for status-based queries (e.g., finding AVAILABLE resources)
+ *
+ * Buckets and CloudFront live in StorageStack to survive failed deployments.
  */
 export class SessionStack extends Stack {
   public readonly table: dynamodb.Table;
   public readonly recordingStartRule: events.Rule;
   public readonly recordingEndRule: events.Rule;
-  public readonly recordingsBucket!: s3.Bucket;
+  public readonly recordingsBucket: s3.IBucket;
+  public readonly transcriptionBucket: s3.IBucket;
   public readonly mediaConvertTopic!: sns.Topic;
-  public readonly cloudfrontDomainName!: string;
+  public readonly cloudfrontDomainName: string;
 
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props: SessionStackProps) {
     super(scope, id, props);
+
+    this.recordingsBucket = props.recordingsBucket;
+    this.transcriptionBucket = props.transcriptionBucket;
+    this.cloudfrontDomainName = props.cloudfrontDomainName;
 
     // Single table for sessions and resource pool items
     this.table = new dynamodb.Table(this, 'SessionTable', {
@@ -117,6 +128,22 @@ export class SessionStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // GSI5: Time-range queries for cost records and moderation events
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI5',
+      partitionKey: { name: 'GSI5PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI5SK', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // GSI6: Per-user cost attribution queries
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI6',
+      partitionKey: { name: 'GSI6PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI6SK', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     new CfnOutput(this, 'SessionTableName', {
       value: this.table.tableName,
     });
@@ -147,72 +174,8 @@ export class SessionStack extends Stack {
     // Recording Infrastructure
     // ============================================================
 
-    // S3 bucket for session recordings
-    this.recordingsBucket = new s3.Bucket(this, 'RecordingsBucket', {
-      bucketName: `vnl-recordings-${this.stackName.toLowerCase()}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      cors: [
-        {
-          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE, s3.HttpMethods.HEAD],
-          allowedOrigins: ['*'],
-          allowedHeaders: ['*'],
-          exposedHeaders: ['ETag'],
-          maxAge: 3600, // 1 hour in seconds
-        },
-      ],
-    });
-
-    // S3 bucket for transcription pipeline (MediaConvert input/output and Transcribe outputs)
-    const transcriptionBucket = new s3.Bucket(this, 'TranscriptionBucket', {
-      bucketName: `vnl-transcription-${this.stackName.toLowerCase()}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    // CloudFront CORS policy for HLS playback
-    const recordingsCorsPolicy = new cloudfront.ResponseHeadersPolicy(this, 'RecordingsCorsPolicy', {
-      corsBehavior: {
-        accessControlAllowOrigins: ['*'],
-        accessControlAllowMethods: ['GET', 'HEAD', 'OPTIONS'],
-        accessControlAllowHeaders: ['*'],
-        accessControlExposeHeaders: ['*'],
-        accessControlAllowCredentials: false,
-        originOverride: true,
-      },
-      comment: 'CORS headers for IVS Player HLS requests',
-    });
-
-    // CloudFront distribution for secure recording playback
-    const distribution = new cloudfront.Distribution(this, 'RecordingsDistribution', {
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(this.recordingsBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-        responseHeadersPolicy: recordingsCorsPolicy,
-      },
-      comment: 'CloudFront distribution for VNL session recordings',
-    });
-
-    this.cloudfrontDomainName = distribution.distributionDomainName;
-
-    // Grant CloudFront access to S3 bucket
-    this.recordingsBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: [`${this.recordingsBucket.bucketArn}/*`],
-        principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
-        conditions: {
-          StringEquals: {
-            'AWS:SourceArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
-          },
-        },
-      })
-    );
+    // Buckets and CloudFront live in StorageStack (survives failed SessionStack deploys).
+    const transcriptionBucket = this.transcriptionBucket;
 
     // IVS Cleanup Custom Resource
     // This ensures IVS channels are properly cleaned up before stack deletion
@@ -247,11 +210,15 @@ export class SessionStack extends Stack {
       description: 'ARN of IVS RecordingConfiguration',
     });
 
-    new CfnOutput(this, 'RecordingsDomain', {
-      value: distribution.distributionDomainName,
-      exportName: 'vnl-recordings-domain',
-      description: 'CloudFront domain for session recordings',
+    // IVS RealTime StorageConfiguration — used for per-participant stage recording
+    const storageConfiguration = new ivs.CfnStorageConfiguration(this, 'StageStorageConfiguration', {
+      name: 'vnl-stage-storage-config',
+      s3: {
+        bucketName: this.recordingsBucket.bucketName,
+      },
     });
+
+    // RecordingsDomain output is now in StorageStack
 
     // EventBridge rules for recording lifecycle
     this.recordingStartRule = new events.Rule(this, 'RecordingStartRule', {
@@ -290,6 +257,7 @@ export class SessionStack extends Stack {
         MIN_ROOMS: '5',
         MIN_PRIVATE_CHANNELS: '5', // Phase 22: Private channels for secure broadcasts
         RECORDING_CONFIGURATION_ARN: recordingConfiguration.attrArn,
+        STORAGE_CONFIGURATION_ARN: storageConfiguration.attrArn,
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
@@ -381,6 +349,54 @@ export class SessionStack extends Stack {
     new events.Rule(this, 'ExpireStoriesSchedule', {
       schedule: events.Schedule.rate(Duration.hours(1)),
       targets: [new targets.LambdaFunction(expireStoriesFn)],
+    });
+
+    // ============================================================
+    // Content Moderation Frame Sampler (Rekognition)
+    // Samples thumbnails from live broadcasts every 60s and flags inappropriate content
+    // ============================================================
+    const moderationFrameSamplerFn = new nodejs.NodejsFunction(this, 'ModerationFrameSampler', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/moderation-frame-sampler.ts'),
+      timeout: Duration.seconds(60),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'ModerationFrameSamplerLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    this.table.grantReadWriteData(moderationFrameSamplerFn);
+
+    moderationFrameSamplerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['rekognition:DetectModerationLabels'],
+        resources: ['*'],
+      }),
+    );
+
+    moderationFrameSamplerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:StopStream'],
+        resources: ['*'],
+      }),
+    );
+
+    moderationFrameSamplerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['*'],
+      }),
+    );
+
+    new events.Rule(this, 'ModerationSamplerSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+      targets: [new targets.LambdaFunction(moderationFrameSamplerFn)],
+      description: 'Sample frames from live sessions for content moderation',
     });
 
     // Lambda function for stream-started events
@@ -618,7 +634,7 @@ export class SessionStack extends Stack {
     }));
 
     // Update recording-ended function with CloudFront domain
-    recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
+    recordingEndedFn.addEnvironment('CLOUDFRONT_DOMAIN', this.cloudfrontDomainName);
 
     // Grant S3 read access to Lambda functions for recording metadata
     this.recordingsBucket.grantRead(streamStartedFn);
@@ -656,6 +672,14 @@ export class SessionStack extends Stack {
 
     // Grant recording-ended handler S3 write access to transcription bucket (MediaConvert outputs MP4 there)
     transcriptionBucket.grantWrite(recordingEndedFn);
+
+    // Grant recording-ended handler CloudWatch PutMetricData permission
+    recordingEndedFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
+      })
+    );
 
     // Grant recording-ended handler IAM pass-role permission for MediaConvert job
     recordingEndedFn.addToRolePolicy(new iam.PolicyStatement({
@@ -718,6 +742,14 @@ export class SessionStack extends Stack {
       resources: ['*'],
     }));
 
+    // Grant transcode-completed handler CloudWatch PutMetricData permission
+    transcodeCompletedFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
+      })
+    );
+
     // Grant S3 read access to transcription bucket (for MP4 files from MediaConvert)
     transcriptionBucket.grantRead(transcodeCompletedFn);
 
@@ -767,6 +799,14 @@ export class SessionStack extends Stack {
         actions: ['events:PutEvents'],
         resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
         effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Grant transcribe-completed handler CloudWatch PutMetricData permission
+    transcribeCompletedFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
       })
     );
 
@@ -825,6 +865,14 @@ export class SessionStack extends Stack {
         actions: ['events:PutEvents'],
         resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
         effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Grant store-summary handler CloudWatch PutMetricData permission
+    storeSummaryFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
       })
     );
 
@@ -996,7 +1044,7 @@ export class SessionStack extends Stack {
     });
 
     // Set CloudFront domain for thumbnail/poster URL generation
-    onMediaConvertCompleteFunction.addEnvironment('CLOUDFRONT_DOMAIN', distribution.distributionDomainName);
+    onMediaConvertCompleteFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.cloudfrontDomainName);
 
     // Grant DynamoDB access to on-mediaconvert-complete
     this.table.grantReadWriteData(onMediaConvertCompleteFunction);
@@ -1006,6 +1054,14 @@ export class SessionStack extends Stack {
       actions: ['events:PutEvents'],
       resources: ['arn:aws:events:*:*:event-bus/default'],
     }));
+
+    // Grant on-mediaconvert-complete handler CloudWatch PutMetricData permission
+    onMediaConvertCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
+      })
+    );
 
     // EventBridge rule for MediaConvert job state changes (Phase 21)
     const mediaConvertCompleteRule = new events.Rule(this, 'MediaConvertCompleteRule', {
@@ -1068,6 +1124,14 @@ export class SessionStack extends Stack {
       resources: ['*'],
     }));
 
+    // Grant start-transcribe handler CloudWatch PutMetricData permission
+    startTranscribeFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
+      })
+    );
+
     // EventBridge rule for Upload Recording Available events
     // Target migrated from LambdaFunction to SqsQueue (Phase 31)
     const uploadRecordingAvailableRule = new events.Rule(this, 'UploadRecordingAvailableRule', {
@@ -1101,12 +1165,7 @@ export class SessionStack extends Stack {
       reportBatchItemFailures: true,
     }));
 
-    // S3 lifecycle rule for orphaned multipart uploads (clean up after 24 hours)
-    this.recordingsBucket.addLifecycleRule({
-      id: 'AbortIncompleteMultipartUploads',
-      abortIncompleteMultipartUploadAfter: Duration.days(1),
-      prefix: 'uploads/',
-    });
+    // Lifecycle rules are in StorageStack
 
     // Export environment variables for API handlers
     new CfnOutput(this, 'MediaConvertTopicArn', {
@@ -1246,5 +1305,54 @@ export class SessionStack extends Stack {
         }),
       );
     }
+
+    // ============================================================
+    // Budget Alert System (Phase 5: Cost Refinement)
+    // Hourly check of monthly spend against configurable thresholds
+    // ============================================================
+
+    const budgetAlertTopic = new sns.Topic(this, 'BudgetAlertTopic', {
+      displayName: 'VNL Budget Alerts',
+      topicName: 'vnl-budget-alerts',
+    });
+
+    const budgetAlertEmail = this.node.tryGetContext('budgetAlertEmail') as string | undefined;
+    if (budgetAlertEmail) {
+      budgetAlertTopic.addSubscription(
+        new sns_subscriptions.EmailSubscription(budgetAlertEmail)
+      );
+    }
+
+    new CfnOutput(this, 'BudgetAlertTopicArn', {
+      value: budgetAlertTopic.topicArn,
+      description: 'SNS Topic ARN for budget alerts — subscribe additional endpoints here',
+    });
+
+    const checkBudgetFn = new nodejs.NodejsFunction(this, 'CheckBudget', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/check-budget.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        SNS_TOPIC_ARN: budgetAlertTopic.topicArn,
+        BUDGET_THRESHOLDS: '[50,75,90,100]',
+        MONTHLY_BUDGET: '100',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'CheckBudgetLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    this.table.grantReadWriteData(checkBudgetFn);
+    budgetAlertTopic.grantPublish(checkBudgetFn);
+
+    new events.Rule(this, 'CheckBudgetSchedule', {
+      schedule: events.Schedule.rate(Duration.hours(1)),
+      targets: [new targets.LambdaFunction(checkBudgetFn)],
+      description: 'Check monthly spend against budget thresholds every hour',
+    });
   }
 }

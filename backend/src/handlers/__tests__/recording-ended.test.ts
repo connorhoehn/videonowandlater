@@ -6,7 +6,7 @@
 
 import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { handler } from '../recording-ended';
-import { updateRecordingMetadata, findSessionByChannelArn, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount } from '../../repositories/session-repository';
+import { updateRecordingMetadata, findSessionByChannelArn, findSessionByStageArn, computeAndStoreReactionSummary, getHangoutParticipants, updateParticipantCount, updateParticipantRecording, getParticipantsWithRecordings } from '../../repositories/session-repository';
 
 // ---------------------------------------------------------------------------
 // TRACE-02 / TRACE-03: Tracer mock — captureAWSv3Client + putAnnotation
@@ -50,7 +50,14 @@ jest.mock('@aws-sdk/client-dynamodb', () => ({
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn(() => ({
-      send: jest.fn().mockResolvedValue({ Items: [] }),
+      send: jest.fn().mockImplementation((cmd: any) => {
+        // Atomic counter updates return Attributes with a high count
+        // so the handler proceeds past the "waiting for remaining" gate
+        if (cmd?.input?.ReturnValues === 'ALL_NEW') {
+          return Promise.resolve({ Attributes: { recordingsReceived: 999 } });
+        }
+        return Promise.resolve({ Items: [] });
+      }),
     })),
   },
   GetCommand: jest.fn().mockImplementation((input: any) => ({ input })),
@@ -79,6 +86,8 @@ jest.mock('../../repositories/session-repository', () => ({
   computeAndStoreReactionSummary: jest.fn().mockResolvedValue({}),
   getHangoutParticipants: jest.fn().mockResolvedValue([]),
   updateParticipantCount: jest.fn().mockResolvedValue(undefined),
+  updateParticipantRecording: jest.fn().mockResolvedValue(undefined),
+  getParticipantsWithRecordings: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('../../repositories/resource-pool-repository', () => ({
@@ -91,6 +100,8 @@ const mockFindSessionByStageArn = findSessionByStageArn as jest.MockedFunction<t
 const mockComputeAndStoreReactionSummary = computeAndStoreReactionSummary as jest.MockedFunction<typeof computeAndStoreReactionSummary>;
 const mockGetHangoutParticipants = getHangoutParticipants as jest.MockedFunction<typeof getHangoutParticipants>;
 const mockUpdateParticipantCount = updateParticipantCount as jest.MockedFunction<typeof updateParticipantCount>;
+const mockUpdateParticipantRecording = updateParticipantRecording as jest.MockedFunction<typeof updateParticipantRecording>;
+const mockGetParticipantsWithRecordings = getParticipantsWithRecordings as jest.MockedFunction<typeof getParticipantsWithRecordings>;
 
 function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
   return {
@@ -116,6 +127,21 @@ function makeSqsEvent(ebEvent: Record<string, any>): SQSEvent {
 describe('recording-ended handler', () => {
   const originalEnv = process.env;
 
+  // Helper: set up mocks so a hangout with one participant completes the full per-participant pipeline
+  function setupHangoutWithAllRecordings(sessionId: string, participantId = 'participant-abc') {
+    mockGetParticipantsWithRecordings.mockResolvedValue([{
+      sessionId,
+      userId: 'user-1',
+      displayName: 'user-1',
+      participantId,
+      joinedAt: '2024-01-01T00:01:00Z',
+      recordingS3KeyPrefix: 'prefix/',
+      recordingHlsUrl: 'https://d1234567890.cloudfront.net/prefix/media/hls/multivariant.m3u8',
+      recordingDuration: 300000,
+      recordingStatus: 'available',
+    }]);
+  }
+
   beforeEach(() => {
     process.env = {
       ...originalEnv,
@@ -127,6 +153,8 @@ describe('recording-ended handler', () => {
     // Default: no session found
     mockFindSessionByChannelArn.mockResolvedValue(null);
     mockFindSessionByStageArn.mockResolvedValue(null);
+    // Default: no participants with recordings (per-participant flow waits)
+    mockGetParticipantsWithRecordings.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -287,6 +315,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('hangout-session-123');
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
     const result = await handler(makeSqsEvent({
@@ -330,6 +359,18 @@ describe('recording-ended handler', () => {
     } as any);
 
     const prefix = 'stage-id/session-id/participant-id/2024-01-01T00-00-00Z';
+    // Set up participant with matching prefix so session-level metadata matches
+    mockGetParticipantsWithRecordings.mockResolvedValue([{
+      sessionId: 'hangout-session-123',
+      userId: 'user-1',
+      displayName: 'user-1',
+      participantId: 'participant-abc',
+      joinedAt: '2024-01-01T00:01:00Z',
+      recordingS3KeyPrefix: prefix,
+      recordingHlsUrl: `https://d1234567890.cloudfront.net/${prefix}/media/hls/multivariant.m3u8`,
+      recordingDuration: 450000,
+      recordingStatus: 'available',
+    }]);
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
     await handler(makeSqsEvent({
@@ -351,12 +392,12 @@ describe('recording-ended handler', () => {
       },
     }));
 
+    // Session-level metadata uses the first participant's recording URL
     expect(mockUpdateRecordingMetadata).toHaveBeenCalledWith(
       'test-table',
       'hangout-session-123',
       expect.objectContaining({
         recordingHlsUrl: `https://d1234567890.cloudfront.net/${prefix}/media/hls/multivariant.m3u8`,
-        thumbnailUrl: `https://d1234567890.cloudfront.net/${prefix}/media/latest_thumbnail/high/thumb.jpg`,
         recordingStatus: 'available',
       })
     );
@@ -371,6 +412,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('hangout-session-123');
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
     await handler(makeSqsEvent({
@@ -413,6 +455,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('session-with-reactions');
     mockComputeAndStoreReactionSummary.mockResolvedValue({
       heart: 42,
       fire: 17,
@@ -458,6 +501,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('session-summary-error');
     mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Reaction summary computation failed'));
 
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
@@ -498,6 +542,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('session-log-error');
     mockComputeAndStoreReactionSummary.mockRejectedValueOnce(new Error('Test reaction error'));
 
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
@@ -539,10 +584,11 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
-    mockGetHangoutParticipants.mockResolvedValueOnce([
-      { sessionId: 'hangout-participants', userId: 'user-1', displayName: 'user-1', participantId: 'p-1', joinedAt: '2024-01-01T00:01:00Z' },
-      { sessionId: 'hangout-participants', userId: 'user-2', displayName: 'user-2', participantId: 'p-2', joinedAt: '2024-01-01T00:02:00Z' },
-      { sessionId: 'hangout-participants', userId: 'user-3', displayName: 'user-3', participantId: 'p-3', joinedAt: '2024-01-01T00:03:00Z' },
+    // All 3 participants have recordings available — triggers full pipeline
+    mockGetParticipantsWithRecordings.mockResolvedValue([
+      { sessionId: 'hangout-participants', userId: 'user-1', displayName: 'user-1', participantId: 'p-1', joinedAt: '2024-01-01T00:01:00Z', recordingStatus: 'available', recordingS3KeyPrefix: 'prefix/p1', recordingHlsUrl: 'https://d.cf.net/prefix/p1/media/hls/multivariant.m3u8', recordingDuration: 300000 },
+      { sessionId: 'hangout-participants', userId: 'user-2', displayName: 'user-2', participantId: 'p-2', joinedAt: '2024-01-01T00:02:00Z', recordingStatus: 'available', recordingS3KeyPrefix: 'prefix/p2', recordingHlsUrl: 'https://d.cf.net/prefix/p2/media/hls/multivariant.m3u8', recordingDuration: 300000 },
+      { sessionId: 'hangout-participants', userId: 'user-3', displayName: 'user-3', participantId: 'p-3', joinedAt: '2024-01-01T00:03:00Z', recordingStatus: 'available', recordingS3KeyPrefix: 'prefix/p3', recordingHlsUrl: 'https://d.cf.net/prefix/p3/media/hls/multivariant.m3u8', recordingDuration: 300000 },
     ]);
 
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
@@ -566,7 +612,6 @@ describe('recording-ended handler', () => {
       },
     }));
 
-    expect(mockGetHangoutParticipants).toHaveBeenCalledWith('test-table', 'hangout-participants');
     expect(mockUpdateParticipantCount).toHaveBeenCalledWith('test-table', 'hangout-participants', 3);
   });
 
@@ -603,10 +648,7 @@ describe('recording-ended handler', () => {
     expect(mockGetHangoutParticipants).not.toHaveBeenCalled();
   });
 
-  it('participant count failure does not block pool release', async () => {
-    const { releasePoolResource } = require('../../repositories/resource-pool-repository');
-    const mockReleasePoolResource = releasePoolResource as jest.MockedFunction<any>;
-
+  it('participant recording update failure is reported as batchItemFailure', async () => {
     mockFindSessionByStageArn.mockResolvedValue({
       sessionId: 'hangout-count-error',
       sessionType: 'HANGOUT',
@@ -616,7 +658,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
-    mockGetHangoutParticipants.mockRejectedValueOnce(new Error('DynamoDB query failed'));
+    mockUpdateParticipantRecording.mockRejectedValueOnce(new Error('DynamoDB update failed'));
 
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
@@ -639,11 +681,8 @@ describe('recording-ended handler', () => {
       },
     }));
 
-    // Should not fail - participant count error is non-blocking
-    expect(result.batchItemFailures).toHaveLength(0);
-
-    // Pool release should still happen
-    expect(mockReleasePoolResource).toHaveBeenCalled();
+    // Should report failure for SQS retry
+    expect(result.batchItemFailures).toHaveLength(1);
   });
 
   // =========================================================================
@@ -667,6 +706,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('mc-fail-session');
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
     const result = await handler(makeSqsEvent({
@@ -710,6 +750,7 @@ describe('recording-ended handler', () => {
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
+    setupHangoutWithAllRecordings('mc-fail-release-session');
     process.env.CLOUDFRONT_DOMAIN = 'd1234567890.cloudfront.net';
 
     await handler(makeSqsEvent({
@@ -837,15 +878,15 @@ describe('recording-ended handler', () => {
   // MediaConvert Thumbnails output group tests
   // =========================================================================
 
-  it('includes Thumbnails output group in MediaConvert job with FRAME_CAPTURE codec', async () => {
+  it('includes Thumbnails output group in MediaConvert job for broadcast sessions', async () => {
     const { CreateJobCommand } = require('@aws-sdk/client-mediaconvert');
 
-    mockFindSessionByStageArn.mockResolvedValue({
+    mockFindSessionByChannelArn.mockResolvedValue({
       sessionId: 'thumb-test-session',
-      sessionType: 'HANGOUT',
+      sessionType: 'BROADCAST',
       status: 'ENDING',
       userId: 'user-abc',
-      claimedResources: { stage: 'arn:aws:ivs:us-east-1:123456789012:stage/hangout-thumb', chatRoom: 'arn:aws:ivschat:room-thumb' },
+      claimedResources: { channel: 'arn:aws:ivs:us-east-1:123456789012:channel/broadcast-thumb', chatRoom: 'arn:aws:ivschat:room-thumb' },
       createdAt: '2024-01-01T00:00:00Z',
     } as any);
 
@@ -858,16 +899,16 @@ describe('recording-ended handler', () => {
     await handler(makeSqsEvent({
       version: '0',
       id: 'thumb-event',
-      'detail-type': 'IVS Participant Recording State Change',
+      'detail-type': 'IVS Recording State Change',
       source: 'aws.ivs',
       account: '123456789012',
       time: '2024-01-01T00:05:00Z',
       region: 'us-east-1',
-      resources: ['arn:aws:ivs:us-east-1:123456789012:stage/hangout-thumb'],
+      resources: ['arn:aws:ivs:us-east-1:123456789012:channel/broadcast-thumb'],
       detail: {
-        session_id: 'st-test-stream',
-        event_name: 'Recording End',
-        participant_id: 'participant-abc',
+        channel_name: 'Broadcast with Thumbnails',
+        stream_id: 'st_test_stream_id',
+        recording_status: 'Recording End',
         recording_s3_bucket_name: 'my-recordings',
         recording_s3_key_prefix: 'prefix/path',
         recording_duration_ms: 300000,

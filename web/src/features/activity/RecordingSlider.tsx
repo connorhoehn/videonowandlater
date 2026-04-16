@@ -7,7 +7,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EmptyState, VideoIcon } from '../../components/social';
-import { ReactionSummaryPills } from './ReactionSummaryPills';
 
 export interface ActivitySession {
   sessionId: string;
@@ -50,7 +49,7 @@ function RecordingCard({ session, navigate }: { session: ActivitySession; naviga
 
   return (
     <div
-      className="snap-center flex-shrink-0 w-64 bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
+      className="snap-center flex-shrink-0 w-64 bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
       onClick={() => navigate(`/replay/${session.sessionId}`)}
     >
       {/* Thumbnail */}
@@ -84,12 +83,9 @@ function RecordingCard({ session, navigate }: { session: ActivitySession; naviga
 
       {/* Metadata */}
       <div className="p-3">
-        <p className="text-xs font-semibold text-gray-800 truncate">
+        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
           {session.sourceFileName || session.userId}
         </p>
-        <div className="mt-2">
-          <ReactionSummaryPills reactionSummary={session.reactionSummary} />
-        </div>
       </div>
     </div>
   );
@@ -98,9 +94,9 @@ function RecordingCard({ session, navigate }: { session: ActivitySession; naviga
 export function RecordingSlider({ sessions }: RecordingSliderProps) {
   const navigate = useNavigate();
 
-  // Filter to broadcasts and completed uploads
+  // Filter to broadcasts, uploads, and hangouts with recordings
   const broadcasts = sessions.filter(
-    (s) => s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD'
+    (s) => s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD' || s.sessionType === 'HANGOUT'
   );
 
   if (broadcasts.length === 0) {

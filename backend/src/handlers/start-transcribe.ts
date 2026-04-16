@@ -39,37 +39,57 @@ async function processEvent(
   logger.info('Received Upload Recording Available event:', { detail: event.detail });
 
   // Extract required fields from event detail
-  const { sessionId, recordingHlsUrl } = event.detail;
+  const { sessionId, recordingHlsUrl, userId } = event.detail;
 
   logger.appendPersistentKeys({ sessionId: sessionId ?? 'unknown' });
-  logger.info('Pipeline stage entered', { recordingHlsUrl });
+  logger.info('Pipeline stage entered', { recordingHlsUrl, userId });
 
   // Validate required fields (defensive programming, already validated at handler boundary)
   if (!sessionId || !recordingHlsUrl) {
-    logger.error('Missing required fields in event detail:', {
-      sessionId,
-      recordingHlsUrl,
-    });
+    logger.error('Missing required fields in event detail:', { sessionId, recordingHlsUrl });
     return;
   }
 
-  // Derive audio file URI from session ID
-  // MediaConvert outputs MP4 to: s3://{transcriptionBucket}/{sessionId}/masterrecording.mp4
   const transcriptionBucket = process.env.TRANSCRIPTION_BUCKET!;
+
+  // Per-participant hangout recording: userId present in event detail
+  if (userId) {
+    // MediaConvert input is multivariant.m3u8 + NameModifier 'recording' = multivariantrecording.mp4
+    const audioFileUri = `s3://${transcriptionBucket}/${sessionId}/participants/${userId}/multivariantrecording.mp4`;
+    const jobName = `vnl-${sessionId}-${userId}-${Date.now()}`;
+    const outputKey = `${sessionId}/participants/${userId}/transcript.json`;
+
+    logger.info('Starting per-participant Transcribe job', { sessionId, userId, audioFileUri });
+
+    const command = new StartTranscriptionJobCommand({
+      TranscriptionJobName: jobName,
+      Media: { MediaFileUri: audioFileUri },
+      OutputBucketName: transcriptionBucket,
+      OutputKey: outputKey,
+      LanguageCode: 'en-US' as const,
+      // No speaker diarization needed — single speaker per recording
+    });
+
+    const response = await transcribe.send(command);
+    logger.info('Per-participant Transcribe job started', {
+      jobName: response.TranscriptionJob?.TranscriptionJobName,
+      status: response.TranscriptionJob?.TranscriptionJobStatus,
+      userId,
+    });
+    logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
+    return;
+  }
+
+  // Standard broadcast flow: single composite recording
   const audioFileUri = `s3://${transcriptionBucket}/${sessionId}/masterrecording.mp4`;
+  const jobName = `vnl-${sessionId}-${Date.now()}`;
 
   logger.info('Derived audio file URI', { sessionId, audioFileUri });
 
-  // Generate job name with timestamp for uniqueness
-  const jobName = `vnl-${sessionId}-${Date.now()}`;
-
-  // Prepare Transcribe job parameters
   const transcribeParams = {
     TranscriptionJobName: jobName,
-    Media: {
-      MediaFileUri: audioFileUri,
-    },
-    OutputBucketName: process.env.TRANSCRIPTION_BUCKET!,
+    Media: { MediaFileUri: audioFileUri },
+    OutputBucketName: transcriptionBucket,
     OutputKey: `${sessionId}/transcript.json`,
     LanguageCode: 'en-US' as const,
     Settings: {
@@ -81,10 +101,9 @@ async function processEvent(
   logger.info('Starting Transcribe job:', {
     jobName,
     audioFileUri,
-    outputLocation: `s3://${process.env.TRANSCRIPTION_BUCKET}/${sessionId}/transcript.json`,
+    outputLocation: `s3://${transcriptionBucket}/${sessionId}/transcript.json`,
   });
 
-  // Start the Transcribe job — let errors propagate to handler for classification
   const command = new StartTranscriptionJobCommand(transcribeParams);
   const response = await transcribe.send(command);
 

@@ -9,6 +9,7 @@ export const UploadRecordingAvailableDetailSchema = z.object({
   recordingHlsUrl: z.string()
     .min(1, 'recordingHlsUrl is required')
     .regex(/\.m3u8$/, 'recordingHlsUrl must end with .m3u8'),
+  userId: z.string().min(1).optional(), // Present for hangout per-participant recordings
 });
 
 export type UploadRecordingAvailableDetail = z.infer<typeof UploadRecordingAvailableDetailSchema>;

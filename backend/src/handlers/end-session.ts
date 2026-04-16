@@ -6,7 +6,7 @@
  */
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { getSessionById, updateSessionStatus, updateSpotlight } from '../repositories/session-repository';
+import { getSessionById, updateSessionStatus, updateSpotlight, getHangoutParticipants } from '../repositories/session-repository';
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
@@ -43,27 +43,46 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return resp(200, { message: 'Session already ending/ended', status: session.status });
     }
 
-    // Hangout sessions go directly to ENDED since stage recording is not yet configured
-    // Broadcast sessions go to ENDING and wait for recording-ended event
+    // Hangout sessions transition to ENDING to wait for per-participant recording events.
+    // recording-ended handler will transition ENDING → ENDED once all participant recordings arrive.
     if (session.sessionType === SessionType.HANGOUT) {
-      await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
-      logger.info('Hangout session transitioned to ENDED', { sessionId, userId });
+      const participants = await getHangoutParticipants(tableName, sessionId);
 
-      // Release claimed resources (non-blocking)
-      try {
-        if (session.claimedResources?.stage) {
-          await releasePoolResource(tableName, session.claimedResources.stage);
-          logger.info('Released stage resource', { stage: session.claimedResources.stage });
+      if (participants.length === 0) {
+        // No participants ever joined — go directly to ENDED
+        await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
+        logger.info('Hangout session with 0 participants transitioned directly to ENDED', { sessionId, userId });
+
+        try {
+          await updateSpotlight(tableName, sessionId, null, null);
+        } catch (spotlightErr) {
+          logger.warn('Spotlight cleanup failed', { error: spotlightErr instanceof Error ? spotlightErr.message : String(spotlightErr) });
         }
-        if (session.claimedResources?.chatRoom) {
-          await releasePoolResource(tableName, session.claimedResources.chatRoom);
-          logger.info('Released chat room resource', { chatRoom: session.claimedResources.chatRoom });
+
+        try {
+          if (session.claimedResources?.stage) {
+            await releasePoolResource(tableName, session.claimedResources.stage);
+          }
+          if (session.claimedResources?.chatRoom) {
+            await releasePoolResource(tableName, session.claimedResources.chatRoom);
+          }
+        } catch (releaseErr) {
+          logger.warn('Resource release failed', { error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr) });
         }
-      } catch (releaseErr) {
-        logger.warn('Resource release failed', { error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr) });
+
+        return resp(200, { message: 'Session ended', status: 'ended' });
       }
 
-      return resp(200, { message: 'Session ended', status: 'ended' });
+      await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
+      logger.info('Hangout session transitioning to ENDING', { sessionId, userId });
+
+      try {
+        await updateSpotlight(tableName, sessionId, null, null);
+      } catch (spotlightErr) {
+        logger.warn('Spotlight cleanup failed', { error: spotlightErr instanceof Error ? spotlightErr.message : String(spotlightErr) });
+      }
+
+      return resp(200, { message: 'Session ending', status: 'ending' });
     }
 
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');

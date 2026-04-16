@@ -187,6 +187,8 @@ async function processEvent(
       }
 
       // Publish event to trigger Phase 19 transcription pipeline
+      // For hangout per-participant jobs, include userId from userMetadata
+      const userId = detail.userMetadata?.userId;
       await eventBridgeClient.send(
         new PutEventsCommand({
           Entries: [
@@ -196,13 +198,14 @@ async function processEvent(
               Detail: JSON.stringify({
                 sessionId,
                 recordingHlsUrl,
+                ...(userId && { userId }),
               }),
               EventBusName: eventBusName,
             },
           ],
         })
       );
-      logger.info('Transcription pipeline triggered', { sessionId });
+      logger.info('Transcription pipeline triggered', { sessionId, userId });
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed
       logger.error('MediaConvert job failed', { jobName, jobId });

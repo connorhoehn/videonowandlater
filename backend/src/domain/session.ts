@@ -5,6 +5,7 @@
 
 import type { StreamMetrics } from './metrics';
 import type { StorySegment } from './story';
+import type { AgentStatus, IntentResult } from './context-event';
 
 /**
  * AI-generated chapter representing a logical section of a video
@@ -158,6 +159,16 @@ export interface Session {
   highlightReelStatus?: 'pending' | 'processing' | 'available' | 'failed';
   /** S3 key of selected background music track (in assets bucket) */
   musicTrackKey?: string;
+  // Cross-app integration
+  sourceAppId?: string;
+  sourceAppOrigin?: string;
+  linkedDocumentIds?: string[];
+  // AI Agent
+  agentStatus?: AgentStatus;
+  agentParticipantId?: string;
+  agentTaskArn?: string;
+  intentFlowId?: string;
+  intentResults?: IntentResult[];
 }
 
 /**

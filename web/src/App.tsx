@@ -16,6 +16,7 @@ import { ReplayViewer } from './features/replay/ReplayViewer';
 import { HangoutPage } from './features/hangout/HangoutPage';
 import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
+import { AdminDashboard } from './features/admin/AdminDashboard';
 import { DemoPage } from './demo/DemoPage';
 import { AuthenticatedShell } from './components/AuthenticatedShell';
 import { ToastProvider } from './components/social';
@@ -87,6 +88,7 @@ function App() {
             <Route path="/hangout/:sessionId" element={<HangoutPage />} />
             <Route path="/upload/:sessionId" element={<UploadViewer />} />
             <Route path="/video/:sessionId" element={<VideoPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
           </Route>
         </Routes>
         </ToastProvider>

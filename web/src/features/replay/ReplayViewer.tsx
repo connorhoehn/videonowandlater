@@ -17,6 +17,8 @@ import { useReactionSender } from '../reactions/useReactionSender';
 import { EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
 import { ReactionSummaryPills } from '../activity/ReactionSummaryPills';
 import { SessionAuditLog } from '../activity/SessionAuditLog';
+import { IntentSummaryCard } from './IntentSummaryCard';
+import { ContextSidebar } from './ContextSidebar';
 import { SummaryDisplay } from './SummaryDisplay';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ChapterList } from './ChapterList';
@@ -71,10 +73,13 @@ export function ReplayViewer() {
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
   const [authToken, setAuthToken] = useState('');
   const [currentUserId, setCurrentUserId] = useState('');
-  const [activeTab, setActiveTab] = useState<'chat' | 'transcript'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'transcript' | 'context'>('chat');
   const [viewMode, setViewMode] = useState<'replay' | 'highlights'>(
     searchParams.get('view') === 'highlights' ? 'highlights' : 'replay'
   );
+
+  const config = getConfig();
+  const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
   useEffect(() => {
     fetchToken().then(({ token, username }) => {
@@ -450,6 +455,13 @@ export function ReplayViewer() {
               </Card.Body>
             </Card>
 
+            {/* Intent Summary */}
+            <IntentSummaryCard
+              sessionId={sessionId!}
+              authToken={authToken}
+              apiBaseUrl={apiBaseUrl}
+            />
+
             {/* Details */}
             <Card>
               <Card.Header>
@@ -530,6 +542,16 @@ export function ReplayViewer() {
                       </span>
                     )}
                   </button>
+                  <button
+                    onClick={() => setActiveTab('context')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                      activeTab === 'context'
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    Context
+                  </button>
                 </div>
               </Card.Header>
 
@@ -539,6 +561,14 @@ export function ReplayViewer() {
                 </div>
                 <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'transcript' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'}`}>
                   <TranscriptDisplay sessionId={sessionId!} currentTime={syncTime} authToken={authToken} diarizedTranscriptS3Path={session.diarizedTranscriptS3Path} onSeek={handleSeek} />
+                </div>
+                <div className={`absolute inset-0 transition-all duration-200 ease-out ${activeTab === 'context' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'}`}>
+                  <ContextSidebar
+                    sessionId={sessionId!}
+                    authToken={authToken}
+                    apiBaseUrl={apiBaseUrl}
+                    currentTime={syncTime}
+                  />
                 </div>
               </div>
             </Card>

@@ -8,10 +8,9 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getSessionById } from '../repositories/session-repository';
 import { isAdmin, getAdminUserId } from '../lib/admin-auth';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { getDocumentClient } from '../lib/dynamodb-client';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { createEventEmitter } from '../lib/emit-session-event';
+import { emitSessionEventAtomic } from '../lib/emit-session-event';
 import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'admin-pin-session' } });
 
@@ -58,49 +57,37 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const session = await getSessionById(tableName, sessionId);
     if (!session) return resp(404, { error: 'Session not found' });
 
-    const docClient = getDocumentClient();
+    const now = new Date().toISOString();
 
     if (pinned) {
-      // 5. Pin session
-      const now = new Date().toISOString();
-      await docClient.send(
-        new UpdateCommand({
-          TableName: tableName,
-          Key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
-          UpdateExpression: 'SET isPinned = :true, pinnedAt = :now, pinnedBy = :admin',
-          ExpressionAttributeValues: {
-            ':true': true,
-            ':now': now,
-            ':admin': adminUserId,
-          },
-        }),
-      );
+      // 5. Pin session (atomic state change + event)
+      await emitSessionEventAtomic(tableName, {
+        key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
+        updateExpression: 'SET isPinned = :pinned, pinnedAt = :at, pinnedBy = :by',
+        expressionAttributeValues: { ':pinned': true, ':at': now, ':by': adminUserId },
+      }, {
+        eventId: uuidv4(), sessionId,
+        eventType: SessionEventType.SESSION_PINNED,
+        timestamp: now, actorId: adminUserId, actorType: 'user',
+        details: { pinned: true },
+      });
       logger.info('Session pinned', { sessionId, adminUserId });
     } else {
-      // 6. Unpin session
-      await docClient.send(
-        new UpdateCommand({
-          TableName: tableName,
-          Key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
-          UpdateExpression: 'REMOVE isPinned, pinnedAt, pinnedBy',
-        }),
-      );
+      // 6. Unpin session (atomic state change + event)
+      await emitSessionEventAtomic(tableName, {
+        key: { PK: `SESSION#${sessionId}`, SK: 'METADATA' },
+        updateExpression: 'REMOVE isPinned, pinnedAt, pinnedBy',
+        expressionAttributeValues: {},
+      }, {
+        eventId: uuidv4(), sessionId,
+        eventType: SessionEventType.SESSION_UNPINNED,
+        timestamp: now, actorId: adminUserId, actorType: 'user',
+        details: { pinned: false },
+      });
       logger.info('Session unpinned', { sessionId, adminUserId });
     }
 
-    // 7. Emit session event (non-blocking)
-    try {
-      const emit = createEventEmitter(tableName);
-      await emit(
-        sessionId,
-        pinned ? SessionEventType.SESSION_PINNED : SessionEventType.SESSION_UNPINNED,
-        adminUserId,
-        'user',
-        { pinned },
-      );
-    } catch { /* non-blocking */ }
-
-    // 8. Return success
+    // 7. Return success
     return resp(200, {
       message: pinned ? 'Session pinned' : 'Session unpinned',
       isPinned: pinned,

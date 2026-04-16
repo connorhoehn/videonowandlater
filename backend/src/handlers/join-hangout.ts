@@ -85,7 +85,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           timestamp: new Date().toISOString(), actorId: userId,
           actorType: 'user', details: { participantId: response.participantToken!.participantId!, displayName: userId },
         });
-      } catch { /* non-blocking */ }
+      } catch (err: any) {
+        logger.error('Failed to emit PARTICIPANT_JOINED event', { sessionId, error: err.message });
+      }
     } catch (participantErr: any) {
       logger.error('Failed to persist participant', { error: participantErr.message });
     }

@@ -3,41 +3,26 @@
  * Displays userId, duration, reaction summary pills, AI summary (2-line truncated), and relative timestamp
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Avatar } from '../../components/social';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
 import { PipelineStatusBadge } from './PipelineStatusBadge';
 import { SessionAuditLog } from './SessionAuditLog';
 import { SummaryDisplay } from '../replay/SummaryDisplay';
+import { formatDate, formatHumanDuration, getSessionRoute } from './utils';
+import { LiveBadge } from './LiveBadge';
+import { PinBadge } from './PinBadge';
+import { LiveDuration } from './LiveDuration';
+import { ProcessingOverlay } from './ProcessingOverlay';
+import { LiveActionButton } from './LiveActionButton';
 import type { ActivitySession } from './RecordingSlider';
+
+// Re-export for backwards compatibility
+export { formatHumanDuration } from './utils';
 
 interface BroadcastActivityCardProps {
   session: ActivitySession;
-}
-
-export function formatHumanDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes === 0) return `${seconds} sec`;
-  if (seconds === 0) return `${minutes} min`;
-  return `${minutes} min ${seconds} sec`;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function ThumbnailPlaceholder() {
@@ -69,22 +54,6 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const isLive = session.status === 'live';
   const isReady = isLive || session.recordingStatus === 'available' || !!hlsUrl;
 
-  // Live duration counter
-  const [liveDuration, setLiveDuration] = useState('');
-
-  useEffect(() => {
-    if (!isLive) return;
-    const tick = () => {
-      const elapsed = Date.now() - new Date(session.createdAt).getTime();
-      const mins = Math.floor(elapsed / 60000);
-      const hrs = Math.floor(mins / 60);
-      setLiveDuration(hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`);
-    };
-    tick();
-    const id = setInterval(tick, 30000);
-    return () => clearInterval(id);
-  }, [isLive, session.createdAt]);
-
   const handleMouseEnter = useCallback(() => {
     if (!hlsUrl || !isReady || isLive) return;
     hoverTimeoutRef.current = setTimeout(() => {
@@ -114,10 +83,12 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
     if (videoRef.current) videoRef.current.muted = next;
   }, [isMuted]);
 
+  const route = getSessionRoute({ sessionId: session.sessionId, sessionType: session.sessionType, status: session.status });
+
   return (
     <Card
       className={`group transition-all duration-300 ${isReady ? 'hover:shadow-lg cursor-pointer' : 'cursor-default'} ${isLive ? 'ring-2 ring-red-500/50' : ''}`}
-      onClick={isReady ? () => navigate(isLive ? `/viewer/${session.sessionId}` : `/replay/${session.sessionId}`) : undefined}
+      onClick={isReady ? () => navigate(route) : undefined}
     >
       {/* Thumbnail with hover-to-play video preview */}
       <div
@@ -125,19 +96,8 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {isLive && (
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg shadow-red-600/30">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            LIVE
-          </div>
-        )}
-        {session.isPinned && (
-          <div className="absolute top-3 right-3 z-10 bg-amber-500/90 text-white p-1.5 rounded-full">
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.8L9 4.323V3a1 1 0 011-1z" />
-            </svg>
-          </div>
-        )}
+        {isLive && <LiveBadge variant="broadcast" />}
+        {session.isPinned && <PinBadge />}
         {showThumbnail ? (
           <img
             src={thumbnailSrc}
@@ -164,9 +124,9 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         )}
 
         {/* Live duration badge */}
-        {isLive && liveDuration && !isHovering && (
+        {isLive && !isHovering && (
           <span className="absolute bottom-2 left-3 px-1.5 py-0.5 text-xs font-medium text-white bg-black/70 rounded">
-            {liveDuration}
+            <LiveDuration createdAt={session.createdAt} />
           </span>
         )}
 
@@ -198,14 +158,10 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
           </span>
         )}
 
-        {!isReady && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
-            <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            <span className="text-white text-sm font-medium">Processing...</span>
-            <span className="text-white/60 text-xs">Recording will be available soon</span>
+        <ProcessingOverlay visible={!isReady && !isLive} message="Processing..." />
+        {!isReady && !isLive && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-20 pointer-events-none">
+            <span className="text-white/60 text-xs mt-12">Recording will be available soon</span>
           </div>
         )}
       </div>
@@ -278,12 +234,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         {/* Watch Live CTA */}
         {isLive && (
           <div className="ml-[42px] mt-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/viewer/${session.sessionId}`); }}
-              className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              Watch Live
-            </button>
+            <LiveActionButton sessionId={session.sessionId} sessionType={session.sessionType} />
           </div>
         )}
 

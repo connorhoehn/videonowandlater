@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-
 interface ImageGridProps {
   images: { src: string; alt?: string }[];
   maxVisible?: number;

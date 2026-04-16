@@ -27,6 +27,8 @@ new ApiStack(app, 'VNL-Api', {
   recordingsBucket: storageStack.recordingsBucket,
   mediaConvertTopic: sessionStack.mediaConvertTopic,
   cloudfrontDomainName: storageStack.cloudfrontDomainName,
+  webhookQueueUrl: sessionStack.webhookDeliveryQueue.queueUrl,
+  webhookQueueArn: sessionStack.webhookDeliveryQueue.queueArn,
 });
 new AgentStack(app, 'VNL-Agent', {
   env,

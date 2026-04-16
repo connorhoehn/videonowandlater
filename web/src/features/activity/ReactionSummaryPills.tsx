@@ -19,10 +19,10 @@ export function ReactionSummaryPills({ reactionSummary }: ReactionSummaryPillsPr
       {Object.entries(reactionSummary).map(([emojiType, count]) => (
         <div
           key={emojiType}
-          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 border border-gray-200 rounded-full transition-colors hover:bg-gray-100"
+          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
         >
           <span className="text-sm">{EMOJI_MAP[emojiType as EmojiType]}</span>
-          <span className="text-xs font-semibold text-gray-600 tabular-nums">{count}</span>
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 tabular-nums">{count}</span>
         </div>
       ))}
     </div>

@@ -14,6 +14,9 @@ import { getIVSRealTimeClient } from '../lib/ivs-clients';
 import { getSessionById, updateSessionStatus, addHangoutParticipant } from '../repositories/session-repository';
 import { SessionType, SessionStatus } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'join-hangout' } });
 
@@ -76,6 +79,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         userId,           // displayName = cognito:username (no separate display name exists)
         response.participantToken!.participantId!,
       );
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.PARTICIPANT_JOINED,
+          timestamp: new Date().toISOString(), actorId: userId,
+          actorType: 'user', details: { participantId: response.participantToken!.participantId!, displayName: userId },
+        });
+      } catch { /* non-blocking */ }
     } catch (participantErr: any) {
       logger.error('Failed to persist participant', { error: participantErr.message });
     }

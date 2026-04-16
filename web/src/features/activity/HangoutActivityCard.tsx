@@ -86,7 +86,7 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
           status={session.aiSummaryStatus}
           visualAnalysis={session.visualAnalysis}
           truncate={true}
-          className="text-gray-700"
+          className="text-gray-700 dark:text-gray-300"
         />
 
         {/* Audit Log - Processing Timeline */}

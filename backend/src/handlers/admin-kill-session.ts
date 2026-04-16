@@ -16,6 +16,8 @@ import { IvschatClient, SendEventCommand } from '@aws-sdk/client-ivschat';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'admin-kill-session' } });
 
@@ -127,6 +129,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // 8. Transition to ENDING
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
     logger.info('Admin killed session — transitioned to ENDING', { sessionId, adminUserId, reason });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.SESSION_ENDING,
+        timestamp: new Date().toISOString(), actorId: adminUserId,
+        actorType: 'user', details: { reason, adminAction: true, killedBy: adminUserId },
+      });
+    } catch { /* non-blocking */ }
 
     // 9. Write audit record
     const createdAt = new Date().toISOString();

@@ -3,7 +3,6 @@
  * Variants: text, card, player (video player placeholder)
  */
 
-import React from 'react';
 
 type SkeletonVariant = 'text' | 'card' | 'player';
 

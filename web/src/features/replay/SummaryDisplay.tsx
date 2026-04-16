@@ -28,14 +28,14 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     return (
       <div className={`flex items-center gap-2 animate-fade-in ${className}`}>
         <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-blue-600 flex-shrink-0" />
-        <span className="text-gray-500 text-sm">Generating summary...</span>
+        <span className="text-gray-500 dark:text-gray-400 text-sm">Generating summary...</span>
       </div>
     );
   }
 
   if (displayStatus === 'available' && summary) {
     return (
-      <div className={`bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl p-3.5 transition-all duration-300 ease-out animate-fade-in ${className}`}>
+      <div className={`bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-gray-800 dark:to-gray-800/50 border border-blue-100 dark:border-gray-700 rounded-xl p-3.5 transition-all duration-300 ease-out animate-fade-in ${className}`}>
         <p className={`text-sm leading-relaxed ${truncate ? 'line-clamp-2' : ''}`}>
           {summary}
         </p>
@@ -57,11 +57,11 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
   if (displayStatus === 'failed') {
     return (
-      <div className={`flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl p-3.5 animate-fade-in ${className}`}>
+      <div className={`flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-3.5 animate-fade-in ${className}`}>
         <svg className="h-4 w-4 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         </svg>
-        <span className="text-gray-500 text-sm">Summary unavailable</span>
+        <span className="text-gray-500 dark:text-gray-400 text-sm">Summary unavailable</span>
       </div>
     );
   }

@@ -29,4 +29,10 @@ aws cognito-idp admin-set-user-password \
   --password "$PASSWORD" \
   --permanent
 
+# Add user to admin group
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$USERNAME" \
+  --group-name admin
+
 echo "User '$USERNAME' created and confirmed."

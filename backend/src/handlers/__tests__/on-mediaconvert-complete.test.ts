@@ -44,6 +44,9 @@ jest.mock('@aws-lambda-powertools/tracer', () => {
 
 jest.mock('../../repositories/session-repository');
 jest.mock('@aws-sdk/client-eventbridge');
+jest.mock('../../lib/emit-session-event', () => ({
+  emitSessionEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 const mockGetSessionById = sessionRepository.getSessionById as jest.MockedFunction<typeof sessionRepository.getSessionById>;
 const mockUpdateSessionRecording = sessionRepository.updateSessionRecording as jest.MockedFunction<typeof sessionRepository.updateSessionRecording>;

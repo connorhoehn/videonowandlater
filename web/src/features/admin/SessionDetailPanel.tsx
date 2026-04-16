@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Badge, Avatar, ConfirmModal } from '../../components/social';
 import { OffcanvasSidebar } from '../../components/social/OffcanvasSidebar';
+import { SessionEventLog } from './SessionEventLog';
+import type { SessionEvent } from './SessionEventLog';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -108,6 +110,7 @@ interface SessionDetailData {
   contextEvents: ContextEventRecord[];
   intentFlow: IntentFlowRecord | null;
   intentResults: IntentResultRecord[];
+  sessionEvents: SessionEvent[];
 }
 
 interface SessionDetailPanelProps {
@@ -644,7 +647,18 @@ export function SessionDetailPanel({
               </Card.Body>
             </Card>
 
-            {/* 7. Actions */}
+            {/* 7. Event Log */}
+            <Card className="border border-gray-200 dark:border-gray-700">
+              <Card.Header className="dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Event Log</h3>
+                <span className="text-xs text-gray-400">{(data?.sessionEvents ?? []).length}</span>
+              </Card.Header>
+              <Card.Body className="px-0 py-0">
+                <SessionEventLog events={data?.sessionEvents ?? []} />
+              </Card.Body>
+            </Card>
+
+            {/* 8. Actions */}
             {isLiveOrEnding && (
               <div className="pt-2">
                 <button

@@ -9,6 +9,9 @@ import { updateAgentStatus, writeAgentAuditRecord } from '../repositories/agent-
 import { getIntentFlow } from '../repositories/intent-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'agent-join-session' } });
 
@@ -65,6 +68,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     });
 
     logger.info('Agent join requested', { sessionId, userId, intentFlowId });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.AGENT_JOINED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: { intentFlowId: intentFlowId ?? null },
+      });
+    } catch { /* non-blocking */ }
+
     return resp(202, { message: 'Agent joining', sessionId });
   } catch (err: any) {
     logger.error('Error requesting agent join', { error: err instanceof Error ? err.message : String(err) });

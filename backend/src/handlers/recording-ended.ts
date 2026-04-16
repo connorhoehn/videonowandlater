@@ -30,6 +30,9 @@ import type { Session } from '../domain/session';
 import { calculateIvsRealtimeCost, calculateIvsLowLatencyCost, calculateMediaConvertCost, CostService, PRICING_RATES } from '../domain/cost';
 import { writeCostLineItem, upsertCostSummary } from '../repositories/cost-repository';
 import { emitCostMetric } from '../lib/cost-metrics';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 export const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 
@@ -307,6 +310,14 @@ async function processEvent(
       logger.info('All participant recordings received, processing hangout', { sessionId });
       const availableRecordings = allParticipants.filter(p => p.recordingStatus === 'available');
 
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.RECORDING_ENDED,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: { recordingStatus: finalStatus, participantCount: totalParticipants },
+        });
+      } catch { /* non-blocking */ }
+
       // Update participant count
       await updateParticipantCount(tableName, sessionId, totalParticipants);
 
@@ -439,6 +450,14 @@ async function processEvent(
     }
 
     // ─── BROADCAST: existing single-recording flow ──────────────────────
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.RECORDING_ENDED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: { recordingStatus: finalStatus },
+      });
+    } catch { /* non-blocking */ }
+
     // Update session: ENDING -> ENDED
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
     logger.info('Session transitioned to ENDED:', { sessionId });
@@ -559,6 +578,14 @@ async function processEvent(
         }));
 
         logger.info('MediaConvert job submitted:', { jobId, sessionId });
+
+        try {
+          await emitSessionEvent(tableName, {
+            eventId: uuidv4(), sessionId, eventType: SessionEventType.MEDIACONVERT_SUBMITTED,
+            timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+            actorType: 'system', details: { jobId },
+          });
+        } catch { /* non-blocking */ }
 
         // Record MediaConvert cost (non-blocking)
         try {

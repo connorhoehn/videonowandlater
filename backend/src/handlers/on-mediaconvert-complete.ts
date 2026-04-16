@@ -13,6 +13,9 @@ import type { Subsegment } from 'aws-xray-sdk-core';
 import { getSessionById, updateSessionRecording, updateHighlightReel } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
 import { MediaConvertCompleteDetailSchema, type MediaConvertCompleteDetail } from './schemas/on-mediaconvert-complete.schema';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const tracer = new Tracer({ serviceName: 'vnl-pipeline' });
 const logger = new Logger({
@@ -118,6 +121,14 @@ async function processEvent(
       // Do NOT overwrite recordingHlsUrl — recording-ended already set the CloudFront URL
       logger.info('MediaConvert complete, updating convertStatus', { sessionId });
 
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.MEDIACONVERT_COMPLETED,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: { jobId, status },
+        });
+      } catch { /* non-blocking */ }
+
       await updateSessionRecording(tableName, sessionId, {
         convertStatus: 'available',
       });
@@ -209,6 +220,14 @@ async function processEvent(
     } else if (status === 'ERROR' || status === 'CANCELED') {
       // MediaConvert job failed
       logger.error('MediaConvert job failed', { jobName, jobId });
+
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.MEDIACONVERT_FAILED,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: { jobId, status },
+        });
+      } catch { /* non-blocking */ }
 
       // Mark session as failed
       await updateSessionRecording(tableName, sessionId, {

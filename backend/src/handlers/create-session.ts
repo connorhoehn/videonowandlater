@@ -6,6 +6,9 @@ import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResul
 import { SessionType } from '../domain/session';
 import { createNewSession } from '../services/session-service';
 import { createStorySession } from '../repositories/story-repository';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -51,6 +54,15 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
   // STORY sessions don't need IVS resources — use dedicated story path
   if (body.sessionType === SessionType.STORY) {
     const session = await createStorySession(tableName, userId);
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId: session.sessionId, eventType: SessionEventType.SESSION_CREATED,
+        timestamp: new Date().toISOString(), actorId: userId,
+        actorType: 'user', details: { sessionType: body.sessionType },
+      });
+    } catch { /* non-blocking */ }
+
     return {
       statusCode: 201,
       headers: {
@@ -77,6 +89,14 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       body: JSON.stringify({ error: result.error }),
     };
   }
+
+  try {
+    await emitSessionEvent(tableName, {
+      eventId: uuidv4(), sessionId: result.sessionId, eventType: SessionEventType.SESSION_CREATED,
+      timestamp: new Date().toISOString(), actorId: userId,
+      actorType: 'user', details: { sessionType: body.sessionType },
+    });
+  } catch { /* non-blocking */ }
 
   return {
     statusCode: 201,

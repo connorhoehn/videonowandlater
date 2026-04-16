@@ -8,6 +8,9 @@ import type { SQSEvent, SQSBatchResponse, EventBridgeEvent } from 'aws-lambda';
 import { TranscribeClient, StartTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { UploadRecordingAvailableDetailSchema, type UploadRecordingAvailableDetail } from './schemas/start-transcribe.schema';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const transcribe = new TranscribeClient({});
 
@@ -76,6 +79,15 @@ async function processEvent(
       status: response.TranscriptionJob?.TranscriptionJobStatus,
       userId,
     });
+
+    try {
+      await emitSessionEvent(process.env.TABLE_NAME!, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.TRANSCRIBE_SUBMITTED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: { jobName },
+      });
+    } catch { /* non-blocking */ }
+
     logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
     return;
   }
@@ -111,6 +123,15 @@ async function processEvent(
     jobName: response.TranscriptionJob?.TranscriptionJobName,
     status: response.TranscriptionJob?.TranscriptionJobStatus,
   });
+
+  try {
+    await emitSessionEvent(process.env.TABLE_NAME!, {
+      eventId: uuidv4(), sessionId, eventType: SessionEventType.TRANSCRIBE_SUBMITTED,
+      timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+      actorType: 'system', details: { jobName },
+    });
+  } catch { /* non-blocking */ }
+
   logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
 }
 

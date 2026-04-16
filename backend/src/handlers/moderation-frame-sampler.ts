@@ -13,6 +13,8 @@ import { DEFAULT_MODERATION_CONFIG, getRandomSamplingInterval } from '../domain/
 import { SessionType } from '../domain/session';
 import { v4 as uuidv4 } from 'uuid';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'moderation-frame-sampler' } });
 
@@ -160,6 +162,17 @@ export async function handler(): Promise<void> {
       );
 
       logger.info('Wrote moderation record', { sessionId, actionType, reason, maxConfidence });
+
+      try {
+        const eventType = actionType === 'ML_AUTO_KILL'
+          ? SessionEventType.MODERATION_AUTO_KILLED
+          : SessionEventType.MODERATION_FLAGGED;
+        await emitSessionEvent(tableName!, {
+          eventId: uuidv4(), sessionId, eventType,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: { labels, maxConfidence },
+        });
+      } catch { /* non-blocking */ }
 
       // 3f. If auto-kill threshold exceeded, stop the stream
       if (actionType === 'ML_AUTO_KILL') {

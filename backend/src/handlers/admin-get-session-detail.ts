@@ -9,6 +9,7 @@ import { getSessionById, getHangoutParticipants } from '../repositories/session-
 import { getCostSummary, getCostLineItems } from '../repositories/cost-repository';
 import { getContextEvents } from '../repositories/context-repository';
 import { getIntentFlow, getIntentResults } from '../repositories/intent-repository';
+import { getSessionEvents } from '../repositories/event-repository';
 import { isAdmin } from '../lib/admin-auth';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
@@ -48,11 +49,12 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       getCostLineItems(tableName, sessionId),
     ]);
 
-    // 5. Get participants + context events + intent data
-    const [participants, contextEvents, intentResults] = await Promise.all([
+    // 5. Get participants + context events + intent data + session events
+    const [participants, contextEvents, intentResults, sessionEvents] = await Promise.all([
       getHangoutParticipants(tableName, sessionId),
       getContextEvents(tableName, sessionId),
       getIntentResults(tableName, sessionId),
+      getSessionEvents(tableName, sessionId),
     ]);
 
     const intentFlow = session.intentFlowId
@@ -100,6 +102,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       contextEvents,
       intentFlow,
       intentResults,
+      sessionEvents,
     });
   } catch (err: any) {
     logger.error('Error getting session detail', { error: err instanceof Error ? err.message : String(err) });

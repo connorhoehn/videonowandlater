@@ -41,6 +41,7 @@ export class SessionStack extends Stack {
   public readonly transcriptionBucket: s3.IBucket;
   public readonly mediaConvertTopic!: sns.Topic;
   public readonly cloudfrontDomainName: string;
+  public readonly webhookDeliveryQueue: sqs.Queue;
 
   constructor(scope: Construct, id: string, props: SessionStackProps) {
     super(scope, id, props);
@@ -147,6 +148,34 @@ export class SessionStack extends Stack {
     new CfnOutput(this, 'SessionTableName', {
       value: this.table.tableName,
     });
+
+    // ============================================================
+    // Webhook Delivery Infrastructure
+    // ============================================================
+    const webhookDeliveryDlq = new sqs.Queue(this, 'WebhookDeliveryDlq', {
+      queueName: 'vnl-webhook-delivery-dlq',
+      retentionPeriod: Duration.days(14),
+    });
+    const webhookDeliveryQueue = new sqs.Queue(this, 'WebhookDeliveryQueue', {
+      queueName: 'vnl-webhook-delivery',
+      visibilityTimeout: Duration.seconds(60),
+      deadLetterQueue: { queue: webhookDeliveryDlq, maxReceiveCount: 5 },
+    });
+
+    // Webhook delivery Lambda
+    const deliverWebhookFn = new nodejs.NodejsFunction(this, 'DeliverWebhook', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/deliver-webhook.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    this.table.grantReadData(deliverWebhookFn);
+    deliverWebhookFn.addEventSource(new SqsEventSource(webhookDeliveryQueue, { batchSize: 10 }));
+    this.webhookDeliveryQueue = webhookDeliveryQueue;
 
     // ============================================================
     // Idempotency Table (Phase 38: Required for Powertools migration)
@@ -1166,6 +1195,38 @@ export class SessionStack extends Stack {
     }));
 
     // Lifecycle rules are in StorageStack
+
+    // ============================================================
+    // Webhook + EventBridge env vars & permissions for pipeline Lambdas
+    // ============================================================
+    const webhookPipelineFns = [
+      recordingEndedFn,
+      onMediaConvertCompleteFunction,
+      startTranscribeFn,
+      transcribeCompletedFn,
+      storeSummaryFn,
+      streamStartedFn,
+      streamEndedFn,
+      recordingStartedFn,
+      moderationFrameSamplerFn,
+    ];
+
+    const webhookEventPolicy = new iam.PolicyStatement({
+      actions: ['sqs:SendMessage'],
+      resources: [webhookDeliveryQueue.queueArn],
+    });
+
+    const eventBridgePutPolicy = new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    });
+
+    for (const fn of webhookPipelineFns) {
+      fn.addEnvironment('WEBHOOK_QUEUE_URL', webhookDeliveryQueue.queueUrl);
+      fn.addEnvironment('EVENT_BUS_NAME', 'default');
+      fn.addToRolePolicy(webhookEventPolicy);
+      fn.addToRolePolicy(eventBridgePutPolicy);
+    }
 
     // Export environment variables for API handlers
     new CfnOutput(this, 'MediaConvertTopicArn', {

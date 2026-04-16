@@ -3,7 +3,6 @@
  * Displayed at top-right for both broadcasters (with remove button) and viewers.
  */
 
-import React from 'react';
 import { Link } from 'react-router-dom';
 import type { FeaturedCreator } from './useSpotlight';
 

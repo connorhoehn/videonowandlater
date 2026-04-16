@@ -186,13 +186,13 @@ export function SessionAuditLog({ session, compact = false }: SessionAuditLogPro
   const displayEvents = compact ? events.slice(-1) : events;
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-100">
+    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
       <div className="space-y-2">
         {displayEvents.map((event, index) => (
           <div key={index} className="flex items-start gap-2 text-xs">
             {getStatusIcon(event.status)}
             <div className="flex-1 flex items-center justify-between">
-              <span className="text-gray-700">
+              <span className="text-gray-700 dark:text-gray-300">
                 {event.title}
               </span>
               {event.timestamp && !compact && (

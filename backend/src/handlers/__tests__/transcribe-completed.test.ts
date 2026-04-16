@@ -46,6 +46,9 @@ jest.mock('@aws-lambda-powertools/tracer', () => {
 jest.mock('@aws-sdk/client-s3');
 jest.mock('@aws-sdk/client-eventbridge');
 jest.mock('../../repositories/session-repository');
+jest.mock('../../lib/emit-session-event', () => ({
+  emitSessionEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 const mockS3Client = S3Client as jest.Mocked<typeof S3Client>;
 const mockEventBridgeClient = EventBridgeClient as jest.Mocked<typeof EventBridgeClient>;

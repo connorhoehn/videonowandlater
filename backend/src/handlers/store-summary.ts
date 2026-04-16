@@ -19,6 +19,9 @@ import { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './schem
 import { calculateBedrockCost, CostService, PRICING_RATES } from '../domain/cost';
 import { writeCostLineItem, upsertCostSummary } from '../repositories/cost-repository';
 import { emitCostMetric } from '../lib/cost-metrics';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -64,6 +67,14 @@ async function processEvent(
     logger.warn('Failed to check session state (non-blocking, continue):', { errorMessage: error.message });
     // If we can't verify, proceed — better to re-invoke Bedrock than silently skip with stale data
   }
+
+  try {
+    await emitSessionEvent(tableName, {
+      eventId: uuidv4(), sessionId, eventType: SessionEventType.AI_SUMMARY_STARTED,
+      timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+      actorType: 'system', details: {},
+    });
+  } catch { /* non-blocking */ }
 
   try {
     // Parse S3 URI and fetch transcript
@@ -206,6 +217,15 @@ async function processEvent(
         aiSummaryStatus: 'available',
       });
       logger.info('AI summary stored:', { sessionId, summaryLength: summary.length });
+
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.AI_SUMMARY_COMPLETED,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: {},
+        });
+      } catch { /* non-blocking */ }
+
       logger.info('Pipeline stage completed', { status: 'success', durationMs: Date.now() - startMs });
     } catch (storeError: any) {
       logger.error('Failed to store AI summary (non-blocking):', { errorMessage: storeError.message });
@@ -458,6 +478,14 @@ Be specific and descriptive but brief.`,
   } catch (error: any) {
     logger.error('Bedrock summarization failed:', { errorMessage: error.message });
     logger.error('Pipeline stage failed', { status: 'error', durationMs: Date.now() - startMs, errorMessage: error instanceof Error ? error.message : String(error) });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.AI_SUMMARY_FAILED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: {},
+      });
+    } catch { /* non-blocking */ }
 
     // Mark summary as failed but preserve the transcript (CRITICAL)
     try {

@@ -7,6 +7,9 @@ import type { EventBridgeEvent } from 'aws-lambda';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { updateSessionStatus, findSessionByChannelArn } from '../repositories/session-repository';
 import { SessionStatus } from '../domain/session';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({
   serviceName: 'vnl-events',
@@ -52,6 +55,14 @@ export const handler = async (
   try {
     await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
     logger.info('Session transitioned to LIVE');
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.SESSION_STARTED,
+        timestamp: new Date().toISOString(), actorId: 'IVS',
+        actorType: 'ivs', details: { channelArn },
+      });
+    } catch { /* non-blocking */ }
   } catch (error: any) {
     // Gracefully handle concurrent transitions (e.g., session already LIVE)
     if (error.name === 'ConditionalCheckFailedException' || error.message?.includes('Invalid transition')) {

@@ -25,6 +25,9 @@ import { TranscribeJobDetailSchema, type TranscribeJobDetail } from './schemas/t
 import { calculateTranscribeCost, CostService, PRICING_RATES } from '../domain/cost';
 import { writeCostLineItem, upsertCostSummary } from '../repositories/cost-repository';
 import { emitCostMetric } from '../lib/cost-metrics';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({
   serviceName: 'vnl-pipeline',
@@ -209,6 +212,15 @@ async function processEvent(
     } catch (error: any) {
       logger.error('Failed to update transcript status to failed:', { errorMessage: error.message });
     }
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.TRANSCRIBE_FAILED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: { jobName },
+      });
+    } catch { /* non-blocking */ }
+
     return;
   }
 
@@ -354,6 +366,15 @@ async function processEvent(
         }],
       }));
       logger.info('Transcript Stored event emitted for hangout', { sessionId });
+
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.TRANSCRIBE_COMPLETED,
+          timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+          actorType: 'system', details: { jobName },
+        });
+      } catch { /* non-blocking */ }
+
       logger.info('Pipeline stage completed (hangout merge)', { status: 'success', durationMs: Date.now() - startMs });
     } catch (error: any) {
       logger.error('Failed to process per-participant transcript:', { errorMessage: error.message, sessionId, participantUserId });
@@ -446,6 +467,14 @@ async function processEvent(
     await updateTranscriptStatus(tableName, sessionId, 'available', s3Uri, plainText);
 
     logger.info('Transcript stored for session:', { sessionId, s3Uri });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.TRANSCRIBE_COMPLETED,
+        timestamp: new Date().toISOString(), actorId: 'SYSTEM',
+        actorType: 'system', details: { jobName },
+      });
+    } catch { /* non-blocking */ }
 
     // Record Transcribe cost for broadcast (non-blocking)
     try {

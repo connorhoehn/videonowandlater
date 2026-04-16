@@ -10,6 +10,9 @@ import { getSessionById, updateSessionStatus, updateSpotlight, getHangoutPartici
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'end-session' } });
 
@@ -77,6 +80,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       logger.info('Hangout session transitioning to ENDING', { sessionId, userId });
 
       try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.SESSION_ENDING,
+          timestamp: new Date().toISOString(), actorId: userId,
+          actorType: 'user', details: { sessionType: session.sessionType },
+        });
+      } catch { /* non-blocking */ }
+
+      try {
         await updateSpotlight(tableName, sessionId, null, null);
       } catch (spotlightErr) {
         logger.warn('Spotlight cleanup failed', { error: spotlightErr instanceof Error ? spotlightErr.message : String(spotlightErr) });
@@ -87,6 +98,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
     logger.info('Session transitioning to ENDING', { sessionId, userId });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.SESSION_ENDING,
+        timestamp: new Date().toISOString(), actorId: userId,
+        actorType: 'user', details: { sessionType: session.sessionType },
+      });
+    } catch { /* non-blocking */ }
 
     // Clear any spotlight on this session (non-blocking)
     try {

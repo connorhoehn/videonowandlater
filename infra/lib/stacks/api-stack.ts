@@ -17,6 +17,8 @@ export interface ApiStackProps extends StackProps {
   recordingsBucket?: s3.IBucket;
   mediaConvertTopic?: sns.ITopic;
   cloudfrontDomainName?: string;
+  webhookQueueUrl?: string;
+  webhookQueueArn?: string;
 }
 
 export class ApiStack extends Stack {
@@ -1106,6 +1108,92 @@ export class ApiStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+
+    // ============================================================
+    // Session Events + Webhook API Routes
+    // ============================================================
+
+    // POST /sessions/{sessionId}/events — emit client event
+    const eventsResource = sessionIdResource.addResource('events');
+    const emitClientEventHandler = new NodejsFunction(this, 'EmitClientEventHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/emit-client-event.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        ...(props.webhookQueueUrl && { WEBHOOK_QUEUE_URL: props.webhookQueueUrl }),
+        EVENT_BUS_NAME: 'default',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(emitClientEventHandler);
+    if (props.webhookQueueArn) {
+      emitClientEventHandler.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [props.webhookQueueArn],
+      }));
+    }
+    emitClientEventHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    }));
+    eventsResource.addMethod('POST', new apigateway.LambdaIntegration(emitClientEventHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // PATCH /sessions/{sessionId}/webhook — configure webhook
+    const webhookResource = sessionIdResource.addResource('webhook');
+    const configureWebhookHandler = new NodejsFunction(this, 'ConfigureWebhookHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/configure-webhook.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        ...(props.webhookQueueUrl && { WEBHOOK_QUEUE_URL: props.webhookQueueUrl }),
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(configureWebhookHandler);
+    if (props.webhookQueueArn) {
+      configureWebhookHandler.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [props.webhookQueueArn],
+      }));
+    }
+    webhookResource.addMethod('PATCH', new apigateway.LambdaIntegration(configureWebhookHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // Add webhook + EventBridge env vars to API Lambdas
+    // ============================================================
+    const apiLambdasForWebhook = [
+      createSessionHandler,
+      endSessionHandler,
+      joinHangoutHandler,
+      adminKillSessionFn,
+      pushContextEventHandler,
+      agentJoinSessionHandler,
+    ];
+
+    for (const fn of apiLambdasForWebhook) {
+      if (props.webhookQueueUrl) {
+        fn.addEnvironment('WEBHOOK_QUEUE_URL', props.webhookQueueUrl);
+      }
+      fn.addEnvironment('EVENT_BUS_NAME', 'default');
+      if (props.webhookQueueArn) {
+        fn.addToRolePolicy(new iam.PolicyStatement({
+          actions: ['sqs:SendMessage'],
+          resources: [props.webhookQueueArn],
+        }));
+      }
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+      }));
+    }
 
     // POST /admin/moderation/{sessionId}/review — review moderation flag
     const adminModeration = admin.addResource('moderation');

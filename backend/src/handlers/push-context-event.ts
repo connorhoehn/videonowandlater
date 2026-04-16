@@ -8,6 +8,9 @@ import { getSessionById } from '../repositories/session-repository';
 import { addContextEvent } from '../repositories/context-repository';
 import { createContextId } from '../domain/context-event';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { emitSessionEvent } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
+import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'push-context-event' } });
 
@@ -55,6 +58,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     });
 
     logger.info('Context event pushed', { sessionId, contextId, eventType });
+
+    try {
+      await emitSessionEvent(tableName, {
+        eventId: uuidv4(), sessionId, eventType: SessionEventType.CONTEXT_EVENT_RECEIVED,
+        timestamp: new Date().toISOString(), actorId: userId,
+        actorType: 'user', details: { contextId, eventType: body.eventType },
+      });
+    } catch { /* non-blocking */ }
+
     return resp(201, { contextId });
   } catch (err: any) {
     logger.error('Error pushing context event', { error: err instanceof Error ? err.message : String(err) });

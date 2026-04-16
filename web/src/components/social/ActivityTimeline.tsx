@@ -33,7 +33,7 @@ export function ActivityTimeline({ events, className = '' }: ActivityTimelinePro
               {event.icon ? (
                 event.icon
               ) : event.avatar || event.name ? (
-                <Avatar src={event.avatar} name={event.name ?? ''} size="sm" />
+                <Avatar src={event.avatar} alt={event.name ?? ''} name={event.name ?? ''} size="sm" />
               ) : (
                 <div className="w-2 h-2 rounded-full bg-gray-400" />
               )}

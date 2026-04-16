@@ -35,7 +35,7 @@ interface UploadSession {
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   sourceFileName?: string;
   sourceFileSize?: number;
-  uploadStatus?: string;
+  uploadStatus?: 'pending' | 'uploading' | 'processing' | 'available' | 'failed';
   diarizedTranscriptS3Path?: string;
   reactionSummary?: Record<string, number>;
   chapters?: Chapter[];

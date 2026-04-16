@@ -169,6 +169,9 @@ export interface Session {
   agentTaskArn?: string;
   intentFlowId?: string;
   intentResults?: IntentResult[];
+  // Webhook delivery configuration
+  webhookUrl?: string;
+  webhookSecret?: string;
 }
 
 /**

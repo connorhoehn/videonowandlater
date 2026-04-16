@@ -30,7 +30,18 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
 
   try {
     const sessions = await getLivePublicSessions(tableName, userId);
-    return resp(200, { sessions });
+    // Return a curated shape for the Live Now feed
+    const liveSessions = sessions.map(s => ({
+      sessionId: s.sessionId,
+      userId: s.userId,
+      sessionType: s.sessionType,
+      createdAt: s.createdAt,
+      participantCount: s.participantCount ?? 0,
+      messageCount: s.messageCount ?? 0,
+      thumbnailUrl: s.thumbnailUrl ?? null,
+      isPrivate: s.isPrivate ?? false,
+    }));
+    return resp(200, { sessions: liveSessions });
   } catch (err: any) {
     logger.error('Error listing live sessions', { error: err instanceof Error ? err.message : String(err) });
     return resp(500, { error: err.message });

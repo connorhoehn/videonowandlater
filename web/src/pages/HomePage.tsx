@@ -11,6 +11,7 @@ import { StoriesSlider, StoryViewer, StoryCreator, Skeleton } from '../component
 import { useActivityData } from '../hooks/useActivityData';
 import { useStories } from '../hooks/useStories';
 import { useStoryViewState } from '../hooks/useStoryViewState';
+import { LiveNowSection } from '../features/activity/LiveNowSection';
 
 function formatRelativeTime(isoDate?: string): string {
   if (!isoDate) return '';
@@ -116,6 +117,10 @@ export function HomePage() {
             { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
           ]}
         />
+
+        {authToken && (
+          <LiveNowSection authToken={authToken} apiBaseUrl={getConfig()?.apiUrl || ''} />
+        )}
 
         {loadingActivity ? (
           <>

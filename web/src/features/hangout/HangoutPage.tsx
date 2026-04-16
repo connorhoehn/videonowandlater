@@ -42,6 +42,57 @@ export function HangoutPage() {
     });
   }, []);
 
+  // Lobby state — user previews camera/mic before joining
+  const [isInLobby, setIsInLobby] = useState(true);
+  const [lobbyMuted, setLobbyMuted] = useState(false);
+  const [lobbyCameraOn, setLobbyCameraOn] = useState(true);
+  const lobbyVideoRef = React.useRef<HTMLVideoElement>(null);
+  const lobbyStreamRef = React.useRef<MediaStream | null>(null);
+
+  // Start camera preview in lobby
+  React.useEffect(() => {
+    if (!isInLobby) return;
+    let stream: MediaStream | null = null;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        lobbyStreamRef.current = stream;
+        if (lobbyVideoRef.current) {
+          lobbyVideoRef.current.srcObject = stream;
+        }
+      } catch {
+        // camera access denied — user can still join
+      }
+    })();
+    return () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      lobbyStreamRef.current = null;
+    };
+  }, [isInLobby]);
+
+  // Toggle lobby mic
+  React.useEffect(() => {
+    const stream = lobbyStreamRef.current;
+    if (!stream) return;
+    stream.getAudioTracks().forEach(t => { t.enabled = !lobbyMuted; });
+  }, [lobbyMuted]);
+
+  // Toggle lobby camera
+  React.useEffect(() => {
+    const stream = lobbyStreamRef.current;
+    if (!stream) return;
+    stream.getVideoTracks().forEach(t => { t.enabled = lobbyCameraOn; });
+  }, [lobbyCameraOn]);
+
+  const handleJoinFromLobby = () => {
+    // Stop lobby preview stream before handing off to useHangout
+    if (lobbyStreamRef.current) {
+      lobbyStreamRef.current.getTracks().forEach(t => t.stop());
+      lobbyStreamRef.current = null;
+    }
+    setIsInLobby(false);
+  };
+
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -72,7 +123,7 @@ export function HangoutPage() {
   } = useHangout({
     sessionId: sessionId || '',
     apiBaseUrl,
-    authToken,
+    authToken: isInLobby ? '' : authToken, // Don't join until lobby dismissed
   });
 
   useFrameReporter(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined);
@@ -181,7 +232,88 @@ export function HangoutPage() {
 
   // Wait for Cognito to resolve before rendering (prevents race with useHangout)
   if (!userId || !authToken) {
-    return <div className="p-8">Loading…</div>;
+    return <div className="p-8">Loading...</div>;
+  }
+
+  // Lobby screen — preview camera/mic before joining
+  if (isInLobby) {
+    return (
+      <div className="h-screen bg-gray-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-gray-900 rounded-2xl shadow-2xl overflow-hidden">
+          {/* Camera preview */}
+          <div className="relative aspect-video bg-gray-800 overflow-hidden">
+            <video
+              ref={lobbyVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover scale-x-[-1]"
+            />
+            {!lobbyCameraOn && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
+                <svg className="w-16 h-16 text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
+                </svg>
+              </div>
+            )}
+            {/* Media toggles overlaid on preview */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+              <button
+                onClick={() => setLobbyMuted(!lobbyMuted)}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                  lobbyMuted ? 'bg-red-600 text-white' : 'bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  {lobbyMuted ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 19L5 5m14 0l-3.5 3.5M12 18.75a6 6 0 01-6-6v-1.5m6 7.5a6 6 0 006-6v-1.5M12 18.75V21m-4.5 0h9M9.75 3.104A4.5 4.5 0 0112 2.25a4.5 4.5 0 014.5 4.5v4.5" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => setLobbyCameraOn(!lobbyCameraOn)}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                  !lobbyCameraOn ? 'bg-red-600 text-white' : 'bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  {!lobbyCameraOn ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25zM3 3l18 18" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Lobby info & CTA */}
+          <div className="p-6 text-center">
+            <h2 className="text-xl font-bold text-white mb-1">Ready to join?</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              Check your camera and microphone before joining the hangout.
+            </p>
+
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => navigate('/')}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleJoinFromLobby}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-500 active:bg-green-700 transition-colors shadow-lg shadow-green-600/25"
+              >
+                Join Hangout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

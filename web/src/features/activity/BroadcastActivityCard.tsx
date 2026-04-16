@@ -3,7 +3,7 @@
  * Displays userId, duration, reaction summary pills, AI summary (2-line truncated), and relative timestamp
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Avatar } from '../../components/social';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
@@ -69,8 +69,24 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const isLive = session.status === 'live';
   const isReady = isLive || session.recordingStatus === 'available' || !!hlsUrl;
 
+  // Live duration counter
+  const [liveDuration, setLiveDuration] = useState('');
+
+  useEffect(() => {
+    if (!isLive) return;
+    const tick = () => {
+      const elapsed = Date.now() - new Date(session.createdAt).getTime();
+      const mins = Math.floor(elapsed / 60000);
+      const hrs = Math.floor(mins / 60);
+      setLiveDuration(hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`);
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [isLive, session.createdAt]);
+
   const handleMouseEnter = useCallback(() => {
-    if (!hlsUrl || !isReady) return;
+    if (!hlsUrl || !isReady || isLive) return;
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true);
       const video = videoRef.current;
@@ -134,8 +150,8 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
           <ThumbnailPlaceholder />
         )}
 
-        {/* Video preview on hover */}
-        {hlsUrl && isReady && (
+        {/* Video preview on hover (skip for live sessions) */}
+        {hlsUrl && isReady && !isLive && (
           <video
             ref={videoRef}
             src={hlsUrl}
@@ -147,8 +163,15 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
           />
         )}
 
+        {/* Live duration badge */}
+        {isLive && liveDuration && !isHovering && (
+          <span className="absolute bottom-2 left-3 px-1.5 py-0.5 text-xs font-medium text-white bg-black/70 rounded">
+            {liveDuration}
+          </span>
+        )}
+
         {/* Mute toggle button — visible on hover */}
-        {isHovering && hlsUrl && (
+        {isHovering && hlsUrl && !isLive && (
           <button
             type="button"
             onClick={toggleMute}
@@ -248,6 +271,18 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7 4V2m0 2a2 2 0 00-2 2v1a2 2 0 002 2h0a2 2 0 002-2V6a2 2 0 00-2-2zm0 10v2m0-2a2 2 0 01-2-2v-1a2 2 0 012-2h0a2 2 0 012 2v1a2 2 0 01-2 2zM17 4V2m0 2a2 2 0 00-2 2v1a2 2 0 002 2h0a2 2 0 002-2V6a2 2 0 00-2-2zm0 10v2m0-2a2 2 0 01-2-2v-1a2 2 0 012-2h0a2 2 0 012 2v1a2 2 0 01-2 2z" />
               </svg>
               Highlights
+            </button>
+          </div>
+        )}
+
+        {/* Watch Live CTA */}
+        {isLive && (
+          <div className="ml-[42px] mt-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/viewer/${session.sessionId}`); }}
+              className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              Watch Live
             </button>
           </div>
         )}

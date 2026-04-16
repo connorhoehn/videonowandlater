@@ -143,9 +143,6 @@ export function HomePage() {
           <>
             {/* Combined stories + recordings slider */}
             {(() => {
-              const liveBroadcasts = sessions.filter(
-                (s) => s.sessionType === 'BROADCAST' && s.recordingStatus === 'processing'
-              );
               const recordings = sessions.filter(
                 (s) => (s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD') &&
                   s.recordingStatus === 'available' && s.recordingHlsUrl
@@ -158,12 +155,6 @@ export function HomePage() {
                         id: group.userId,
                         name: group.userId,
                         thumbnail: group.stories[0]?.segments?.[0]?.url || '',
-                      })),
-                      ...liveBroadcasts.map(session => ({
-                        id: session.sessionId,
-                        name: session.userId,
-                        thumbnail: session.thumbnailUrl || '',
-                        onClick: () => navigate(`/viewer/${session.sessionId}`),
                       })),
                       ...recordings.map(session => ({
                         id: session.sessionId,

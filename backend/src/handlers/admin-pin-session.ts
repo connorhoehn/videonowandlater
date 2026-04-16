@@ -10,6 +10,8 @@ import { isAdmin, getAdminUserId } from '../lib/admin-auth';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { createEventEmitter } from '../lib/emit-session-event';
+import { SessionEventType } from '../domain/session-event';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'admin-pin-session' } });
 
@@ -86,7 +88,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       logger.info('Session unpinned', { sessionId, adminUserId });
     }
 
-    // 7. Return success
+    // 7. Emit session event (non-blocking)
+    try {
+      const emit = createEventEmitter(tableName);
+      await emit(
+        sessionId,
+        pinned ? SessionEventType.SESSION_PINNED : SessionEventType.SESSION_UNPINNED,
+        adminUserId,
+        'user',
+        { pinned },
+      );
+    } catch { /* non-blocking */ }
+
+    // 8. Return success
     return resp(200, {
       message: pinned ? 'Session pinned' : 'Session unpinned',
       isPinned: pinned,

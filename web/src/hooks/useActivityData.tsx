@@ -133,9 +133,11 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         const response = await fetch(`${config.apiUrl}/activity`);
         if (!response.ok) throw new Error(`${response.status}`);
         const data = await response.json();
-        setSessions(data.sessions || []);
+        const freshSessions = data.sessions || [];
+        setSessions(freshSessions);
       } catch (err) {
         console.error('Error polling activity:', err);
+        return;
       }
       const live = hasLiveSessions(sessions);
       // Don't back off beyond 5s when live sessions exist

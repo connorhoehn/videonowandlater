@@ -103,6 +103,16 @@ export function HangoutActivityCard({ session }: HangoutActivityCardProps) {
           className="text-gray-700 dark:text-gray-300"
         />
 
+        {/* Join Hangout CTA */}
+        {isLive && (
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/hangout/${session.sessionId}`); }}
+            className="mt-2 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            Join Hangout ({participantCount} {participantCount === 1 ? 'person' : 'people'})
+          </button>
+        )}
+
         {/* Audit Log - Processing Timeline */}
         <SessionAuditLog session={session} compact={true} />
       </Card.Body>

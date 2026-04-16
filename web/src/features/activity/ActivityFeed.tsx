@@ -67,8 +67,14 @@ export function ActivityFeed({
 }: ActivityFeedProps) {
   // Sort pinned first, then by endedAt DESC (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
+    // Pinned always first
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
+    // Live sessions above non-live
+    const aLive = a.status === 'live' ? 1 : 0;
+    const bLive = b.status === 'live' ? 1 : 0;
+    if (aLive !== bLive) return bLive - aLive;
+    // Then by most recent
     const aTime = new Date(a.endedAt || a.createdAt).getTime();
     const bTime = new Date(b.endedAt || b.createdAt).getTime();
     return bTime - aTime;

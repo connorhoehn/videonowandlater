@@ -47,3 +47,4 @@ ios/Packages/*/.build/
 cdk.out2/
 cdk.out3/
 cdk.out4/
+ios/.spm-cache/

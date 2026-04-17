@@ -38,3 +38,12 @@ Config.local.xcconfig
 !backend/tsconfig.json
 !backend/jest.config.js
 !tools/*.js
+
+# iOS build artifacts
+ios/.build/
+ios/Packages/*/.build/
+
+# CDK build artifacts
+cdk.out2/
+cdk.out3/
+cdk.out4/

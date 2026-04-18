@@ -357,6 +357,45 @@ export class SessionStack extends Stack {
       description: 'Scan for stuck pipeline sessions and re-trigger recovery every 15 minutes',
     });
 
+    // ============================================================
+    // Auto-Kill + Auto-Finalize Cron
+    // - LIVE sessions > 10 min → force-kill (stop stream/disconnect participants)
+    // - ENDING sessions > 2 min → force-finalize to ENDED (+ release pool resources)
+    // ============================================================
+    const scanActiveSessionsFn = new nodejs.NodejsFunction(this, 'ScanActiveSessions', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/scan-active-sessions.ts'),
+      timeout: Duration.minutes(2),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        ACTIVE_SESSION_MAX_AGE_MIN: '10',
+        ENDING_MAX_AGE_MIN: '2',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'ScanActiveSessionsLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    this.table.grantReadWriteData(scanActiveSessionsFn);
+
+    scanActiveSessionsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'ivs:StopStream',
+        'ivs-realtime:DisconnectParticipant',
+        'ivschat:SendEvent',
+      ],
+      resources: ['*'],
+    }));
+
+    new events.Rule(this, 'ScanActiveSessionsSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+      targets: [new targets.LambdaFunction(scanActiveSessionsFn)],
+      description: 'Auto-kill LIVE sessions > 10 min and auto-finalize stuck ENDING sessions > 2 min',
+    });
+
     // Scheduled Lambda to expire old stories (runs hourly)
     const expireStoriesFn = new nodejs.NodejsFunction(this, 'ExpireStories', {
       runtime: lambda.Runtime.NODEJS_20_X,

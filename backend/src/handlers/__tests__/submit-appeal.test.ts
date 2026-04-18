@@ -36,15 +36,17 @@ describe('submit-appeal handler', () => {
     claimedResources: { chatRoom: 'room-1' },
   };
 
+  // Kill date must stay within the 7-day appeal window, so compute relative to now
+  const killCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const killRecord = {
     PK: 'SESSION#session-killed',
-    SK: 'MOD#2026-04-10T10:00:00Z#mod-uuid',
+    SK: `MOD#${killCreatedAt}#mod-uuid`,
     entityType: 'MODERATION',
     actionType: 'ADMIN_KILL',
     actorId: 'admin-user',
     reason: 'Inappropriate content',
     sessionId: 'session-killed',
-    createdAt: '2026-04-10T10:00:00Z',
+    createdAt: killCreatedAt,
   };
 
   const existingAppeal = {

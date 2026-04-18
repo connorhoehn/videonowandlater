@@ -8,6 +8,7 @@ interface ActiveSession {
   sessionType: string;
   status: string;
   createdAt: string;
+  endedAt?: string;
   participantCount: number;
   messageCount: number;
   isPinned?: boolean;
@@ -18,9 +19,11 @@ interface ActiveSessionsPanelProps {
   apiBaseUrl: string;
 }
 
-function formatDuration(createdAt: string): string {
-  const diffMs = Date.now() - new Date(createdAt).getTime();
-  const totalSec = Math.floor(diffMs / 1000);
+function formatDuration(session: Pick<ActiveSession, 'createdAt' | 'endedAt' | 'status'>): string {
+  const startMs = new Date(session.createdAt).getTime();
+  const isTerminal = session.status === 'ending' || session.status === 'ended';
+  const endMs = isTerminal && session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
+  const totalSec = Math.max(0, Math.floor((endMs - startMs) / 1000));
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
@@ -93,7 +96,7 @@ function SessionTableRow({
         </span>
       </td>
       <td className="py-3 px-4 text-gray-600 dark:text-gray-300 text-sm tabular-nums font-mono">
-        {formatDuration(session.createdAt)}
+        {formatDuration(session)}
       </td>
       <td className="py-3 px-4 text-gray-600 dark:text-gray-300 text-sm text-center">
         {session.participantCount}
@@ -109,10 +112,10 @@ function SessionTableRow({
               onPin(session.sessionId, !session.isPinned);
             }}
             title={session.isPinned ? 'Unpin from feed' : 'Pin to feed'}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
               session.isPinned
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30'
-                : 'bg-gray-700/50 text-gray-400 border-gray-600/50 hover:bg-gray-700'
+                ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30 hover:bg-amber-100 dark:hover:bg-amber-500/30'
+                : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600/50 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
@@ -175,10 +178,10 @@ function SessionCard({
               onPin(session.sessionId, !session.isPinned);
             }}
             title={session.isPinned ? 'Unpin from feed' : 'Pin to feed'}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
               session.isPinned
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30'
-                : 'bg-gray-700/50 text-gray-400 border-gray-600/50 hover:bg-gray-700'
+                ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30 hover:bg-amber-100 dark:hover:bg-amber-500/30'
+                : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600/50 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
@@ -200,7 +203,7 @@ function SessionCard({
         <div>
           <span className="text-gray-400 dark:text-gray-500">Duration</span>
           <p className="text-gray-700 dark:text-gray-300 font-mono tabular-nums mt-0.5">
-            {formatDuration(session.createdAt)}
+            {formatDuration(session)}
           </p>
         </div>
         <div>

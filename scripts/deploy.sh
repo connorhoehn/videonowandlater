@@ -14,12 +14,14 @@ if [[ "$SKIP_CHECKS" != "--no-checks" ]]; then
   echo ""
 fi
 
-echo "Deploying CDK stacks..."
-npx cdk deploy --all --require-approval never --outputs-file cdk-outputs.json
+# Phase 1: Deploy everything except Web (so Auth/Api outputs exist for config)
+echo "Deploying backend stacks..."
+npx cdk deploy VNL-Storage VNL-Auth VNL-Session VNL-Api VNL-Monitoring VNL-Agent \
+  --require-approval never --outputs-file cdk-outputs.json
 
+# Phase 2: Generate frontend config from outputs
 echo "Generating frontend config..."
 mkdir -p web/public
-
 jq '{
   userPoolId: ."VNL-Auth".UserPoolId,
   userPoolClientId: ."VNL-Auth".UserPoolClientId,
@@ -27,4 +29,17 @@ jq '{
   apiUrl: (."VNL-Api".ApiUrl | rtrimstr("/"))
 }' cdk-outputs.json > web/public/aws-config.json
 
-echo "Deploy complete. Frontend config written to web/public/aws-config.json"
+# Phase 3: Rebuild web so aws-config.json is copied into dist/
+echo "Rebuilding web with fresh config..."
+(cd web && npm run build)
+
+# Phase 4: Deploy Web stack last — it uploads dist/ (now including aws-config.json) to S3
+echo "Deploying Web stack..."
+npx cdk deploy VNL-Web --require-approval never --outputs-file cdk-outputs-web.json
+
+# Merge Web outputs back into cdk-outputs.json for consumers
+jq -s '.[0] * .[1]' cdk-outputs.json cdk-outputs-web.json > cdk-outputs.merged.json \
+  && mv cdk-outputs.merged.json cdk-outputs.json \
+  && rm -f cdk-outputs-web.json
+
+echo "Deploy complete. Frontend config written to web/public/aws-config.json and uploaded to CloudFront."

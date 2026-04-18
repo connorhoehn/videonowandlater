@@ -1837,6 +1837,78 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === Chat Moderation ===
+    // Nova Lite text classifier + admin review queue.
+    // ============================================================
+
+    // POST /sessions/{sessionId}/chat/classify
+    const chatClassifyResource = sessionChatResource.addResource('classify');
+    const classifyChatMessageHandler = new NodejsFunction(this, 'ClassifyChatMessageHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/classify-chat-message.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        NOVA_MODEL_ID: 'amazon.nova-lite-v1:0',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(classifyChatMessageHandler);
+    classifyChatMessageHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+      ],
+    }));
+    classifyChatMessageHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    chatClassifyResource.addMethod('POST', new apigateway.LambdaIntegration(classifyChatMessageHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/chat-flags?status=pending
+    const adminChatFlags = admin.addResource('chat-flags');
+    const adminListChatFlagsFn = new NodejsFunction(this, 'AdminListChatFlags', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-chat-flags.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminListChatFlagsFn);
+    adminChatFlags.addMethod('GET', new apigateway.LambdaIntegration(adminListChatFlagsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/chat-flags/{sessionId}/{sk}/resolve
+    const adminChatFlagSession = adminChatFlags.addResource('{sessionId}');
+    const adminChatFlagSk = adminChatFlagSession.addResource('{sk}');
+    const adminChatFlagResolve = adminChatFlagSk.addResource('resolve');
+    const adminResolveChatFlagFn = new NodejsFunction(this, 'AdminResolveChatFlag', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-resolve-chat-flag.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(15),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminResolveChatFlagFn);
+    adminResolveChatFlagFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    adminChatFlagResolve.addMethod('POST', new apigateway.LambdaIntegration(adminResolveChatFlagFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

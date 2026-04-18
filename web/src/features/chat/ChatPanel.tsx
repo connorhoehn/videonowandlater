@@ -159,7 +159,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const handleSendMessage = async (content: string) => {
     try {
-      await room.sendMessage(new SendMessageRequest(content));
+      const sent = await room.sendMessage(new SendMessageRequest(content));
+      // Fire-and-forget Nova Lite chat moderation. Never block the sender on
+      // classification — a failure (network, auth, etc.) must not degrade UX.
+      const apiUrl = getConfig()?.apiUrl;
+      if (apiUrl && authToken && sent?.id) {
+        void fetch(`${apiUrl}/sessions/${sessionId}/chat/classify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ messageId: sent.id, text: content }),
+        }).catch((err) => {
+          // Swallow — classifier is best-effort, audit-only.
+          console.warn('Chat classify call failed (non-fatal):', err);
+        });
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
     }

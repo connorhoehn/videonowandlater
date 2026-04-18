@@ -1377,7 +1377,6 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-<<<<<<< HEAD
     // === Phase 1: Groups ===
     // User-created groups + RBAC. All routes use the existing Cognito authorizer.
     const groupsResource = api.root.addResource('groups');
@@ -1552,6 +1551,80 @@ export class ApiStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+
+    // ============================================================
+    // === Phase 2: Lobbies ===
+    // Host-approval flow for HANGOUT sessions with requireApproval=true.
+    // ============================================================
+    const lobbyResource = sessionIdResource.addResource('lobby');
+
+    // GET /sessions/{sessionId}/lobby — list pending lobby requests (host only)
+    const listLobbyRequestsFn = new NodejsFunction(this, 'ListLobbyRequestsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-lobby-requests.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listLobbyRequestsFn);
+    lobbyResource.addMethod('GET', new apigateway.LambdaIntegration(listLobbyRequestsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const lobbyUserResource = lobbyResource.addResource('{userId}');
+
+    // POST /sessions/{sessionId}/lobby/{userId}/approve
+    const approveLobbyFn = new NodejsFunction(this, 'ApproveLobbyRequestHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/approve-lobby-request.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(approveLobbyFn);
+    approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:CreateParticipantToken'],
+      resources: ['*'],
+    }));
+    approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    const approveResource = lobbyUserResource.addResource('approve');
+    approveResource.addMethod('POST', new apigateway.LambdaIntegration(approveLobbyFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/lobby/{userId}/deny
+    const denyLobbyFn = new NodejsFunction(this, 'DenyLobbyRequestHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/deny-lobby-request.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(denyLobbyFn);
+    denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:DisconnectParticipant'],
+      resources: ['*'],
+    }));
+    denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    const denyResource = lobbyUserResource.addResource('deny');
+    denyResource.addMethod('POST', new apigateway.LambdaIntegration(denyLobbyFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // Grant join-hangout handler the ability to emit chat events (lobby_update)
+    joinHangoutHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

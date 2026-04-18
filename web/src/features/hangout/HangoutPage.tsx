@@ -13,6 +13,8 @@ import { useHangout } from './useHangout';
 import { useFrameReporter } from './useFrameReporter';
 import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
+import { LobbyWaitingRoom } from './LobbyWaitingRoom';
+import { LobbyPanel } from './LobbyPanel';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ChatRoomProvider } from '../chat/ChatRoomProvider';
 import { useChatRoom } from '../chat/useChatRoom';
@@ -117,6 +119,7 @@ export function HangoutPage() {
     isJoined,
     isScreenSharing,
     error,
+    lobbyStatus,
     toggleMute,
     toggleCamera,
     startScreenShare,
@@ -126,6 +129,27 @@ export function HangoutPage() {
     apiBaseUrl,
     authToken: isInLobby ? '' : authToken, // Don't join until lobby dismissed
   });
+
+  // Track host ownership — server only accepts lobby approvals from the owner.
+  // sessionOwnerId is loaded from GET /sessions/{sessionId}.
+  const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
+  React.useEffect(() => {
+    if (!sessionId || !authToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setSessionOwnerId(data.userId || null);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, authToken, apiBaseUrl]);
 
   useFrameReporter(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined);
 
@@ -252,6 +276,33 @@ export function HangoutPage() {
   // Wait for Cognito to resolve before rendering (prevents race with useHangout)
   if (!userId || !authToken) {
     return <div className="p-8">Loading...</div>;
+  }
+
+  // Phase 2: Lobby waiting room — shown when the server responded with
+  // status='pending' because the session requires host approval.
+  // On approval the waiting room calls onApproved — we reload so useHangout
+  // re-runs its join flow with the now-approved lobby row and gets a
+  // PUBLISH+SUBSCRIBE token on the next /join call.
+  if (lobbyStatus === 'pending') {
+    return (
+      <LobbyWaitingRoom
+        sessionId={sessionId}
+        userId={userId}
+        authToken={authToken}
+        apiBaseUrl={apiBaseUrl}
+        room={room}
+        onApproved={() => {
+          // Re-run the join flow by reloading the page. useHangout will call
+          // /join again; the now-approved lobby row allows the PUBLISH token.
+          window.location.reload();
+        }}
+        onDenied={() => {
+          setKillError('Your join request was denied by the host.');
+          setTimeout(() => navigate('/'), 3000);
+        }}
+        onCancel={() => navigate('/')}
+      />
+    );
   }
 
   // Lobby screen — preview camera/mic before joining
@@ -406,6 +457,15 @@ export function HangoutPage() {
                 <VideoGrid participants={participantsWithSpeaking} />
               </Card.Body>
             </Card>
+            {/* Phase 2: Host-only lobby panel with pending join requests */}
+            {sessionOwnerId && sessionOwnerId === userId && (
+              <LobbyPanel
+                sessionId={sessionId}
+                authToken={authToken}
+                apiBaseUrl={apiBaseUrl}
+                room={room}
+              />
+            )}
             <FloatingReactions
               reactions={floatingReactions}
             />

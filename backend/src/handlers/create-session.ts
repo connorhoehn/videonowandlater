@@ -3,11 +3,13 @@
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SessionType } from '../domain/session';
 import { createNewSession } from '../services/session-service';
 import { createStorySession } from '../repositories/story-repository';
 import { emitSessionEvent } from '../lib/emit-session-event';
 import { SessionEventType } from '../domain/session-event';
+import { getDocumentClient } from '../lib/dynamodb-client';
 import { v4 as uuidv4 } from 'uuid';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -26,7 +28,7 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
   }
 
   // Parse request body
-  let body: { sessionType: SessionType };
+  let body: { sessionType: SessionType; requireApproval?: boolean };
   try {
     body = JSON.parse(event.body || '{}');
   } catch {
@@ -90,11 +92,25 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
+  // Phase 2: Hangout lobbies — persist requireApproval flag on HANGOUT sessions
+  const requireApproval = body.requireApproval === true && body.sessionType === SessionType.HANGOUT;
+  if (requireApproval) {
+    try {
+      await getDocumentClient().send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `SESSION#${result.sessionId}`, SK: 'METADATA' },
+        UpdateExpression: 'SET #requireApproval = :val',
+        ExpressionAttributeNames: { '#requireApproval': 'requireApproval' },
+        ExpressionAttributeValues: { ':val': true },
+      }));
+    } catch { /* non-blocking, default is no approval */ }
+  }
+
   try {
     await emitSessionEvent(tableName, {
       eventId: uuidv4(), sessionId: result.sessionId, eventType: SessionEventType.SESSION_CREATED,
       timestamp: new Date().toISOString(), actorId: userId,
-      actorType: 'user', details: { sessionType: body.sessionType },
+      actorType: 'user', details: { sessionType: body.sessionType, requireApproval },
     });
   } catch { /* non-blocking */ }
 
@@ -104,6 +120,6 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     },
-    body: JSON.stringify(result),
+    body: JSON.stringify({ ...result, requireApproval }),
   };
 };

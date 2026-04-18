@@ -4,14 +4,23 @@
  *
  * POST /sessions/{sessionId}/join
  * - Validates session exists and is a HANGOUT type
- * - Generates participant token with PUBLISH+SUBSCRIBE capabilities
- * - Returns token, participantId, and expirationTime
+ * - If session.requireApproval === true AND caller is not owner:
+ *     mints a SUBSCRIBE-only token (15min), writes a LOBBY request, emits a chat event,
+ *     and returns { status: 'pending', token, ... } so the client shows a waiting room.
+ * - Otherwise (owner, or requireApproval=false):
+ *     mints a PUBLISH+SUBSCRIBE token (12h), adds participant row, transitions session LIVE
  */
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { CreateParticipantTokenCommand } from '@aws-sdk/client-ivs-realtime';
-import { getIVSRealTimeClient } from '../lib/ivs-clients';
-import { getSessionById, updateSessionStatus, addHangoutParticipant } from '../repositories/session-repository';
+import { SendEventCommand } from '@aws-sdk/client-ivschat';
+import { getIVSRealTimeClient, getIVSChatClient } from '../lib/ivs-clients';
+import {
+  getSessionById,
+  updateSessionStatus,
+  addHangoutParticipant,
+  createLobbyRequest,
+} from '../repositories/session-repository';
 import { SessionType, SessionStatus } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { emitSessionEvent } from '../lib/emit-session-event';
@@ -60,6 +69,69 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const ivsRealTimeClient = getIVSRealTimeClient();
+
+    // === Phase 2: Lobby flow ===
+    // Non-owner joining a hangout that requires approval → mint SUBSCRIBE-only token
+    // and write a LOBBY request. Host must approve via POST /lobby/{userId}/approve.
+    const needsApproval = session.requireApproval === true && userId !== session.userId;
+
+    if (needsApproval) {
+      const pendingCommand = new CreateParticipantTokenCommand({
+        stageArn,
+        userId,
+        duration: 15, // minutes — short TTL while in the lobby
+        capabilities: ['SUBSCRIBE'],
+        attributes: { userId, role: 'pending' },
+      });
+
+      const pendingResponse = await ivsRealTimeClient.send(pendingCommand);
+      if (!pendingResponse.participantToken) {
+        return resp(500, { error: 'Failed to generate lobby participant token' });
+      }
+
+      const requestedAt = new Date().toISOString();
+
+      // Persist lobby request (best-effort)
+      try {
+        await createLobbyRequest(tableName, {
+          sessionId,
+          userId,
+          displayName: userId, // no separate display name source yet
+          requestedAt,
+          status: 'pending',
+          ivsParticipantId: pendingResponse.participantToken.participantId,
+        });
+      } catch (lobbyErr: any) {
+        logger.error('Failed to persist lobby request', { sessionId, userId, error: lobbyErr.message });
+      }
+
+      // Emit chat event so host UI gets a live notification
+      if (session.claimedResources?.chatRoom) {
+        try {
+          await getIVSChatClient().send(new SendEventCommand({
+            roomIdentifier: session.claimedResources.chatRoom,
+            eventName: 'lobby_update',
+            attributes: {
+              userId,
+              action: 'requested',
+              requestedAt,
+            },
+          }));
+        } catch (evtErr: any) {
+          logger.warn('Failed to emit lobby_update chat event', { error: evtErr.message });
+        }
+      }
+
+      return resp(200, {
+        status: 'pending',
+        token: pendingResponse.participantToken.token,
+        participantId: pendingResponse.participantToken.participantId,
+        expirationTime: pendingResponse.participantToken.expirationTime?.toISOString(),
+        userId,
+      });
+    }
+
+    // === Default flow: host or no-approval session ===
     const command = new CreateParticipantTokenCommand({
       stageArn,
       userId,
@@ -105,6 +177,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     return resp(200, {
+      status: 'joined',
       token: response.participantToken.token,
       participantId: response.participantToken.participantId,
       expirationTime: response.participantToken.expirationTime?.toISOString(),

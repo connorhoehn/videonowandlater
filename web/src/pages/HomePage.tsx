@@ -37,6 +37,9 @@ export function HomePage() {
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [error, setError] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
+  // Phase 2: Hangout lobby options modal
+  const [showHangoutOptions, setShowHangoutOptions] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -73,16 +76,23 @@ export function HomePage() {
   };
 
   const handleCreateHangout = async () => {
+    // Phase 2: Show options dialog (requireApproval checkbox) instead of creating directly.
+    setRequireApproval(false);
+    setShowHangoutOptions(true);
+  };
+
+  const confirmCreateHangout = async () => {
     const config = getConfig();
     if (!config?.apiUrl) return;
     setIsCreatingHangout(true);
     setError('');
+    setShowHangoutOptions(false);
     try {
       const { token: authToken } = await fetchToken();
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionType: 'HANGOUT' }),
+        body: JSON.stringify({ sessionType: 'HANGOUT', requireApproval }),
       });
       if (!response.ok) throw new Error(`${response.status}`);
       const sessionData = await response.json();
@@ -228,6 +238,47 @@ export function HomePage() {
           refreshStories();
         }}
       />
+
+      {/* Phase 2: Hangout options modal */}
+      {showHangoutOptions && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowHangoutOptions(false); }}
+        >
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h2 className="text-lg font-bold mb-2">Start a hangout</h2>
+            <p className="text-sm text-gray-600 mb-4">Choose how people can join your hangout.</p>
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={requireApproval}
+                onChange={(e) => setRequireApproval(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+              />
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Require host approval</div>
+                <div className="text-xs text-gray-500">
+                  Non-host participants wait in a lobby until you approve them.
+                </div>
+              </div>
+            </label>
+            <div className="flex gap-3 justify-end mt-5">
+              <button
+                onClick={() => setShowHangoutOptions(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCreateHangout}
+                className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 active:bg-violet-700 transition-colors shadow-md shadow-violet-600/25"
+              >
+                Start Hangout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Modal */}
       {showUploadModal && (

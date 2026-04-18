@@ -26,6 +26,8 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
   const [isJoined, setIsJoined] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Phase 2: lobby/waiting room status
+  const [lobbyStatus, setLobbyStatus] = useState<'pending' | 'joined' | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -56,7 +58,14 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
           throw new Error(`Failed to join hangout: ${response.statusText}`);
         }
 
-        const { token, participantId, userId } = await response.json();
+        const joinData = await response.json();
+        // Phase 2: pending lobby — don't start the Stage / camera
+        if (joinData.status === 'pending') {
+          if (mounted) setLobbyStatus('pending');
+          return;
+        }
+        if (mounted) setLobbyStatus('joined');
+        const { token, participantId, userId } = joinData;
 
         // Acquire camera + microphone BEFORE creating the Stage so the
         // stageStreamsToPublish closure has the tracks ready to return.
@@ -314,6 +323,7 @@ export function useHangout({ sessionId, apiBaseUrl, authToken }: UseHangoutOptio
     isJoined,
     isScreenSharing,
     error,
+    lobbyStatus,
     toggleMute,
     toggleCamera,
     startScreenShare,

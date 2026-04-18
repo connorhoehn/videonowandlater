@@ -183,6 +183,7 @@ describe('join-hangout handler', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body).toEqual({
+      status: 'joined',
       token: PARTICIPANT_TOKEN,
       participantId: PARTICIPANT_ID,
       expirationTime: new Date(EXPIRATION_TIME).toISOString(),

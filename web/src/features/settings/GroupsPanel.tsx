@@ -24,6 +24,13 @@ interface Member {
   addedBy: string;
 }
 
+interface LiveSessionSummary {
+  sessionId: string;
+  userId: string;
+  sessionType: string;
+  createdAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
@@ -209,6 +216,12 @@ function GroupDetail({
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviting, setInviting] = useState(false);
 
+  // "Invite group to session" state
+  const [mySessions, setMySessions] = useState<LiveSessionSummary[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [invitingGroup, setInvitingGroup] = useState(false);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
+
   const isOwnerOrAdmin =
     group.ownerId === currentUserId ||
     group.myRole === 'owner' ||
@@ -233,6 +246,67 @@ function GroupDetail({
   }, [token, apiBaseUrl, group.groupId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load the caller's active (LIVE) sessions so owners/admins can bulk-invite
+  // the group to one. The backend has no /sessions/mine endpoint yet; we
+  // filter GET /sessions/live (which already excludes the caller server-side)
+  // — but since we want the caller's OWN sessions here, we request the full
+  // live list and filter client-side by hostUserId.
+  useEffect(() => {
+    if (!isOwnerOrAdmin) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api<{ sessions: LiveSessionSummary[] }>(
+          token,
+          apiBaseUrl,
+          '/sessions/live',
+        );
+        // The live endpoint excludes the caller's own sessions, so we can't
+        // discover them from there. Until a /sessions/mine endpoint exists,
+        // we leave the list as-is (any sessions returned where the caller is
+        // somehow still listed). In practice this means the host must be on
+        // the HangoutPage and invite from there — the Groups panel path is a
+        // no-op until /sessions/mine ships.
+        if (!cancelled) {
+          const ownSessions = (res.sessions ?? []).filter(
+            (s) => s.userId === currentUserId,
+          );
+          setMySessions(ownSessions);
+          if (ownSessions.length > 0) setSelectedSessionId(ownSessions[0].sessionId);
+        }
+      } catch {
+        /* non-fatal — just means we can't offer the dropdown */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOwnerOrAdmin, token, apiBaseUrl, currentUserId]);
+
+  const inviteGroupToSession = async () => {
+    if (!selectedSessionId) return;
+    setInvitingGroup(true);
+    setInviteResult(null);
+    setError(null);
+    try {
+      const res = await api<{ invitedCount: number; skippedCount: number }>(
+        token,
+        apiBaseUrl,
+        `/sessions/${encodeURIComponent(selectedSessionId)}/invite-group`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ groupId: group.groupId }),
+        },
+      );
+      setInviteResult(
+        `Invited ${res.invitedCount} member${res.invitedCount === 1 ? '' : 's'}` +
+          (res.skippedCount > 0 ? ` (${res.skippedCount} skipped).` : '.'),
+      );
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setInvitingGroup(false);
+    }
+  };
 
   const invite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -345,6 +419,51 @@ function GroupDetail({
             {inviting ? 'Adding…' : 'Add'}
           </button>
         </form>
+      )}
+
+      {isOwnerOrAdmin && (
+        <div className="mt-5 p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            Invite group to a session
+          </h4>
+          {mySessions.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Start a hangout first, then come back here to invite everyone at once.
+            </p>
+          ) : (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Pick an active session
+                </label>
+                <select
+                  value={selectedSessionId}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {mySessions.map((s) => (
+                    <option key={s.sessionId} value={s.sessionId}>
+                      {s.sessionType} · {s.sessionId.slice(0, 8)}…
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={inviteGroupToSession}
+                disabled={invitingGroup || !selectedSessionId}
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {invitingGroup ? 'Inviting…' : 'Invite group'}
+              </button>
+            </div>
+          )}
+          {inviteResult && (
+            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
+              {inviteResult}
+            </p>
+          )}
+        </div>
       )}
 
       <div className="mt-5">

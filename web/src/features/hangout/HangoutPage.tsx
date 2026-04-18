@@ -16,6 +16,7 @@ import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
 import { LobbyWaitingRoom } from './LobbyWaitingRoom';
 import { LobbyPanel } from './LobbyPanel';
+import { InviteGroupModal } from './InviteGroupModal';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ChatRoomProvider } from '../chat/ChatRoomProvider';
 import { useChatRoom } from '../chat/useChatRoom';
@@ -102,6 +103,7 @@ export function HangoutPage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showInviteGroupModal, setShowInviteGroupModal] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
   const [killError, setKillError] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<{
@@ -443,6 +445,15 @@ export function HangoutPage() {
                 Chat
               </button>
             )}
+            {sessionOwnerId && sessionOwnerId === userId && isJoined && (
+              <button
+                onClick={() => setShowInviteGroupModal(true)}
+                title="Invite a group you own or administer"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-lg text-sm font-medium transition-colors duration-150"
+              >
+                Invite from your groups
+              </button>
+            )}
             <button
               onClick={() => setShowLeaveConfirm(true)}
               className="px-3 py-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-all duration-150"
@@ -625,6 +636,21 @@ export function HangoutPage() {
       variant="danger"
       onConfirm={() => { handleLeave(); setShowLeaveConfirm(false); }}
       onClose={() => setShowLeaveConfirm(false)}
+    />
+
+    <InviteGroupModal
+      isOpen={showInviteGroupModal}
+      onClose={() => setShowInviteGroupModal(false)}
+      sessionId={sessionId}
+      authToken={authToken}
+      apiBaseUrl={apiBaseUrl}
+      onInvited={({ invitedCount, skippedCount }) => {
+        addToast({
+          variant: 'info',
+          title: 'Group invited',
+          description: `Invited ${invitedCount}${skippedCount > 0 ? `, skipped ${skippedCount}` : ''}.`,
+        });
+      }}
     />
     </ChatRoomProvider>
   );

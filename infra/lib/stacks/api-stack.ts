@@ -1753,6 +1753,66 @@ export class ApiStack extends Stack {
       });
     }
 
+    // ============================================================
+    // === Invitations ===
+    // Group-bulk invites to a session + per-user invite inbox.
+    // ============================================================
+    const invitationsEnv = {
+      TABLE_NAME: props.sessionsTable.tableName,
+      USER_POOL_ID: props.userPool.userPoolId,
+      USER_POOL_CLIENT_ID: props.userPoolClient.userPoolClientId,
+    };
+
+    // POST /sessions/{sessionId}/invite-group  — host bulk-invites a group
+    const inviteGroupResource = sessionIdResource.addResource('invite-group');
+    const inviteGroupFn = new NodejsFunction(this, 'InviteGroupToSession', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/invite-group-to-session.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(inviteGroupFn);
+    inviteGroupFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    inviteGroupResource.addMethod('POST', new apigateway.LambdaIntegration(inviteGroupFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // /invites/...
+    const invitesResource = api.root.addResource('invites');
+    const invitesMineResource = invitesResource.addResource('mine');
+    const invitesBySessionResource = invitesResource.addResource('{sessionId}');
+    const invitesRespondResource = invitesBySessionResource.addResource('respond');
+
+    // GET /invites/mine — list my invites (with optional ?status=)
+    const listMyInvitesFn = new NodejsFunction(this, 'ListMyInvites', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-invites.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listMyInvitesFn);
+    invitesMineResource.addMethod('GET', new apigateway.LambdaIntegration(listMyInvitesFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /invites/{sessionId}/respond — accept/decline
+    const respondToInviteFn = new NodejsFunction(this, 'RespondToInvite', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/respond-to-invite.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(respondToInviteFn);
+    invitesRespondResource.addMethod('POST', new apigateway.LambdaIntegration(respondToInviteFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

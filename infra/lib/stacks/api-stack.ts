@@ -19,6 +19,8 @@ export interface ApiStackProps extends StackProps {
   cloudfrontDomainName?: string;
   webhookQueueUrl?: string;
   webhookQueueArn?: string;
+  // Phase 4: Image Moderation
+  moderationBucket?: s3.IBucket;
 }
 
 export class ApiStack extends Stack {
@@ -1376,6 +1378,136 @@ export class ApiStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+
+    // ============================================================
+    // === Phase 4: Image Moderation ===
+    // Admin ruleset CRUD + participant presigned-upload endpoint.
+    // ============================================================
+    const adminRulesets = admin.addResource('rulesets');
+    const adminRulesetByName = adminRulesets.addResource('{name}');
+    const adminRulesetRollback = adminRulesetByName.addResource('rollback');
+    const adminRulesetTest = adminRulesetByName.addResource('test');
+
+    const defaultRulesetEnv: Record<string, string> = {
+      TABLE_NAME: props.sessionsTable.tableName,
+      NOVA_MODEL_ID: 'amazon.nova-lite-v1:0',
+    };
+
+    // GET /admin/rulesets
+    const adminListRulesetsFn = new NodejsFunction(this, 'AdminListRulesets', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-rulesets.ts'),
+      timeout: Duration.seconds(15),
+      environment: defaultRulesetEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminListRulesetsFn);
+    adminRulesets.addMethod('GET', new apigateway.LambdaIntegration(adminListRulesetsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/rulesets/{name}
+    const adminGetRulesetFn = new NodejsFunction(this, 'AdminGetRuleset', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-get-ruleset.ts'),
+      timeout: Duration.seconds(10),
+      environment: defaultRulesetEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminGetRulesetFn);
+    adminRulesetByName.addMethod('GET', new apigateway.LambdaIntegration(adminGetRulesetFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/rulesets/{name}
+    const adminUpsertRulesetFn = new NodejsFunction(this, 'AdminUpsertRuleset', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-upsert-ruleset.ts'),
+      timeout: Duration.seconds(10),
+      environment: defaultRulesetEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminUpsertRulesetFn);
+    adminRulesetByName.addMethod('POST', new apigateway.LambdaIntegration(adminUpsertRulesetFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/rulesets/{name}/rollback
+    const adminRollbackRulesetFn = new NodejsFunction(this, 'AdminRollbackRuleset', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-rollback-ruleset.ts'),
+      timeout: Duration.seconds(10),
+      environment: defaultRulesetEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminRollbackRulesetFn);
+    adminRulesetRollback.addMethod('POST', new apigateway.LambdaIntegration(adminRollbackRulesetFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /admin/rulesets/{name}/test
+    const adminTestRulesetFn = new NodejsFunction(this, 'AdminTestRuleset', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-test-ruleset.ts'),
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+      environment: defaultRulesetEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminTestRulesetFn);
+    adminTestRulesetFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
+        ],
+      }),
+    );
+    adminRulesetTest.addMethod('POST', new apigateway.LambdaIntegration(adminTestRulesetFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/moderation-upload
+    // (Only wired if a moderation bucket has been provisioned.)
+    if (props.moderationBucket) {
+      const sessionsById = api.root.getResource('sessions')?.getResource('{sessionId}');
+      // sessionsById is created earlier in the file; reach via resourceForPath for safety.
+      const moderationUploadPath = api.root
+        .resourceForPath('sessions/{sessionId}/moderation-upload');
+
+      const requestModerationUploadFn = new NodejsFunction(this, 'RequestModerationUpload', {
+        runtime: Runtime.NODEJS_20_X,
+        handler: 'handler',
+        entry: path.join(__dirname, '../../../backend/src/handlers/request-moderation-upload.ts'),
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: props.sessionsTable.tableName,
+          MODERATION_BUCKET: props.moderationBucket.bucketName,
+        },
+        depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      });
+      props.sessionsTable.grantReadData(requestModerationUploadFn);
+      props.moderationBucket.grantPut(requestModerationUploadFn);
+
+      moderationUploadPath.addMethod('POST', new apigateway.LambdaIntegration(requestModerationUploadFn), {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      });
+
+      // Quiet unused-var warning if sessionsById was resolved but unused
+      void sessionsById;
+    }
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

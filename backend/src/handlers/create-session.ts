@@ -8,6 +8,7 @@ import { createNewSession } from '../services/session-service';
 import { createStorySession } from '../repositories/story-repository';
 import { emitSessionEvent } from '../lib/emit-session-event';
 import { SessionEventType } from '../domain/session-event';
+import { getCurrentVersion } from '../repositories/ruleset-repository';
 import { v4 as uuidv4 } from 'uuid';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -26,7 +27,11 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
   }
 
   // Parse request body
-  let body: { sessionType: SessionType };
+  let body: {
+    sessionType: SessionType;
+    moderationEnabled?: boolean;
+    rulesetName?: string;
+  };
   try {
     body = JSON.parse(event.body || '{}');
   } catch {
@@ -73,9 +78,35 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
+  // Phase 4: pin ruleset version at session start if moderation enabled
+  let rulesetName: string | undefined;
+  let rulesetVersion: number | undefined;
+  if (body.moderationEnabled && body.rulesetName) {
+    try {
+      const version = await getCurrentVersion(tableName, body.rulesetName);
+      if (version === null) {
+        return {
+          statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ error: `Unknown ruleset: ${body.rulesetName}` }),
+        };
+      }
+      rulesetName = body.rulesetName;
+      rulesetVersion = version;
+    } catch (err) {
+      // Non-blocking: fail closed only on validation error above; treat loader errors as soft-fail
+    }
+  }
+
   const result = await createNewSession(tableName, {
     userId,
     sessionType: body.sessionType,
+    moderationEnabled: Boolean(body.moderationEnabled && rulesetName && rulesetVersion !== undefined),
+    rulesetName,
+    rulesetVersion,
   });
 
   if (result.error) {

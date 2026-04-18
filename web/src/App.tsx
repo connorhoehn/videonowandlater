@@ -19,6 +19,10 @@ import { VideoPage } from './features/upload/VideoPage';
 import { AdminDashboard } from './features/admin/AdminDashboard';
 import { DemoPage } from './demo/DemoPage';
 import { AuthenticatedShell } from './components/AuthenticatedShell';
+import { SettingsShell } from './features/settings/SettingsShell';
+import { ProfilePanel } from './features/settings/ProfilePanel';
+import { GroupsPanel } from './features/settings/GroupsPanel';
+import { AdminSettingsPanel } from './features/settings/AdminSettingsPanel';
 import { ToastProvider } from './components/social';
 
 function BrandedLoader() {
@@ -89,6 +93,12 @@ function App() {
             <Route path="/upload/:sessionId" element={<UploadViewer />} />
             <Route path="/video/:sessionId" element={<VideoPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/settings" element={<SettingsShell />}>
+              <Route index element={<Navigate to="profile" replace />} />
+              <Route path="profile" element={<ProfilePanel />} />
+              <Route path="groups" element={<GroupsPanel />} />
+              <Route path="admin" element={<AdminSettingsPanel />} />
+            </Route>
           </Route>
         </Routes>
         </ToastProvider>

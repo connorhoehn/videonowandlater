@@ -1377,6 +1377,116 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // === Phase 1: Groups ===
+    // User-created groups + RBAC. All routes use the existing Cognito authorizer.
+    const groupsResource = api.root.addResource('groups');
+    const groupsMineResource = groupsResource.addResource('mine');
+    const groupByIdResource = groupsResource.addResource('{groupId}');
+    const groupMembersResource = groupByIdResource.addResource('members');
+    const groupMemberByIdResource = groupMembersResource.addResource('{userId}');
+
+    const phase1GroupsEnv = {
+      TABLE_NAME: props.sessionsTable.tableName,
+      USER_POOL_ID: props.userPool.userPoolId,
+      USER_POOL_CLIENT_ID: props.userPoolClient.userPoolClientId,
+    };
+
+    const groupCreateFn = new NodejsFunction(this, 'GroupCreate', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-create.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupCreateFn);
+    groupsResource.addMethod('POST', new apigateway.LambdaIntegration(groupCreateFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupListMineFn = new NodejsFunction(this, 'GroupListMine', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-list-mine.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(groupListMineFn);
+    groupsMineResource.addMethod('GET', new apigateway.LambdaIntegration(groupListMineFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupGetFn = new NodejsFunction(this, 'GroupGet', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-get.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(groupGetFn);
+    groupByIdResource.addMethod('GET', new apigateway.LambdaIntegration(groupGetFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupUpdateFn = new NodejsFunction(this, 'GroupUpdate', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-update.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupUpdateFn);
+    groupByIdResource.addMethod('PATCH', new apigateway.LambdaIntegration(groupUpdateFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupDeleteFn = new NodejsFunction(this, 'GroupDelete', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-delete.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupDeleteFn);
+    groupByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(groupDeleteFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupAddMemberFn = new NodejsFunction(this, 'GroupAddMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-add-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupAddMemberFn);
+    groupMembersResource.addMethod('POST', new apigateway.LambdaIntegration(groupAddMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupRemoveMemberFn = new NodejsFunction(this, 'GroupRemoveMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-remove-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupRemoveMemberFn);
+    groupMemberByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(groupRemoveMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupPromoteMemberFn = new NodejsFunction(this, 'GroupPromoteMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-promote-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(groupPromoteMemberFn);
+    groupMemberByIdResource.addMethod('PATCH', new apigateway.LambdaIntegration(groupPromoteMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

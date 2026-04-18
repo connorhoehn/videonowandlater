@@ -1969,6 +1969,82 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === vnl-ads Integration ===
+    // Skeleton wiring for the sibling **vnl-ads** service. All three handlers
+    // read AD_SERVICE_URL + AD_SERVICE_SECRET from env; when either is missing
+    // they short-circuit to safe defaults (feature flag off).
+    // ============================================================
+    const adServiceUrl = (this.node.tryGetContext('adServiceUrl') as string | undefined) ?? '';
+    const adServiceSecret = (this.node.tryGetContext('adServiceSecret') as string | undefined) ?? '';
+    const adServiceSecretArn = (this.node.tryGetContext('adServiceSecretArn') as string | undefined) ?? '';
+    const adsEnv: Record<string, string> = {
+      TABLE_NAME: props.sessionsTable.tableName,
+      AD_SERVICE_URL: adServiceUrl,
+      AD_SERVICE_SECRET: adServiceSecret,
+      AD_SERVICE_SECRET_ARN: adServiceSecretArn,
+    };
+
+    // GET /sessions/{sessionId}/promo/drawer — list creatives (host only)
+    const promoResource = sessionIdResource.addResource('promo');
+    const promoDrawerResource = promoResource.addResource('drawer');
+    const getPromoDrawerFn = new NodejsFunction(this, 'GetPromoDrawerHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-promo-drawer.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getPromoDrawerFn);
+    promoDrawerResource.addMethod('GET', new apigateway.LambdaIntegration(getPromoDrawerFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/promo/trigger — emit overlay via IVS (host only)
+    const promoTriggerResource = promoResource.addResource('trigger');
+    const triggerPromoFn = new NodejsFunction(this, 'TriggerPromoHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/trigger-promo.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(triggerPromoFn);
+    triggerPromoFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:PutMetadata'],
+        resources: ['*'],
+      }),
+    );
+    triggerPromoFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
+      }),
+    );
+    promoTriggerResource.addMethod('POST', new apigateway.LambdaIntegration(triggerPromoFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/promo/click — record click + return CTA (any user)
+    const promoClickResource = promoResource.addResource('click');
+    const trackAdClickFn = new NodejsFunction(this, 'TrackAdClickHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/track-ad-click.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    promoClickResource.addMethod('POST', new apigateway.LambdaIntegration(trackAdClickFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

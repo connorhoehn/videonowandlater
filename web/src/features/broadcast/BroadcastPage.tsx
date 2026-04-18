@@ -26,6 +26,8 @@ import { SpotlightModal } from '../spotlight/SpotlightModal';
 import { useSpotlight } from '../spotlight/useSpotlight';
 import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
+import { AdDrawerPanel } from '../ads/AdDrawerPanel';
+import { AdOverlay } from '../ads/AdOverlay';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -303,6 +305,8 @@ function BroadcastContent({
                   healthScore={healthScore}
                   isLive={isLive}
                 />
+                {/* Ad overlay — broadcaster preview (chat-room fallback only; no HLS player ref here) */}
+                <AdOverlay sessionId={sessionId} isBroadcast={true} room={room} />
               </div>
 
               {/* Status row */}
@@ -426,14 +430,18 @@ function BroadcastContent({
             />
           )}
 
-          {/* ── Middle: Participants panel (desktop only) ── */}
+          {/* ── Middle: Participants panel + Ad drawer (desktop only) ── */}
           {!isMobile && (
-            <div className="w-[20%] border-r overflow-y-auto">
+            <div className="w-[20%] border-r overflow-y-auto flex flex-col gap-2">
               <ParticipantsPanel
                 userId={userId}
                 viewerCount={viewerCount}
                 isLive={isLive}
               />
+              {/* Host-only promotions drawer — feeds overlays via vnl-ads */}
+              <div className="p-2">
+                <AdDrawerPanel sessionId={sessionId} />
+              </div>
             </div>
           )}
 

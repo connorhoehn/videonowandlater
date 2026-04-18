@@ -29,6 +29,8 @@ import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { useUserKickListener, type UserKickedEvent } from '../chat/useUserKickListener';
 import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
+import { AdDrawerPanel } from '../ads/AdDrawerPanel';
+import { AdOverlay } from '../ads/AdOverlay';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -495,6 +497,16 @@ export function HangoutPage() {
                 apiBaseUrl={apiBaseUrl}
                 room={room}
               />
+            )}
+            {/* Host-only ad drawer — feeds overlays via vnl-ads */}
+            {sessionOwnerId && sessionOwnerId === userId && sessionId && (
+              <div className="absolute top-2 left-2 w-72 z-30">
+                <AdDrawerPanel sessionId={sessionId} />
+              </div>
+            )}
+            {/* Ad overlay — HANGOUT path: subscribes to IVS Chat ad_overlay events */}
+            {sessionId && (
+              <AdOverlay sessionId={sessionId} isBroadcast={false} room={room} />
             )}
             <FloatingReactions
               reactions={floatingReactions}

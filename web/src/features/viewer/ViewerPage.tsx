@@ -20,6 +20,7 @@ import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { useUserKickListener, type UserKickedEvent } from '../chat/useUserKickListener';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { Card, Avatar, useToast } from '../../components/social';
+import { AdOverlay } from '../ads/AdOverlay';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -110,7 +111,7 @@ export function ViewerPage() {
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
-  const { videoRef, isPlaying, isMuted, toggleMute, sessionStatus, error } = usePlayer({
+  const { videoRef, player, isPlaying, isMuted, toggleMute, sessionStatus, error } = usePlayer({
     sessionId,
     apiBaseUrl,
   });
@@ -226,6 +227,8 @@ export function ViewerPage() {
                   <VideoPlayer videoRef={videoRef} isPlaying={isPlaying} isMuted={isMuted} onToggleMute={toggleMute} />
                   {/* Floating reactions overlay */}
                   <FloatingReactions reactions={floatingReactions} />
+                  {/* Ad overlay — BROADCAST path: subscribes to IVS Player TEXT_METADATA_CUE */}
+                  <AdOverlay sessionId={sessionId} isBroadcast={true} player={player} />
                 </div>
               </Card.Body>
             </Card>

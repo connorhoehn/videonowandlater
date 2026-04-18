@@ -1753,6 +1753,90 @@ export class ApiStack extends Stack {
       });
     }
 
+    // ============================================================
+    // === Phase 1b: Roles (Cognito group management via admin UI) ===
+    // ============================================================
+    const adminRoles = admin.addResource('roles');
+    const adminRoleByName = adminRoles.addResource('{roleName}');
+    const adminRoleMembers = adminRoleByName.addResource('members');
+    const adminRoleMemberByUsername = adminRoleMembers.addResource('{username}');
+    const adminUsers = admin.addResource('users');
+
+    const roleEnv = {
+      USER_POOL_ID: props.userPool.userPoolId,
+    };
+
+    const cognitoAdminActions = [
+      'cognito-idp:ListUsersInGroup',
+      'cognito-idp:AdminAddUserToGroup',
+      'cognito-idp:AdminRemoveUserFromGroup',
+      'cognito-idp:ListUsers',
+    ];
+
+    const adminListRoleMembersFn = new NodejsFunction(this, 'AdminListRoleMembers', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-role-members.ts'),
+      timeout: Duration.seconds(10),
+      environment: roleEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminListRoleMembersFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: cognitoAdminActions,
+      resources: [props.userPool.userPoolArn],
+    }));
+    adminRoleMembers.addMethod('GET', new apigateway.LambdaIntegration(adminListRoleMembersFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const adminAddToRoleFn = new NodejsFunction(this, 'AdminAddToRole', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-add-to-role.ts'),
+      timeout: Duration.seconds(10),
+      environment: roleEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminAddToRoleFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: cognitoAdminActions,
+      resources: [props.userPool.userPoolArn],
+    }));
+    adminRoleMembers.addMethod('POST', new apigateway.LambdaIntegration(adminAddToRoleFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const adminRemoveFromRoleFn = new NodejsFunction(this, 'AdminRemoveFromRole', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-remove-from-role.ts'),
+      timeout: Duration.seconds(10),
+      environment: roleEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminRemoveFromRoleFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: cognitoAdminActions,
+      resources: [props.userPool.userPoolArn],
+    }));
+    adminRoleMemberByUsername.addMethod('DELETE', new apigateway.LambdaIntegration(adminRemoveFromRoleFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const adminSearchUsersFn = new NodejsFunction(this, 'AdminSearchUsers', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-search-users.ts'),
+      timeout: Duration.seconds(10),
+      environment: roleEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminSearchUsersFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: cognitoAdminActions,
+      resources: [props.userPool.userPoolArn],
+    }));
+    adminUsers.addMethod('GET', new apigateway.LambdaIntegration(adminSearchUsersFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

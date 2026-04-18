@@ -20,6 +20,16 @@ export class AuthStack extends Stack {
       timeout: Duration.seconds(10),
     });
 
+    // Pre-token-generation Lambda: injects `custom:role` + `permVersion`
+    // derived from Cognito groups into the ID token claims.
+    const preTokenFn = new nodejs.NodejsFunction(this, 'PreTokenGeneration', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/auth-pre-token.ts'),
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      timeout: Duration.seconds(5),
+    });
+
     this.userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'vnl-user-pool',
       selfSignUpEnabled: true,
@@ -34,6 +44,7 @@ export class AuthStack extends Stack {
       },
       lambdaTriggers: {
         preSignUp: autoConfirmFn,
+        preTokenGeneration: preTokenFn,
       },
       removalPolicy: RemovalPolicy.DESTROY,
     });

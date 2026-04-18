@@ -31,6 +31,8 @@
     "@aws-sdk/client-transcribe": "^3.1003.0",
     "@aws-sdk/lib-dynamodb": "^3.1000.0",
     "@aws-sdk/s3-request-presigner": "^3.1003.0",
+    "@casl/ability": "^6.8.0",
+    "aws-jwt-verify": "^5.1.1",
     "commander": "^12.1.0",
     "jsonwebtoken": "^9.0.0",
     "uuid": "^10.0.0",

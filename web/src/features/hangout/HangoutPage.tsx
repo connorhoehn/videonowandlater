@@ -22,7 +22,8 @@ import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReac
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
 import { useSessionKillListener } from '../chat/useSessionKillListener';
-import { ConfirmModal } from '../../components/social';
+import { useUserKickListener, type UserKickedEvent } from '../chat/useUserKickListener';
+import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 
 export function HangoutPage() {
@@ -141,6 +142,24 @@ export function HangoutPage() {
     setKillError(`Session ended: ${reason}`);
     setTimeout(() => navigate('/'), 3000);
   }, [navigate]));
+
+  const { addToast } = useToast();
+  useUserKickListener({
+    room,
+    currentUserId: userId,
+    onSelfKicked: useCallback((e: UserKickedEvent) => {
+      const scopeLabel = e.scope === 'global' ? 'globally banned' : 'removed from chat';
+      setKillError(`You have been ${scopeLabel}: ${e.reason}`);
+      setTimeout(() => navigate('/'), 3000);
+    }, [navigate]),
+    onOtherKicked: useCallback((e: UserKickedEvent) => {
+      addToast({
+        variant: 'info',
+        title: e.scope === 'global' ? 'User globally banned' : 'User removed from chat',
+        description: `${e.userId}: ${e.reason}`,
+      });
+    }, [addToast]),
+  });
 
   useAiAgentListener(room, {
     onJoining: useCallback(() => {

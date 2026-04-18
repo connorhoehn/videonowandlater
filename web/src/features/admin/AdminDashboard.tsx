@@ -6,8 +6,9 @@ import { CostSummaryPanel } from './CostSummaryPanel';
 import { AuditLogPanel } from './AuditLogPanel';
 import { ModerationQueuePanel } from './ModerationQueuePanel';
 import { AppealsPanel } from './AppealsPanel';
+import { BannedUsersPanel } from './BannedUsersPanel';
 
-type TabId = 'sessions' | 'costs' | 'audit' | 'moderation' | 'appeals';
+type TabId = 'sessions' | 'costs' | 'audit' | 'moderation' | 'appeals' | 'bans';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
@@ -15,6 +16,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'audit', label: 'Audit Log' },
   { id: 'moderation', label: 'Moderation Queue' },
   { id: 'appeals', label: 'Appeals' },
+  { id: 'bans', label: 'Banned Users' },
 ];
 
 interface QuickStats {
@@ -135,6 +137,9 @@ export function AdminDashboard() {
           )}
           {activeTab === 'appeals' && (
             <AppealsPanel authToken={authToken} apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'bans' && (
+            <BannedUsersPanel authToken={authToken} apiBaseUrl={apiBaseUrl} />
           )}
         </div>
       </div>

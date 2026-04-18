@@ -1377,6 +1377,7 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+<<<<<<< HEAD
     // === Phase 1: Groups ===
     // User-created groups + RBAC. All routes use the existing Cognito authorizer.
     const groupsResource = api.root.addResource('groups');
@@ -1485,6 +1486,71 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadWriteData(groupPromoteMemberFn);
     groupMemberByIdResource.addMethod('PATCH', new apigateway.LambdaIntegration(groupPromoteMemberFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // === Phase 3: Ban Management ===
+    //
+    // Global (cross-session) chat bans. The existing per-session BOUNCE
+    // endpoints remain — these routes extend the system with admin-issued
+    // bans that block token issuance on ALL sessions.
+    const adminBans = admin.addResource('bans');
+    const adminBanByUser = adminBans.addResource('{userId}');
+
+    // POST /admin/bans — create a global ban
+    const adminCreateGlobalBanFn = new NodejsFunction(this, 'AdminCreateGlobalBan', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-create-global-ban.ts'),
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminCreateGlobalBanFn);
+    adminCreateGlobalBanFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
+        resources: ['*'],
+      }),
+    );
+    adminBans.addMethod('POST', new apigateway.LambdaIntegration(adminCreateGlobalBanFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/bans — list all active global bans
+    const adminListGlobalBansFn = new NodejsFunction(this, 'AdminListGlobalBans', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-global-bans.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminListGlobalBansFn);
+    adminBans.addMethod('GET', new apigateway.LambdaIntegration(adminListGlobalBansFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // DELETE /admin/bans/{userId} — lift a user's global ban
+    const adminLiftGlobalBanFn = new NodejsFunction(this, 'AdminLiftGlobalBan', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-lift-global-ban.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(adminLiftGlobalBanFn);
+    adminBanByUser.addMethod('DELETE', new apigateway.LambdaIntegration(adminLiftGlobalBanFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
     new CfnOutput(this, 'ApiUrl', {

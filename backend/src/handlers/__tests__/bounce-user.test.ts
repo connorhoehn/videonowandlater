@@ -116,7 +116,7 @@ describe('bounce-user handler', () => {
     expect(mockDynamoSend).not.toHaveBeenCalled();
   });
 
-  test('returns 200, calls DisconnectUserCommand, writes BOUNCE record when caller is session owner', async () => {
+  test('returns 200, emits user_kicked event, calls DisconnectUserCommand, writes BOUNCE record when caller is session owner', async () => {
     mockGetSessionById.mockResolvedValue(mockSession);
     const event = createEvent({ actorId: ACTOR_ID });
     const result = await handler(event, mockContext, mockCallback) as APIGatewayProxyResult;
@@ -125,10 +125,22 @@ describe('bounce-user handler', () => {
     expect(result.headers?.['Access-Control-Allow-Origin']).toBe('*');
     expect(JSON.parse(result.body).message).toBe('User bounced');
 
-    // DisconnectUserCommand was sent to IVS Chat
-    expect(mockIvsSend).toHaveBeenCalledTimes(1);
-    const ivsSendArg = mockIvsSend.mock.calls[0][0];
-    expect(ivsSendArg.input).toMatchObject({
+    // Two IVS Chat calls: SendEvent (user_kicked) first, then DisconnectUserCommand.
+    expect(mockIvsSend).toHaveBeenCalledTimes(2);
+
+    const sendEventArg = mockIvsSend.mock.calls[0][0];
+    expect(sendEventArg.input).toMatchObject({
+      roomIdentifier: CHAT_ROOM_ARN,
+      eventName: 'user_kicked',
+      attributes: {
+        userId: TARGET_USER_ID,
+        reason: 'Removed by broadcaster',
+        scope: 'session',
+      },
+    });
+
+    const disconnectArg = mockIvsSend.mock.calls[1][0];
+    expect(disconnectArg.input).toMatchObject({
       roomIdentifier: CHAT_ROOM_ARN,
       userId: TARGET_USER_ID,
       reason: 'Removed by broadcaster',
@@ -153,6 +165,8 @@ describe('bounce-user handler', () => {
     const resourceNotFoundError = Object.assign(new Error('Resource not found'), {
       name: 'ResourceNotFoundException',
     });
+    // 1st IVS call is SendEvent (succeeds), 2nd is DisconnectUser which throws.
+    mockIvsSend.mockResolvedValueOnce({});
     mockIvsSend.mockRejectedValueOnce(resourceNotFoundError);
 
     const event = createEvent({ actorId: ACTOR_ID });

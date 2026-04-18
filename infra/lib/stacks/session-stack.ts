@@ -14,6 +14,7 @@ import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as s3Notifications from 'aws-cdk-lib/aws-s3-notifications';
 import * as path from 'path';
 import { Construct } from 'constructs';
 import { IvsCleanupResource } from '../constructs/ivs-cleanup-resource';
@@ -42,6 +43,7 @@ export class SessionStack extends Stack {
   public readonly mediaConvertTopic!: sns.Topic;
   public readonly cloudfrontDomainName: string;
   public readonly webhookDeliveryQueue: sqs.Queue;
+  public readonly moderationBucket!: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: SessionStackProps) {
     super(scope, id, props);
@@ -1480,6 +1482,119 @@ export class SessionStack extends Stack {
       schedule: events.Schedule.rate(Duration.hours(1)),
       targets: [new targets.LambdaFunction(autoUnpinSessionsFn)],
       description: 'Auto-unpin sessions pinned longer than 24 hours',
+    });
+
+    // ============================================================
+    // === Phase 4: Image Moderation ===
+    // Client-side frame capture → presigned S3 PUT → S3 ObjectCreated → moderate-frame Lambda
+    // Lambda invokes Nova Lite (amazon.nova-lite-v1:0) with the admin-configured ruleset.
+    // ============================================================
+
+    const moderationBucket = new s3.Bucket(this, 'ModerationFramesBucket', {
+      bucketName: `vnl-moderation-frames-${this.account}`,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          maxAge: 3000,
+        },
+      ],
+      lifecycleRules: [
+        {
+          id: 'expire-1-day',
+          enabled: true,
+          expiration: Duration.days(1),
+          abortIncompleteMultipartUploadAfter: Duration.days(1),
+        },
+      ],
+    });
+
+    // Expose as public readonly via Object.defineProperty (TypeScript readonly is compile-time only)
+    (this as any).moderationBucket = moderationBucket;
+
+    const moderateFrameFn = new nodejs.NodejsFunction(this, 'ModerateFrame', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/moderate-frame.ts'),
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        MODERATION_BUCKET: moderationBucket.bucketName,
+        NOVA_MODEL_ID: 'amazon.nova-lite-v1:0',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'ModerateFrameLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    // DynamoDB: read session/ruleset, write MOD rows + strike counter
+    this.table.grantReadWriteData(moderateFrameFn);
+
+    // S3: read and delete frames on the moderation bucket
+    moderationBucket.grantRead(moderateFrameFn);
+    moderationBucket.grantDelete(moderateFrameFn);
+
+    // Bedrock InvokeModel for Nova Lite (and fallback models for future-proofing)
+    moderateFrameFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
+        ],
+      }),
+    );
+
+    // IVS Chat: emit moderation_violation events + disconnect hangout users
+    moderateFrameFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
+        resources: ['*'],
+      }),
+    );
+
+    // IVS: stop broadcast stream on 3rd strike
+    moderateFrameFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:StopStream'],
+        resources: ['*'],
+      }),
+    );
+
+    // IVS Realtime: disconnect hangout participants on 3rd strike
+    moderateFrameFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:DisconnectParticipant'],
+        resources: ['*'],
+      }),
+    );
+
+    // EventBridge PutEvents (emitSessionEvent)
+    moderateFrameFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+      }),
+    );
+
+    // Wire S3 ObjectCreated → moderate-frame (only .jpg frames)
+    moderationBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3Notifications.LambdaDestination(moderateFrameFn),
+      { suffix: '.jpg' },
+    );
+
+    new CfnOutput(this, 'ModerationBucketName', {
+      value: moderationBucket.bucketName,
+      description: 'S3 bucket for Phase 4 moderation frames',
     });
   }
 }

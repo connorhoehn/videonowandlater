@@ -14,6 +14,10 @@ const MAX_RETRIES = 3;
 interface CreateSessionRequest {
   userId: string;
   sessionType: SessionType;
+  // Phase 4: image moderation (Nova Lite) — optional
+  moderationEnabled?: boolean;
+  rulesetName?: string;
+  rulesetVersion?: number;
 }
 
 interface CreateSessionResponse {
@@ -41,6 +45,9 @@ interface GetSessionResponse {
   transcriptStatus?: 'pending' | 'processing' | 'available' | 'failed';
   convertStatus?: 'pending' | 'processing' | 'available' | 'failed';
   mediaConvertJobName?: string;
+  // Phase 4: image moderation
+  moderationEnabled?: boolean;
+  rulesetName?: string;
 }
 
 /**
@@ -115,6 +122,15 @@ export async function createNewSession(
     stageArn,
     createdAt: new Date().toISOString(),
     version: 1,
+    // Phase 4: pin ruleset at session creation (never read CURRENT at runtime)
+    ...(request.moderationEnabled
+      ? {
+          moderationEnabled: true,
+          rulesetName: request.rulesetName,
+          rulesetVersion: request.rulesetVersion,
+          moderationStrikes: 0,
+        }
+      : {}),
   };
 
   await createSession(tableName, session);
@@ -180,5 +196,8 @@ export async function getSession(tableName: string, sessionId: string): Promise<
     transcriptStatus: session.transcriptStatus,
     convertStatus: session.convertStatus,
     mediaConvertJobName: session.mediaConvertJobName,
+    // Phase 4: safe-to-expose fields for moderation UI (version/strikes are NOT exposed)
+    moderationEnabled: session.moderationEnabled,
+    rulesetName: session.rulesetName,
   };
 }

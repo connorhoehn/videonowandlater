@@ -29,6 +29,7 @@ new ApiStack(app, 'VNL-Api', {
   cloudfrontDomainName: storageStack.cloudfrontDomainName,
   webhookQueueUrl: sessionStack.webhookDeliveryQueue.queueUrl,
   webhookQueueArn: sessionStack.webhookDeliveryQueue.queueArn,
+  moderationBucket: sessionStack.moderationBucket,
 });
 new AgentStack(app, 'VNL-Agent', {
   env,

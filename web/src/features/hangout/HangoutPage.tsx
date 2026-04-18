@@ -11,6 +11,7 @@ import { fetchToken } from '../../auth/fetchToken';
 import { v4 as uuidv4 } from 'uuid';
 import { useHangout } from './useHangout';
 import { useFrameReporter } from './useFrameReporter';
+import { useModerationCapture } from './useModerationCapture';
 import { useActiveSpeaker } from './useActiveSpeaker';
 import { VideoGrid } from './VideoGrid';
 import { LobbyWaitingRoom } from './LobbyWaitingRoom';
@@ -152,6 +153,24 @@ export function HangoutPage() {
   }, [sessionId, authToken, apiBaseUrl]);
 
   useFrameReporter(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined);
+
+  // Phase 4: image moderation — fetch session metadata to learn whether moderation is enabled.
+  const [moderationEnabled, setModerationEnabled] = useState(false);
+  React.useEffect(() => {
+    if (!authToken || !sessionId || !apiBaseUrl) return;
+    let cancelled = false;
+    fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { moderationEnabled?: boolean } | null) => {
+        if (!cancelled && data?.moderationEnabled) setModerationEnabled(true);
+      })
+      .catch(() => { /* non-blocking */ });
+    return () => { cancelled = true; };
+  }, [authToken, sessionId, apiBaseUrl]);
+
+  useModerationCapture(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined && moderationEnabled);
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
   const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId: sessionId || '', authToken });

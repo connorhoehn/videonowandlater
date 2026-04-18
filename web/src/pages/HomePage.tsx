@@ -32,6 +32,11 @@ export function HomePage() {
   const [, setIsCreating] = useState(false);
   const [, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  // Phase 4: Hangout moderation configuration
+  const [showHangoutOptions, setShowHangoutOptions] = useState(false);
+  const [availableRulesets, setAvailableRulesets] = useState<Array<{ name: string; severity: string }>>([]);
+  const [modEnabled, setModEnabled] = useState(false);
+  const [modRulesetName, setModRulesetName] = useState<string>('hangout');
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
@@ -75,6 +80,25 @@ export function HomePage() {
     }
   };
 
+  // Phase 4: open the Hangout options modal. Fetches admin rulesets so the user
+  // can opt into moderation at session-create time. Falls back silently if the
+  // list endpoint is unreachable (non-admins get 403) — users can still create
+  // a plain hangout.
+  const handleOpenHangout = async () => {
+    setShowHangoutOptions(true);
+    const config = getConfig();
+    if (!config?.apiUrl || !authToken) return;
+    try {
+      const resp = await fetch(`${config.apiUrl}/admin/rulesets`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as { rulesets: Array<{ name: string; severity: string }> };
+        setAvailableRulesets(data.rulesets);
+      }
+    } catch { /* non-blocking */ }
+  };
+
   const handleCreateHangout = async () => {
     // Phase 2: Show options dialog (requireApproval checkbox) instead of creating directly.
     setRequireApproval(false);
@@ -89,13 +113,19 @@ export function HomePage() {
     setShowHangoutOptions(false);
     try {
       const { token: authToken } = await fetchToken();
+      const body: Record<string, unknown> = { sessionType: 'HANGOUT', requireApproval };
+      if (modEnabled && modRulesetName) {
+        body.moderationEnabled = true;
+        body.rulesetName = modRulesetName;
+      }
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionType: 'HANGOUT', requireApproval }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(`${response.status}`);
       const sessionData = await response.json();
+      setShowHangoutOptions(false);
       navigate(`/hangout/${sessionData.sessionId}`, { state: { session: sessionData } });
     } catch {
       setError('Failed to create session. Try again.');
@@ -121,7 +151,7 @@ export function HomePage() {
           placeholder="What's on your mind?"
           actions={[
             { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast },
-            { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleCreateHangout },
+            { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleOpenHangout },
             { label: 'Story', icon: <PhotoIcon size={16} />, color: 'text-orange-500', onClick: () => setShowStoryCreator(true) },
             { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
           ]}
@@ -291,6 +321,72 @@ export function HomePage() {
               authToken={authToken}
               onClose={() => setShowUploadModal(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: Hangout Options Modal (moderation toggle + ruleset picker) */}
+      {showHangoutOptions && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 animate-backdrop-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowHangoutOptions(false); }}
+        >
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full sm:mx-4 animate-dialog-in shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Start Hangout</h3>
+            <label className="flex items-start gap-3 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={modEnabled}
+                onChange={(e) => setModEnabled(e.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-800">Enable image moderation</span>
+                <span className="block text-xs text-gray-500">
+                  Captures a frame every 10s and runs it through a Nova Lite classifier.
+                </span>
+              </span>
+            </label>
+            {modEnabled && (
+              <div className="mb-4 ml-7">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Ruleset</label>
+                <select
+                  className="w-full px-3 py-2 rounded-md border border-gray-300 bg-white text-sm text-gray-900"
+                  value={modRulesetName}
+                  onChange={(e) => setModRulesetName(e.target.value)}
+                >
+                  {availableRulesets.length === 0 ? (
+                    <>
+                      <option value="hangout">hangout</option>
+                      <option value="classroom">classroom</option>
+                      <option value="broadcast">broadcast</option>
+                    </>
+                  ) : (
+                    availableRulesets.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        {r.name} ({r.severity})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => setShowHangoutOptions(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-500"
+                onClick={handleCreateHangout}
+              >
+                Start
+              </button>
+            </div>
           </div>
         </div>
       )}

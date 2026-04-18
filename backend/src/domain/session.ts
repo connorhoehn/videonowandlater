@@ -179,6 +179,15 @@ export interface Session {
   // Phase 2: Hangout lobby (host approval required to join)
   /** When true, non-owner participants enter a waiting room; host must approve or deny */
   requireApproval?: boolean;
+  // Phase 4: Image moderation (Nova Lite)
+  /** Whether client-side frame capture + Nova Lite classification is active for this session */
+  moderationEnabled?: boolean;
+  /** Admin-configured ruleset name (e.g. 'classroom', 'hangout', 'broadcast') */
+  rulesetName?: string;
+  /** Ruleset version pinned at session creation — never read CURRENT at runtime */
+  rulesetVersion?: number;
+  /** Count of high-confidence moderation flags (auto-bounce when >= 3) */
+  moderationStrikes?: number;
 }
 
 /**

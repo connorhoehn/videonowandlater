@@ -20,6 +20,7 @@ import {
   updateSessionStatus,
   addHangoutParticipant,
   createLobbyRequest,
+  getLobbyRequest,
 } from '../repositories/session-repository';
 import { SessionType, SessionStatus } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
@@ -73,7 +74,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // === Phase 2: Lobby flow ===
     // Non-owner joining a hangout that requires approval → mint SUBSCRIBE-only token
     // and write a LOBBY request. Host must approve via POST /lobby/{userId}/approve.
-    const needsApproval = session.requireApproval === true && userId !== session.userId;
+    // Short-circuit: if an approved lobby row already exists, treat as a normal join.
+    const existingLobby = session.requireApproval === true && userId !== session.userId
+      ? await getLobbyRequest(tableName, sessionId, userId)
+      : null;
+    const needsApproval = session.requireApproval === true
+      && userId !== session.userId
+      && (!existingLobby || existingLobby.status !== 'approved');
 
     if (needsApproval) {
       const pendingCommand = new CreateParticipantTokenCommand({

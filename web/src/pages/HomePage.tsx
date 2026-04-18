@@ -42,8 +42,7 @@ export function HomePage() {
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [error, setError] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
-  // Phase 2: Hangout lobby options modal
-  const [showHangoutOptions, setShowHangoutOptions] = useState(false);
+  // Phase 2: Hangout lobby options
   const [requireApproval, setRequireApproval] = useState(false);
 
   useEffect(() => {

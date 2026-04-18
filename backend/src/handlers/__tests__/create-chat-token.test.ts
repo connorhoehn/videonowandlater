@@ -1,7 +1,12 @@
 /**
  * Tests for create-chat-token handler
  * POST /sessions/:sessionId/chat/token - generate IVS Chat token
- * Includes tests for isBounced blocklist check (Phase 28).
+ * Includes tests for isBounced blocklist check (Phase 28) and global ban check (Phase 3).
+ *
+ * Note: isUserBanned() issues two DDB calls in order:
+ *   1. GetCommand (global ban)  — Item present + unexpired ⇒ banned
+ *   2. QueryCommand (per-session BOUNCE) — Count > 0 ⇒ banned
+ * The default mock returns an empty response so both checks pass (user is not banned).
  */
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
@@ -26,7 +31,7 @@ describe('create-chat-token handler', () => {
       TABLE_NAME: 'test-table',
     };
     jest.clearAllMocks();
-    // Default: user is NOT bounced (Count = 0) so existing tests aren't affected
+    // Default: not banned. Get returns no Item (no global ban), Query returns Count 0.
     mockGetDocumentClient.mockReturnValue({ send: mockDynamoSend } as any);
     mockDynamoSend.mockResolvedValue({ Count: 0, Items: [] });
   });
@@ -130,9 +135,11 @@ describe('create-chat-token handler', () => {
     }
   });
 
-  describe('isBounced blocklist check', () => {
+  describe('isBounced blocklist check (per-session BOUNCE)', () => {
     it('returns 403 with "You have been removed from this chat" when user is bounced', async () => {
-      // Simulate a BOUNCE record being found (Count = 1)
+      // 1st call: Get for global ban — no Item (not globally banned)
+      mockDynamoSend.mockResolvedValueOnce({});
+      // 2nd call: Query for per-session BOUNCE — found
       mockDynamoSend.mockResolvedValueOnce({ Count: 1, Items: [{ actionType: 'BOUNCE' }] });
 
       const event = {
@@ -151,7 +158,8 @@ describe('create-chat-token handler', () => {
       expect(body.error).toBe('You have been removed from this chat');
     });
 
-    it('calls QueryCommand with correct parameters for isBounced check', async () => {
+    it('calls QueryCommand with correct parameters for per-session bounce check', async () => {
+      mockDynamoSend.mockResolvedValueOnce({}); // global ban Get — no Item
       mockDynamoSend.mockResolvedValueOnce({ Count: 1, Items: [{ actionType: 'BOUNCE' }] });
 
       const event = {
@@ -165,8 +173,9 @@ describe('create-chat-token handler', () => {
 
       await handler(event, mockContext, mockCallback);
 
-      expect(mockDynamoSend).toHaveBeenCalledTimes(1);
-      const queryArg = mockDynamoSend.mock.calls[0][0];
+      // 1st call is the Get for global ban, 2nd is the per-session Query.
+      expect(mockDynamoSend).toHaveBeenCalledTimes(2);
+      const queryArg = mockDynamoSend.mock.calls[1][0];
       expect(queryArg.input).toMatchObject({
         TableName: 'test-table',
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
@@ -182,9 +191,10 @@ describe('create-chat-token handler', () => {
       });
     });
 
-    it('proceeds to generateChatToken when isBounced returns false (Count = 0)', async () => {
-      // Not bounced — DynamoDB returns Count: 0
-      mockDynamoSend.mockResolvedValueOnce({ Count: 0, Items: [] });
+    it('proceeds to generateChatToken when not banned (no global ban, Count = 0)', async () => {
+      // Not banned at either level
+      mockDynamoSend.mockResolvedValueOnce({}); // no global ban
+      mockDynamoSend.mockResolvedValueOnce({ Count: 0, Items: [] }); // no bounce
 
       const event = {
         pathParameters: { sessionId: 'session-123' },
@@ -201,6 +211,72 @@ describe('create-chat-token handler', () => {
       expect(result.statusCode).not.toBe(403);
       // Will be 404 or 500 (no real DynamoDB/IVS connection in unit test)
       expect([404, 500]).toContain(result.statusCode);
+    });
+  });
+
+  describe('global ban blocklist check (Phase 3)', () => {
+    it('returns 403 when user has an active global ban (short-circuits before per-session query)', async () => {
+      // 1st call: Get returns a GLOBAL_BAN Item ⇒ short-circuit as banned.
+      mockDynamoSend.mockResolvedValueOnce({
+        Item: {
+          PK: 'USER#banned-user',
+          SK: 'GLOBAL_BAN',
+          userId: 'banned-user',
+          bannedBy: 'admin-user',
+          reason: 'Spam',
+          bannedAt: '2026-04-10T00:00:00.000Z',
+        },
+      });
+
+      const event = {
+        pathParameters: { sessionId: 'session-123' },
+        requestContext: {
+          authorizer: {
+            claims: { 'cognito:username': 'banned-user' },
+          },
+        },
+      } as any as APIGatewayProxyEvent;
+
+      const result = await handler(event, mockContext, mockCallback) as APIGatewayProxyResult;
+
+      expect(result.statusCode).toBe(403);
+      expect(JSON.parse(result.body).error).toBe('You have been removed from this chat');
+      // Only the global ban Get should have fired — per-session query is short-circuited.
+      expect(mockDynamoSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats expired global ban as NOT banned (falls through to session check)', async () => {
+      const yesterday = new Date(Date.now() - 86400 * 1000).toISOString();
+      mockDynamoSend.mockResolvedValueOnce({
+        Item: {
+          PK: 'USER#ex-banned',
+          SK: 'GLOBAL_BAN',
+          userId: 'ex-banned',
+          bannedBy: 'admin',
+          reason: 'old ban',
+          bannedAt: '2026-01-01T00:00:00.000Z',
+          expiresAt: yesterday,
+        },
+      });
+      // Per-session check returns 0 → not banned
+      mockDynamoSend.mockResolvedValueOnce({ Count: 0, Items: [] });
+
+      const event = {
+        pathParameters: { sessionId: 'session-123' },
+        requestContext: {
+          authorizer: {
+            claims: { 'cognito:username': 'ex-banned' },
+          },
+        },
+      } as any as APIGatewayProxyEvent;
+
+      const result = await handler(event, mockContext, mockCallback) as APIGatewayProxyResult;
+
+      expect(result.statusCode).not.toBe(403);
+      // Both ban checks fired (global expired → session check ran). Calls beyond
+      // the first two are getSessionById inside generateChatToken — which we don't
+      // assert on here.
+      expect(mockDynamoSend.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

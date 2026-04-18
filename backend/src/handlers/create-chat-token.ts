@@ -1,37 +1,14 @@
 /**
  * POST /sessions/{sessionId}/chat/token handler - generate chat token
- * Includes a blocklist check: bounced users cannot obtain a new token.
+ * Includes a blocklist check: banned users (global or per-session) cannot obtain a token.
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { generateChatToken } from '../services/chat-service';
-import { getDocumentClient } from '../lib/dynamodb-client';
+import { isUserBanned } from '../repositories/ban-repository';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'create-chat-token' } });
-
-/**
- * Check whether a user has an active BOUNCE record for the given session.
- * Uses Limit: 1 to stop after finding the first match — short-circuits the query.
- */
-async function isBounced(tableName: string, sessionId: string, userId: string): Promise<boolean> {
-  const docClient = getDocumentClient();
-  const result = await docClient.send(new QueryCommand({
-    TableName: tableName,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-    FilterExpression: 'actionType = :actionType AND #userId = :userId',
-    ExpressionAttributeNames: { '#userId': 'userId' },
-    ExpressionAttributeValues: {
-      ':pk': `SESSION#${sessionId}`,
-      ':skPrefix': 'MOD#',
-      ':actionType': 'BOUNCE',
-      ':userId': userId,
-    },
-    Limit: 1,
-  }));
-  return (result.Count ?? 0) > 0;
-}
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.TABLE_NAME!;
@@ -60,8 +37,8 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
-  // Blocklist check: deny token if user has been bounced from this session
-  if (await isBounced(tableName, sessionId, userId)) {
+  // Blocklist check: deny token if user is banned (globally or from this session)
+  if (await isUserBanned(tableName, userId, sessionId)) {
     return {
       statusCode: 403,
       headers: {

@@ -5,7 +5,7 @@
  */
 
 import type { APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DisconnectUserCommand } from '@aws-sdk/client-ivschat';
+import { DisconnectUserCommand, SendEventCommand } from '@aws-sdk/client-ivschat';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { getIVSChatClient } from '../lib/ivs-clients';
@@ -64,7 +64,31 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     return resp(403, { error: 'Only the session owner can bounce users' });
   }
 
-  // 6. Disconnect user from IVS Chat (best-effort — catch ResourceNotFoundException)
+  // 6a. Emit a `user_kicked` chat event BEFORE disconnecting so remaining
+  //     clients can render a kick banner / toast. Best-effort — never fatal.
+  if (session.claimedResources?.chatRoom) {
+    try {
+      await getIVSChatClient().send(
+        new SendEventCommand({
+          roomIdentifier: session.claimedResources.chatRoom,
+          eventName: 'user_kicked',
+          attributes: {
+            userId: targetUserId,
+            reason: 'Removed by broadcaster',
+            scope: 'session',
+          },
+        })
+      );
+    } catch (err) {
+      logger.warn('SendEvent (user_kicked) failed — continuing', {
+        sessionId,
+        targetUserId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // 6b. Disconnect user from IVS Chat (best-effort — catch ResourceNotFoundException)
   try {
     await getIVSChatClient().send(
       new DisconnectUserCommand({

@@ -448,6 +448,107 @@ export async function findSessionByStageArn(
 }
 
 /**
+ * Hangout lobby request (Phase 2 — lobby approval flow)
+ * Stored at PK: SESSION#<id>, SK: LOBBY#<userId>
+ */
+export interface LobbyRequest {
+  sessionId: string;
+  userId: string;
+  displayName: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'denied';
+  /** IVS participant id from the SUBSCRIBE-only token — used for DisconnectParticipant on deny */
+  ivsParticipantId?: string;
+}
+
+/**
+ * Create or upsert a pending lobby request
+ */
+export async function createLobbyRequest(
+  tableName: string,
+  req: LobbyRequest,
+): Promise<void> {
+  const docClient = getDocumentClient();
+  await docClient.send(new PutCommand({
+    TableName: tableName,
+    Item: {
+      PK: `SESSION#${req.sessionId}`,
+      SK: `LOBBY#${req.userId}`,
+      entityType: 'LOBBY_REQUEST',
+      GSI1PK: `SESSION#${req.sessionId}#LOBBY`,
+      GSI1SK: req.requestedAt,
+      ...req,
+    },
+  }));
+}
+
+/**
+ * Fetch a single lobby request by session and user id
+ */
+export async function getLobbyRequest(
+  tableName: string,
+  sessionId: string,
+  userId: string,
+): Promise<LobbyRequest | null> {
+  const docClient = getDocumentClient();
+  const result = await docClient.send(new GetCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: `LOBBY#${userId}`,
+    },
+  }));
+  if (!result.Item) return null;
+  const { PK, SK, GSI1PK, GSI1SK, entityType, ...req } = result.Item;
+  return req as LobbyRequest;
+}
+
+/**
+ * List pending lobby requests for a session
+ */
+export async function listLobbyRequests(
+  tableName: string,
+  sessionId: string,
+): Promise<LobbyRequest[]> {
+  const docClient = getDocumentClient();
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': `SESSION#${sessionId}`,
+      ':skPrefix': 'LOBBY#',
+    },
+  }));
+  if (!result.Items?.length) return [];
+  return result.Items.map(item => {
+    const { PK, SK, GSI1PK, GSI1SK, entityType, ...req } = item;
+    return req as LobbyRequest;
+  });
+}
+
+/**
+ * Update lobby request status (approved/denied)
+ */
+export async function updateLobbyRequestStatus(
+  tableName: string,
+  sessionId: string,
+  userId: string,
+  status: 'approved' | 'denied',
+): Promise<void> {
+  const docClient = getDocumentClient();
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: {
+      PK: `SESSION#${sessionId}`,
+      SK: `LOBBY#${userId}`,
+    },
+    UpdateExpression: 'SET #status = :status',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: { ':status': status },
+  }));
+}
+
+/**
  * Add hangout participant to session
  *
  * @param tableName DynamoDB table name

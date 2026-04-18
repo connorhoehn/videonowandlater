@@ -176,6 +176,9 @@ export interface Session {
   isPinned?: boolean;
   pinnedAt?: string;
   pinnedBy?: string;
+  // Phase 2: Hangout lobby (host approval required to join)
+  /** When true, non-owner participants enter a waiting room; host must approve or deny */
+  requireApproval?: boolean;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -7,6 +7,8 @@ import { useSidebarData } from '../hooks/useSidebarData';
 import { useAuth } from '../auth/useAuth';
 import { ActivityProvider } from '../hooks/useActivityData';
 import { PageTransition } from './PageTransition';
+import { fetchToken } from '../auth/fetchToken';
+import { getConfig } from '../config/aws-config';
 import {
   AppShell,
   Navbar,
@@ -38,6 +40,34 @@ export function AuthenticatedShell() {
     () => FULL_WIDTH_PATTERNS.some(p => location.pathname.startsWith(p)),
     [location.pathname]
   );
+
+  // Pending-invite badge count — polled every 30s.
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
+  useEffect(() => {
+    const apiBaseUrl = getConfig()?.apiUrl;
+    if (!apiBaseUrl) return;
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const { token } = await fetchToken();
+        if (!token || cancelled) return;
+        const res = await fetch(`${apiBaseUrl}/invites/mine?status=pending`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { invites?: unknown[] };
+        if (!cancelled) setPendingInviteCount(data.invites?.length ?? 0);
+      } catch {
+        /* silent — the bell will just show 0 */
+      }
+    };
+    fetchCount();
+    const id = window.setInterval(fetchCount, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const navbar = (
     <Navbar
@@ -75,6 +105,26 @@ export function AuthenticatedShell() {
             </svg>
           </Link>
           <NavIconButton icon={<ChatIcon size={18} />} label="Messages" />
+          <button
+            type="button"
+            aria-label="Invitations"
+            title={
+              pendingInviteCount > 0
+                ? `${pendingInviteCount} pending invitation${pendingInviteCount === 1 ? '' : 's'}`
+                : 'Invitations'
+            }
+            onClick={() => navigate('/settings/invites')}
+            className="relative w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+          >
+            <svg className="w-[18px] h-[18px] text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {pendingInviteCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                {pendingInviteCount > 99 ? '99+' : pendingInviteCount}
+              </span>
+            )}
+          </button>
           <NotificationDropdown notifications={[]} unreadCount={0} />
           <UserAvatarDropdown
             user={{ name: user?.username ?? '' }}

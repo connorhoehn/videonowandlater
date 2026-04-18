@@ -22,6 +22,7 @@ import { AuthenticatedShell } from './components/AuthenticatedShell';
 import { SettingsShell } from './features/settings/SettingsShell';
 import { ProfilePanel } from './features/settings/ProfilePanel';
 import { GroupsPanel } from './features/settings/GroupsPanel';
+import { InvitesPanel } from './features/settings/InvitesPanel';
 import { AdminSettingsPanel } from './features/settings/AdminSettingsPanel';
 import { ToastProvider } from './components/social';
 
@@ -97,6 +98,7 @@ function App() {
               <Route index element={<Navigate to="profile" replace />} />
               <Route path="profile" element={<ProfilePanel />} />
               <Route path="groups" element={<GroupsPanel />} />
+              <Route path="invites" element={<InvitesPanel />} />
               <Route path="admin" element={<AdminSettingsPanel />} />
             </Route>
           </Route>

@@ -37,6 +37,7 @@ Config.local.xcconfig
 !backend/package.json
 !backend/tsconfig.json
 !backend/jest.config.js
+!backend/jest-dynamodb-config.js
 !tools/*.js
 
 # iOS build artifacts

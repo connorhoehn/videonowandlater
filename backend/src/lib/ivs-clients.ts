@@ -1,11 +1,18 @@
 /**
  * IVS client singletons
  * Lazy initialization pattern for Lambda execution optimization
+ *
+ * All clients are wrapped with AWS X-Ray tracing via Powertools so that
+ * IVS / IVS-Realtime / IVS-Chat SDK calls appear as subsegments in the
+ * trace tree produced by Lambdas running with `tracing: ACTIVE`.
  */
 
 import { IvsClient } from '@aws-sdk/client-ivs';
 import { IVSRealTimeClient } from '@aws-sdk/client-ivs-realtime';
 import { IvschatClient } from '@aws-sdk/client-ivschat';
+import { Tracer } from '@aws-lambda-powertools/tracer';
+
+const tracer = new Tracer({ serviceName: 'vnl' });
 
 let ivsClient: IvsClient | null = null;
 let ivsRealTimeClient: IVSRealTimeClient | null = null;
@@ -16,7 +23,7 @@ let ivsChatClient: IvschatClient | null = null;
  */
 export function getIVSClient(): IvsClient {
   if (!ivsClient) {
-    ivsClient = new IvsClient({});
+    ivsClient = tracer.captureAWSv3Client(new IvsClient({}));
   }
   return ivsClient;
 }
@@ -26,7 +33,7 @@ export function getIVSClient(): IvsClient {
  */
 export function getIVSRealTimeClient(): IVSRealTimeClient {
   if (!ivsRealTimeClient) {
-    ivsRealTimeClient = new IVSRealTimeClient({});
+    ivsRealTimeClient = tracer.captureAWSv3Client(new IVSRealTimeClient({}));
   }
   return ivsRealTimeClient;
 }
@@ -36,7 +43,7 @@ export function getIVSRealTimeClient(): IVSRealTimeClient {
  */
 export function getIVSChatClient(): IvschatClient {
   if (!ivsChatClient) {
-    ivsChatClient = new IvschatClient({});
+    ivsChatClient = tracer.captureAWSv3Client(new IvschatClient({}));
   }
   return ivsChatClient;
 }

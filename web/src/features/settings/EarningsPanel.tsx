@@ -7,6 +7,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchToken } from '../../auth/fetchToken';
 import { getConfig } from '../../config/aws-config';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from 'recharts';
 
 type PayoutStatus = 'pending' | 'paid' | 'processing';
 
@@ -33,6 +42,19 @@ interface EarningsResponse {
   };
 }
 
+interface SeriesPoint {
+  bucket: string;
+  impressions: number;
+  clicks?: number;
+}
+
+interface SeriesResponse {
+  series: SeriesPoint[];
+  from: string | null;
+  to: string | null;
+  granularity: string;
+}
+
 function centsToUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
@@ -45,6 +67,7 @@ function formatDate(iso: string | null): string {
 export function EarningsPanel() {
   const apiBaseUrl = getConfig()?.apiUrl ?? '';
   const [data, setData] = useState<EarningsResponse | null>(null);
+  const [series, setSeries] = useState<SeriesResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,15 +76,22 @@ export function EarningsPanel() {
     setErr(null);
     try {
       const { token } = await fetchToken();
-      const res = await fetch(`${apiBaseUrl}/me/earnings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const body = (await res.json()) as EarningsResponse;
-      setData(body);
+      const headers = { Authorization: `Bearer ${token}` };
+      const [earningsRes, seriesRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/me/earnings`, { headers }),
+        fetch(`${apiBaseUrl}/me/impression-series?granularity=day`, { headers }),
+      ]);
+      if (!earningsRes.ok) throw new Error(`${earningsRes.status}`);
+      setData((await earningsRes.json()) as EarningsResponse);
+      if (seriesRes.ok) {
+        setSeries((await seriesRes.json()) as SeriesResponse);
+      } else {
+        setSeries({ series: [], from: null, to: null, granularity: 'day' });
+      }
     } catch (e: any) {
       setErr(`Failed to load earnings: ${e.message}`);
       setData(null);
+      setSeries(null);
     } finally {
       setLoading(false);
     }
@@ -98,6 +128,35 @@ export function EarningsPanel() {
         <Card label="Impressions" value={loading ? '…' : (agg?.totalImpressions ?? 0).toLocaleString()} />
         <Card label="CTR" value={loading ? '…' : ctr !== null ? `${ctr.toFixed(2)}%` : '—'} />
       </div>
+
+      {series && series.series.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+            Impressions (last 30 days)
+          </h3>
+          <div style={{ width: '100%', height: 220 }}>
+            <ResponsiveContainer>
+              <LineChart data={series.series}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="bucket"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: string) => v.slice(5, 10)}
+                />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12 }}
+                  labelFormatter={(v: string) => new Date(v).toLocaleDateString()}
+                />
+                <Line type="monotone" dataKey="impressions" stroke="#2563eb" strokeWidth={2} dot={false} />
+                {series.series.some((p) => typeof p.clicks === 'number') && (
+                  <Line type="monotone" dataKey="clicks" stroke="#10b981" strokeWidth={2} dot={false} />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">

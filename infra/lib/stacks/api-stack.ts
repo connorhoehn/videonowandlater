@@ -2183,6 +2183,20 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // GET /me/impression-series — time-series passthrough for earnings charts.
+    const meImpressionSeriesResource = meResource.addResource('impression-series');
+    const getMyImpressionSeriesFn = new NodejsFunction(this, 'GetMyImpressionSeries', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-impression-series.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meImpressionSeriesResource.addMethod('GET', new apigateway.LambdaIntegration(getMyImpressionSeriesFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

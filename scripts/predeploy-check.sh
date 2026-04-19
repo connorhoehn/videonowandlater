@@ -29,6 +29,27 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+# ── 1b. Local file: deps resolvable (vnl-ads client + admin-ui) ─────────────
+echo -n "  @vnl/ads-client (local file dep)... "
+if [ -f "node_modules/@vnl/ads-client/package.json" ]; then
+  ADS_CLIENT_VER=$(jq -r '.version' node_modules/@vnl/ads-client/package.json 2>/dev/null || echo "?")
+  echo -e "${GREEN}OK${RESET} (v$ADS_CLIENT_VER)"
+else
+  echo -e "${RED}MISSING${RESET} — run: npm install"
+  echo -e "    ${DIM}Check that ../vnl-ads/client exists and is built (npm run build in vnl-ads/client).${RESET}"
+  ERRORS=$((ERRORS + 1))
+fi
+
+echo -n "  @vnl/ads-admin-ui (local file dep)... "
+if [ -f "node_modules/@vnl/ads-admin-ui/package.json" ]; then
+  ADS_UI_VER=$(jq -r '.version' node_modules/@vnl/ads-admin-ui/package.json 2>/dev/null || echo "?")
+  echo -e "${GREEN}OK${RESET} (v$ADS_UI_VER)"
+else
+  echo -e "${RED}MISSING${RESET} — run: npm install"
+  echo -e "    ${DIM}Check that ../vnl-ads/admin-ui exists and is built.${RESET}"
+  ERRORS=$((ERRORS + 1))
+fi
+
 # ── 2. Backend TypeScript ────────────────────────────────────────────────────
 echo -n "  Backend TypeScript... "
 if (cd backend && npx tsc --noEmit) > /dev/null 2>&1; then
@@ -137,7 +158,7 @@ echo -e "${GREEN}${STORAGE_CONFIGS} existing${RESET}"
 # 8d. Check CloudFormation stack status (detect ROLLBACK states, auto-fix ROLLBACK_COMPLETE)
 echo -n "  CloudFormation stack status... "
 STACK_ERRORS=0
-for STACK in VNL-Storage VNL-Session VNL-Api VNL-Auth VNL-Web VNL-Monitoring; do
+for STACK in VNL-Storage VNL-Session VNL-Api VNL-Auth VNL-Web VNL-Monitoring VNL-Agent; do
   STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
   if [ "$STATUS" = "ROLLBACK_COMPLETE" ]; then
     # Stack failed on first create and rolled back — must be deleted before CDK can recreate
@@ -188,6 +209,41 @@ if [ -n "$POOL_ID" ] && [ "$POOL_ID" != "None" ]; then
   fi
 else
   echo -e "${DIM}not found (will be created)${RESET}"
+fi
+
+# 8g. Check moderation frames bucket (Phase 4 — auto-created by CDK)
+echo -n "  Moderation frames bucket... "
+MOD_BUCKET=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'vnl-moderation-frames-')].Name" --output text 2>/dev/null | head -1)
+if [ -n "$MOD_BUCKET" ] && [ "$MOD_BUCKET" != "None" ]; then
+  echo -e "${GREEN}OK${RESET} ($MOD_BUCKET)"
+else
+  echo -e "${DIM}not found (will be created)${RESET}"
+fi
+
+# 8h. Check ECR repo for VNL-Agent container
+echo -n "  ECR repository (vnl-ai-agent)... "
+if aws ecr describe-repositories --repository-names vnl-ai-agent > /dev/null 2>&1; then
+  echo -e "${GREEN}OK${RESET}"
+else
+  echo -e "${DIM}not found (will be created by VNL-Agent deploy)${RESET}"
+fi
+
+# ── 9. vnl-ads integration sanity (CDK context) ─────────────────────────────
+echo ""
+echo -e "${BOLD}  vnl-ads Integration${RESET}"
+ADS_BASE_CTX=$(jq -r '.context.vnlAdsBaseUrl // ""' cdk.json 2>/dev/null || echo "")
+ADS_SECRET_CTX=$(jq -r '.context.vnlAdsJwtSecret // ""' cdk.json 2>/dev/null || echo "")
+ADS_FLAG_CTX=$(jq -r '.context.vnlAdsFeatureEnabled // "false"' cdk.json 2>/dev/null || echo "false")
+echo -n "  Feature flag... "
+if [ "$ADS_FLAG_CTX" = "true" ]; then
+  if [ -n "$ADS_BASE_CTX" ] && [ -n "$ADS_SECRET_CTX" ]; then
+    echo -e "${GREEN}ON${RESET} (base=$ADS_BASE_CTX)"
+  else
+    echo -e "${YELLOW}ON but missing base URL or secret${RESET} — deploy will feature-flag off at runtime"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+else
+  echo -e "${DIM}off (default) — vnl-ads calls will short-circuit to safe defaults${RESET}"
 fi
 
 # ── 9. Check for uncommitted changes ────────────────────────────────────────

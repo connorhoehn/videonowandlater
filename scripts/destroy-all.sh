@@ -222,6 +222,41 @@ else
   echo -e "  ${DIM}No storage configurations found${RESET}"
 fi
 
+# ── 4b. Empty Moderation Frames Bucket (Phase 4) ────────────────────────────
+echo ""
+echo -e "${BOLD}Step 4b: Emptying moderation frames bucket${RESET}"
+MOD_BUCKET=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'vnl-moderation-frames-')].Name" --output text 2>/dev/null | head -1)
+if [ -n "$MOD_BUCKET" ] && [ "$MOD_BUCKET" != "None" ]; then
+  echo -e "  Emptying s3://$MOD_BUCKET (CDK autoDeleteObjects handles this too, but belt+suspenders)..."
+  aws s3 rm "s3://$MOD_BUCKET" --recursive --quiet 2>/dev/null || true
+  # Clean versioned deletes if versioning is enabled — same pattern as the recordings bucket
+  aws s3api delete-objects --bucket "$MOD_BUCKET" --delete "$(aws s3api list-object-versions --bucket "$MOD_BUCKET" --query '{Objects: Versions[].{Key: Key, VersionId: VersionId}}' --output json 2>/dev/null)" 2>/dev/null || true
+  echo -e "  ${GREEN}Moderation bucket drained${RESET}"
+else
+  echo -e "  ${DIM}No vnl-moderation-frames bucket found${RESET}"
+fi
+
+# ── 4c. Clear Cognito pre-token-generation trigger ──────────────────────────
+# The trigger Lambda is owned by VNL-Api but attached to the UserPool owned by
+# VNL-Auth. When VNL-Api is destroyed first, the UserPool can point at a
+# deleted Lambda which blocks sign-in AND sometimes blocks UserPool deletion.
+echo ""
+echo -e "${BOLD}Step 4c: Clearing Cognito pre-token trigger${RESET}"
+POOL_ID=$(aws cognito-idp list-user-pools --max-results 10 --query 'UserPools[?contains(Name, `vnl`) || contains(Name, `VNL`)].Id' --output text 2>/dev/null | head -1)
+if [ -n "$POOL_ID" ] && [ "$POOL_ID" != "None" ]; then
+  HAS_TRIGGER=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL_ID" --query 'UserPool.LambdaConfig.PreTokenGeneration' --output text 2>/dev/null || echo "None")
+  if [ "$HAS_TRIGGER" != "None" ] && [ -n "$HAS_TRIGGER" ]; then
+    echo -e "  Removing PreTokenGeneration trigger on $POOL_ID..."
+    aws cognito-idp update-user-pool --user-pool-id "$POOL_ID" --lambda-config '{}' >/dev/null 2>&1 \
+      && echo -e "  ${GREEN}Trigger cleared${RESET}" \
+      || echo -e "  ${YELLOW}Could not clear trigger — may need manual cleanup${RESET}"
+  else
+    echo -e "  ${DIM}No pre-token trigger set${RESET}"
+  fi
+else
+  echo -e "  ${DIM}No vnl user pool found${RESET}"
+fi
+
 # ── 5. Flush DynamoDB Pool Items ────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}Step 5/7: Flushing DynamoDB Pool Items${RESET}"

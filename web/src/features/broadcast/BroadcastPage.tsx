@@ -28,6 +28,7 @@ import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 import { AdDrawerPanel } from '../ads/AdDrawerPanel';
 import { AdOverlay } from '../ads/AdOverlay';
+import { SurveyModal } from '../survey/SurveyModal';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -113,6 +114,10 @@ function BroadcastContent({
   const [linkCopied, setLinkCopied] = React.useState(false);
   const [showStopConfirm, setShowStopConfirm] = React.useState(false);
   const [killError, setKillError] = React.useState<string | null>(null);
+  // Post-call survey: mounted after the broadcaster confirms stopping, so
+  // the host gets prompted for NPS feedback. The modal self-gates on whether
+  // the user already submitted.
+  const [showSurvey, setShowSurvey] = React.useState(false);
 
   const viewerUrl = `${window.location.origin}/viewer/${sessionId}`;
 
@@ -496,9 +501,23 @@ function BroadcastContent({
           message="Your stream will end and viewers will be disconnected."
           confirmLabel="Stop"
           variant="danger"
-          onConfirm={() => { stopBroadcast(); setShowStopConfirm(false); }}
+          onConfirm={() => {
+            stopBroadcast();
+            setShowStopConfirm(false);
+            setShowSurvey(true);
+          }}
           onClose={() => setShowStopConfirm(false)}
         />
+
+        {showSurvey && sessionId && authToken && (
+          <SurveyModal
+            sessionId={sessionId}
+            authToken={authToken}
+            apiBaseUrl={apiBaseUrl}
+            onSubmitted={() => setShowSurvey(false)}
+            onSkipped={() => setShowSurvey(false)}
+          />
+        )}
       </div>
     </ChatRoomProvider>
   );

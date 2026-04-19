@@ -31,6 +31,7 @@ import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 import { AdDrawerPanel } from '../ads/AdDrawerPanel';
 import { AdOverlay } from '../ads/AdOverlay';
+import { SurveyModal } from '../survey/SurveyModal';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -108,6 +109,10 @@ export function HangoutPage() {
   const [showInviteGroupModal, setShowInviteGroupModal] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState<FloatingEmoji[]>([]);
   const [killError, setKillError] = useState<string | null>(null);
+  // Post-call survey: when true, we show <SurveyModal> instead of navigating
+  // away immediately. The modal self-gates on whether the user already
+  // submitted. Once submitted or skipped we complete the navigation.
+  const [showSurvey, setShowSurvey] = useState(false);
   const [agentState, setAgentState] = useState<{
     active: boolean;
     speaking: boolean;
@@ -289,8 +294,16 @@ export function HangoutPage() {
 
   const handleLeave = () => {
     endSession();
-    navigate('/');
+    // Show the post-call survey before navigating away. The modal auto-hides
+    // if the user has already submitted for this session, so this is a no-op
+    // for returning users.
+    setShowSurvey(true);
   };
+
+  const handleSurveyClosed = useCallback(() => {
+    setShowSurvey(false);
+    navigate('/');
+  }, [navigate]);
 
   if (!sessionId) {
     return <div className="p-8 text-red-600">Session ID required</div>;
@@ -664,6 +677,16 @@ export function HangoutPage() {
         });
       }}
     />
+
+    {showSurvey && sessionId && authToken && (
+      <SurveyModal
+        sessionId={sessionId}
+        authToken={authToken}
+        apiBaseUrl={apiBaseUrl}
+        onSubmitted={handleSurveyClosed}
+        onSkipped={handleSurveyClosed}
+      />
+    )}
     </ChatRoomProvider>
   );
 }

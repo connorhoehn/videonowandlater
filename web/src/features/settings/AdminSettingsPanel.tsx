@@ -11,15 +11,17 @@ import { getConfig } from '../../config/aws-config';
 import { RulesetEditor } from '../admin/settings/RulesetEditor';
 import { RolesPanel } from '../admin/settings/RolesPanel';
 import { ChatFlagsPanel } from '../admin/settings/ChatFlagsPanel';
+import { SurveysPanel } from '../admin/settings/SurveysPanel';
 import { BannedUsersPanel } from '../admin/BannedUsersPanel';
 
-type AdminTab = 'rulesets' | 'bans' | 'roles' | 'chat-flags';
+type AdminTab = 'rulesets' | 'bans' | 'roles' | 'chat-flags' | 'surveys';
 
 const TABS: { key: AdminTab; label: string }[] = [
   { key: 'rulesets', label: 'Rulesets' },
   { key: 'bans', label: 'Banned Users' },
   { key: 'roles', label: 'Roles' },
   { key: 'chat-flags', label: 'Chat Flags' },
+  { key: 'surveys', label: 'Surveys' },
 ];
 
 export function AdminSettingsPanel() {
@@ -60,6 +62,7 @@ export function AdminSettingsPanel() {
       {tab === 'bans' && authToken && <BannedUsersPanel authToken={authToken} apiBaseUrl={apiBaseUrl} />}
       {tab === 'roles' && <RolesPanel />}
       {tab === 'chat-flags' && <ChatFlagsPanel />}
+      {tab === 'surveys' && <SurveysPanel />}
     </section>
   );
 }

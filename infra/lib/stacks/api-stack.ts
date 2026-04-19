@@ -2069,6 +2069,82 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === Surveys ===
+    // Post-call NPS surveys. Participants submit once per session via
+    // POST /sessions/{sessionId}/survey and can re-read their own with
+    // GET /sessions/{sessionId}/survey/mine. Admin has cross-session
+    // aggregates at /admin/surveys and per-session breakdowns under
+    // /admin/sessions/{sessionId}/surveys.
+    // ============================================================
+    const surveyEnv = { TABLE_NAME: props.sessionsTable.tableName };
+
+    // /sessions/{sessionId}/survey (+ /mine)
+    const surveyResource = sessionIdResource.addResource('survey');
+    const surveyMineResource = surveyResource.addResource('mine');
+
+    // POST /sessions/{sessionId}/survey — submit
+    const submitSurveyFn = new NodejsFunction(this, 'SubmitSurvey', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/submit-survey.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(submitSurveyFn);
+    surveyResource.addMethod('POST', new apigateway.LambdaIntegration(submitSurveyFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/survey/mine — caller's own submission
+    const getMySurveyFn = new NodejsFunction(this, 'GetMySurvey', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-survey.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getMySurveyFn);
+    surveyMineResource.addMethod('GET', new apigateway.LambdaIntegration(getMySurveyFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/surveys — cross-session recent window + aggregate
+    const adminSurveysResource = admin.addResource('surveys');
+    const adminListSurveysFn = new NodejsFunction(this, 'AdminListSurveys', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-surveys.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminListSurveysFn);
+    adminSurveysResource.addMethod('GET', new apigateway.LambdaIntegration(adminListSurveysFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /admin/sessions/{sessionId}/surveys — per-session breakdown + aggregate
+    const adminSessionSurveys = adminSessionById.addResource('surveys');
+    const adminGetSessionSurveysFn = new NodejsFunction(this, 'AdminGetSessionSurveys', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-get-session-surveys.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(adminGetSessionSurveysFn);
+    adminSessionSurveys.addMethod('GET', new apigateway.LambdaIntegration(adminGetSessionSurveysFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

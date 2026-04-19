@@ -102,34 +102,61 @@ fi
 
 # ── 7. CDK Synth — folded into check 8i below (single synth, more info) ────
 
+# ── 7a. Sibling-stack resource-import lint ──────────────────────────────────
+# `resourceForPath()` on an IMPORTED RestApi always CREATES fresh API Gateway
+# resources for every path segment — even ones that already exist on the parent
+# stack — which CloudFormation then rejects with 409 AlreadyExists at deploy
+# time. The api-extensions-* stacks must import pre-existing parent resources
+# by ID via `Resource.fromResourceAttributes(...)` instead. This check catches
+# regressions statically (much faster than waiting for the 5-min CFN rollback).
+echo -n "  Sibling-stack resource imports... "
+SIBLING_RFP=$(grep -nE "api\.root\.resourceForPath|\\.root\\.resourceForPath" \
+  infra/lib/stacks/api-extensions-stack.ts \
+  infra/lib/stacks/api-extensions-admin-stack.ts 2>/dev/null \
+  | grep -vE "^[^:]+:[0-9]+:\s*(//|\*|/\*)" || true)
+if [ -z "$SIBLING_RFP" ]; then
+  echo -e "${GREEN}OK${RESET}"
+else
+  echo -e "${RED}FAILED${RESET} — sibling stacks call resourceForPath on imported API"
+  echo "$SIBLING_RFP" | sed 's/^/    /'
+  echo -e "    ${DIM}Use Resource.fromResourceAttributes(...) with a resource ID exported from ApiStack.${RESET}"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── 7b. Stale CDK processes (prevents cdk.out contention) ───────────────────
+echo -n "  No stale cdk processes... "
+STALE_CDK=$(pgrep -fl "cdk (deploy|synth|bootstrap)" 2>/dev/null | grep -v "grep\|$$" || true)
+if [ -z "$STALE_CDK" ]; then
+  echo -e "${GREEN}OK${RESET}"
+else
+  echo -e "${RED}FAILED${RESET} — another cdk invocation is still running"
+  echo "$STALE_CDK" | sed 's/^/    /'
+  echo -e "    ${DIM}Kill those processes first, or they'll fight over cdk.out.${RESET}"
+  ERRORS=$((ERRORS + 1))
+fi
+
 # ── 8. AWS Environment Checks ────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}  AWS Environment${RESET}"
 
-# 8a. S3 bucket policy conflicts — auto-fix orphaned policies from failed rollbacks
+# 8a. S3 recordings bucket policy — warn if missing (CDK-managed).
+# PAST BUG: this check used to auto-DELETE the existing policy if the logical-id
+# lookup failed, expecting CDK to recreate it on next deploy. That breaks hard
+# when CDK's next deploy is a no-op (no drift detected), leaving the bucket
+# without any policy and CloudFront unable to read. Playback then 403s for
+# every session. Current approach: warn only, never mutate.
 RECORDINGS_BUCKET="vnl-recordings-vnl-storage"
 echo -n "  S3 bucket policy ($RECORDINGS_BUCKET)... "
-if aws s3api get-bucket-policy --bucket "$RECORDINGS_BUCKET" --output text > /dev/null 2>&1; then
-  # Bucket has a policy — check if CDK manages it or it's out-of-band
-  STACK_POLICY=$(aws cloudformation describe-stack-resource \
-    --stack-name VNL-Session \
-    --logical-resource-id RecordingsBucketPolicy7D6C1F47 \
-    --query 'StackResourceDetail.PhysicalResourceId' \
-    --output text 2>/dev/null || echo "NOT_FOUND")
-  if [ "$STACK_POLICY" = "NOT_FOUND" ]; then
-    echo -e "${YELLOW}EXISTS (not CDK-managed) — removing...${RESET}"
-    if aws s3api delete-bucket-policy --bucket "$RECORDINGS_BUCKET" 2>/dev/null; then
-      echo -e "    ${GREEN}Deleted orphaned bucket policy${RESET} — CDK will recreate it on deploy"
-    else
-      echo -e "    ${RED}Failed to delete orphaned bucket policy${RESET}"
-      echo -e "    ${DIM}Manually run: aws s3api delete-bucket-policy --bucket $RECORDINGS_BUCKET${RESET}"
-      ERRORS=$((ERRORS + 1))
-    fi
+if aws s3api head-bucket --bucket "$RECORDINGS_BUCKET" 2>/dev/null; then
+  if aws s3api get-bucket-policy --bucket "$RECORDINGS_BUCKET" --output text > /dev/null 2>&1; then
+    echo -e "${GREEN}OK${RESET} (policy present)"
   else
-    echo -e "${GREEN}OK${RESET} (CDK-managed)"
+    echo -e "${RED}MISSING${RESET} — bucket has no policy; CloudFront playback will 403"
+    echo -e "    ${DIM}Fix: cdk deploy VNL-Storage --force, or manually put the policy back.${RESET}"
+    ERRORS=$((ERRORS + 1))
   fi
 else
-  echo -e "${GREEN}OK${RESET} (no existing policy)"
+  echo -e "${DIM}bucket not yet created${RESET}"
 fi
 
 # 8b. Check for orphaned IVS resources that might block stack operations
@@ -153,11 +180,25 @@ echo -n "  CloudFormation stack status... "
 STACK_ERRORS=0
 for STACK in VNL-Storage VNL-Session VNL-Api VNL-Api-Ext VNL-Api-Ext-Admin VNL-Auth VNL-Web VNL-Monitoring VNL-Agent; do
   STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
-  if [ "$STATUS" = "ROLLBACK_COMPLETE" ]; then
-    # Stack failed on first create and rolled back — must be deleted before CDK can recreate
+  if [ "$STATUS" = "ROLLBACK_COMPLETE" ] || [ "$STATUS" = "ROLLBACK_FAILED" ]; then
+    # Stack failed on first create and rolled back — must be deleted before CDK can recreate.
+    # ROLLBACK_FAILED is a deeper form: CFN couldn't clean up one or more resources;
+    # we attempt `delete-stack` first, and on ROLLBACK_FAILED we retain the stuck resources
+    # (they'll need manual cleanup, but the stack itself unblocks).
     if [ "$STACK_ERRORS" -eq 0 ]; then echo ""; fi
     echo -e "    ${YELLOW}$STACK: $STATUS — deleting so CDK can recreate...${RESET}"
-    if aws cloudformation delete-stack --stack-name "$STACK" 2>/dev/null \
+    DELETE_ARGS=()
+    if [ "$STATUS" = "ROLLBACK_FAILED" ]; then
+      STUCK=$(aws cloudformation describe-stack-resources --stack-name "$STACK" \
+        --query 'StackResources[?ResourceStatus==`DELETE_FAILED` || ResourceStatus==`CREATE_FAILED`].LogicalResourceId' \
+        --output text 2>/dev/null || echo "")
+      if [ -n "$STUCK" ] && [ "$STUCK" != "None" ]; then
+        DELETE_ARGS=(--retain-resources)
+        for R in $STUCK; do DELETE_ARGS+=("$R"); done
+        echo -e "    ${DIM}Retaining stuck resources: $STUCK${RESET}"
+      fi
+    fi
+    if aws cloudformation delete-stack --stack-name "$STACK" ${DELETE_ARGS[@]+"${DELETE_ARGS[@]}"} 2>/dev/null \
        && aws cloudformation wait stack-delete-complete --stack-name "$STACK" 2>/dev/null; then
       echo -e "    ${GREEN}Deleted $STACK${RESET} — CDK will recreate it on deploy"
     else

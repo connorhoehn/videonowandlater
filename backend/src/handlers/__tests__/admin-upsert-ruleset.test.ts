@@ -104,6 +104,8 @@ describe('admin-upsert-ruleset handler', () => {
       disallowedItems: ['phone', 'watch'],
       severity: 'high',
       createdBy: 'admin-1',
+      frameIntervalSec: 10,
+      autoBounceThreshold: 3,
     });
     const body = JSON.parse(result.body);
     expect(body.ruleset.version).toBe(2);

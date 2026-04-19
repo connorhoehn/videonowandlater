@@ -1,5 +1,6 @@
 import { Stack, StackProps, RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -8,6 +9,7 @@ import * as path from 'path';
 export class AuthStack extends Stack {
   public readonly userPool: cognito.UserPool;
   public readonly userPoolClient: cognito.UserPoolClient;
+  public readonly identityPool: cognito.CfnIdentityPool;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -81,6 +83,51 @@ export class AuthStack extends Stack {
     new CfnOutput(this, 'CognitoRegion', {
       value: this.region,
       exportName: 'VNL-CognitoRegion',
+    });
+
+    // Identity Pool — mints short-lived STS creds scoped to Transcribe Streaming
+    // so hosts can run live captions directly from the browser.
+    this.identityPool = new cognito.CfnIdentityPool(this, 'IdentityPool', {
+      identityPoolName: 'vnl-identity-pool',
+      allowUnauthenticatedIdentities: false,
+      cognitoIdentityProviders: [
+        {
+          clientId: this.userPoolClient.userPoolClientId,
+          providerName: this.userPool.userPoolProviderName,
+          serverSideTokenCheck: true,
+        },
+      ],
+    });
+
+    const authenticatedRole = new iam.Role(this, 'IdentityPoolAuthenticatedRole', {
+      assumedBy: new iam.FederatedPrincipal(
+        'cognito-identity.amazonaws.com',
+        {
+          StringEquals: {
+            'cognito-identity.amazonaws.com:aud': this.identityPool.ref,
+          },
+          'ForAnyValue:StringLike': {
+            'cognito-identity.amazonaws.com:amr': 'authenticated',
+          },
+        },
+        'sts:AssumeRoleWithWebIdentity',
+      ),
+    });
+    authenticatedRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['transcribe:StartStreamTranscription', 'transcribe:StartStreamTranscriptionWebSocket'],
+        resources: ['*'],
+      }),
+    );
+
+    new cognito.CfnIdentityPoolRoleAttachment(this, 'IdentityPoolRoleAttachment', {
+      identityPoolId: this.identityPool.ref,
+      roles: { authenticated: authenticatedRole.roleArn },
+    });
+
+    new CfnOutput(this, 'IdentityPoolId', {
+      value: this.identityPool.ref,
+      exportName: 'VNL-IdentityPoolId',
     });
   }
 }

@@ -189,8 +189,12 @@ export interface Session {
   rulesetName?: string;
   /** Ruleset version pinned at session creation — never read CURRENT at runtime */
   rulesetVersion?: number;
-  /** Count of high-confidence moderation flags (auto-bounce when >= 3) */
+  /** Count of high-confidence moderation flags (auto-bounce when strikeCount >= autoBounceThreshold) */
   moderationStrikes?: number;
+  /** Pinned at session creation from the ruleset — client samples every N seconds */
+  frameIntervalSec?: number;
+  /** Pinned at session creation from the ruleset — strikes required to auto-bounce */
+  autoBounceThreshold?: number;
   // Live captions (real-time closed-captioning via AWS Transcribe Streaming)
   /**
    * When true, the host is streaming audio to Transcribe and broadcasting caption

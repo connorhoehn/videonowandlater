@@ -15,7 +15,13 @@ import {
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 import type { Ruleset } from '../domain/ruleset';
-import { DEFAULT_RULESETS } from '../domain/ruleset';
+import {
+  DEFAULT_RULESETS,
+  DEFAULT_FRAME_INTERVAL_SEC,
+  DEFAULT_AUTO_BOUNCE_THRESHOLD,
+  clampFrameInterval,
+  clampAutoBounceThreshold,
+} from '../domain/ruleset';
 
 const logger = new Logger({ serviceName: 'vnl-repository' });
 
@@ -114,6 +120,8 @@ export async function createRulesetVersion(
     disallowedItems: string[];
     severity: Ruleset['severity'];
     createdBy: string;
+    frameIntervalSec?: number;
+    autoBounceThreshold?: number;
   },
 ): Promise<Ruleset> {
   const docClient = getDocumentClient();
@@ -131,6 +139,8 @@ export async function createRulesetVersion(
     createdBy: input.createdBy,
     createdAt: now,
     active: true,
+    frameIntervalSec: clampFrameInterval(input.frameIntervalSec),
+    autoBounceThreshold: clampAutoBounceThreshold(input.autoBounceThreshold),
   };
 
   // Write version row

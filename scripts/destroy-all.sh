@@ -414,6 +414,10 @@ done
 
 # ── Cleanup local files ────────────────────────────────────────────────────
 rm -f cdk-outputs.json
+rm -f cdk-outputs-web.json
+rm -f cdk-outputs-agent.json
+rm -f cdk-outputs-session.json
+rm -f cdk-outputs.merged.json
 rm -f web/public/aws-config.json
 
 echo ""

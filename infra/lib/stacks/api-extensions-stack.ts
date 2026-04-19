@@ -32,6 +32,14 @@ export interface ApiExtensionsStackProps extends StackProps {
    */
   restApiId: string;
   restApiRootResourceId: string;
+  /** Existing `/sessions` resource ID from ApiStack — import, don't re-create. */
+  sessionsResourceId: string;
+  /** Existing `/me` resource ID from ApiStack — import, don't re-create. */
+  meResourceId: string;
+  /** Existing `/sessions/{sessionId}` resource ID from ApiStack — import, don't re-create. */
+  sessionIdResourceId: string;
+  /** Existing `/sessions/{sessionId}/chat` resource ID from ApiStack — import, don't re-create. */
+  sessionChatResourceId: string;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   sessionsTable: dynamodb.ITable;
@@ -54,6 +62,10 @@ export class ApiExtensionsStack extends Stack {
     const {
       restApiId,
       restApiRootResourceId,
+      sessionsResourceId,
+      meResourceId,
+      sessionIdResourceId,
+      sessionChatResourceId,
       userPool,
       userPoolClient,
       sessionsTable,
@@ -77,12 +89,46 @@ export class ApiExtensionsStack extends Stack {
       cognitoUserPools: [userPool],
     });
 
-    // Re-acquire resource paths. resourceForPath() on an imported root lazily
-    // creates child resources in THIS stack when accessed for the first time,
-    // but for paths that already exist on the parent (e.g. 'sessions/{sessionId}'
-    // or 'me') we need to manually re-acquire them as children of the imported root.
-    const sessionIdResource = api.root.resourceForPath('sessions/{sessionId}');
-    const meResource = api.root.resourceForPath('me');
+    // CORS preflight propagates DOWN through `addResource()` calls when set as
+    // `defaultCorsPreflightOptions` on a parent. The RestApi's own default is
+    // NOT inherited by resources we attach here because we imported the API
+    // via `fromRestApiAttributes`. So every top-level resource created below
+    // (and every direct child of an imported parent like `meResource`,
+    // `sessionIdResource`, `sessionChatResource`, `sessionsResource`) must be
+    // created with this `defaultCors` options bag — children then inherit.
+    const defaultCors: apigateway.ResourceOptions = {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['*'],
+      },
+    };
+
+    // Re-import existing API Gateway resources by ID. `resourceForPath` on an
+    // imported RestApi always creates NEW resources — which fails with
+    // "AlreadyExists" when the path already exists on the parent stack.
+    // So we use `Resource.fromResourceAttributes` to bind to the real resource
+    // and call `addResource`/`addMethod` to attach this stack's children.
+    const sessionsResource = apigateway.Resource.fromResourceAttributes(this, 'ImportedSessionsResource', {
+      resourceId: sessionsResourceId,
+      path: '/sessions',
+      restApi: api,
+    });
+    const sessionIdResource = apigateway.Resource.fromResourceAttributes(this, 'ImportedSessionIdResource', {
+      resourceId: sessionIdResourceId,
+      path: '/sessions/{sessionId}',
+      restApi: api,
+    });
+    const sessionChatResource = apigateway.Resource.fromResourceAttributes(this, 'ImportedSessionChatResource', {
+      resourceId: sessionChatResourceId,
+      path: '/sessions/{sessionId}/chat',
+      restApi: api,
+    });
+    const meResource = apigateway.Resource.fromResourceAttributes(this, 'ImportedMeResource', {
+      resourceId: meResourceId,
+      path: '/me',
+      restApi: api,
+    });
 
     // `/groups`, `/invites` are OWNED by this stack (removed from api-stack).
     // `/admin` is OWNED by `ApiExtensionsAdminStack` (separate sibling).
@@ -92,7 +138,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     const profileEnv = { TABLE_NAME: sessionsTable.tableName };
 
-    const meProfile = meResource.addResource('profile');
+    const meProfile = meResource.addResource('profile', defaultCors);
     const getMyProfileFn = new NodejsFunction(this, 'GetMyProfile', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -119,7 +165,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const creatorsResource = api.root.addResource('creators');
+    const creatorsResource = api.root.addResource('creators', defaultCors);
     const creatorByHandle = creatorsResource.addResource('{handle}');
     const getPublicProfileFn = new NodejsFunction(this, 'GetPublicProfile', {
       runtime: Runtime.NODEJS_20_X,
@@ -132,7 +178,7 @@ export class ApiExtensionsStack extends Stack {
     sessionsTable.grantReadData(getPublicProfileFn);
     creatorByHandle.addMethod('GET', new apigateway.LambdaIntegration(getPublicProfileFn));
 
-    const usersResource = api.root.addResource('users');
+    const usersResource = api.root.addResource('users', defaultCors);
     const userById = usersResource.addResource('{userId}');
     const followResource = userById.addResource('follow');
     const followUserFn = new NodejsFunction(this, 'FollowUser', {
@@ -151,7 +197,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const meNotifsResource = meResource.addResource('notifications');
+    const meNotifsResource = meResource.addResource('notifications', defaultCors);
     const listNotificationsFn = new NodejsFunction(this, 'ListNotifications', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -183,7 +229,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Phase 4a: Playback Polish ===
     // ============================================================
-    const sessionChaptersResource = sessionIdResource.addResource('chapters');
+    const sessionChaptersResource = sessionIdResource.addResource('chapters', defaultCors);
     const getSessionChaptersFn = new NodejsFunction(this, 'GetSessionChaptersHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-session-chapters.ts'),
       handler: 'handler',
@@ -196,7 +242,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const sessionRecordingResource = sessionIdResource.addResource('recording');
+    const sessionRecordingResource = sessionIdResource.addResource('recording', defaultCors);
     const sessionRecordingDownloadResource = sessionRecordingResource.addResource('download');
     const getRecordingDownloadUrlFn = new NodejsFunction(this, 'GetRecordingDownloadUrlHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-recording-download-url.ts'),
@@ -220,7 +266,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Phase 2: Discovery ===
     // ============================================================
-    const searchResource = api.root.addResource('search');
+    const searchResource = api.root.addResource('search', defaultCors);
     const searchSessionsFn = new NodejsFunction(this, 'SearchSessions', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -232,7 +278,7 @@ export class ApiExtensionsStack extends Stack {
     sessionsTable.grantReadData(searchSessionsFn);
     searchResource.addMethod('GET', new apigateway.LambdaIntegration(searchSessionsFn));
 
-    const feedResource = api.root.addResource('feed');
+    const feedResource = api.root.addResource('feed', defaultCors);
     const getFeedFn = new NodejsFunction(this, 'GetFeed', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -292,7 +338,7 @@ export class ApiExtensionsStack extends Stack {
       }));
     }
 
-    const sessionClipsResource = sessionIdResource.addResource('clips');
+    const sessionClipsResource = sessionIdResource.addResource('clips', defaultCors);
     sessionClipsResource.addMethod('POST', new apigateway.LambdaIntegration(createClipFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -308,7 +354,7 @@ export class ApiExtensionsStack extends Stack {
     sessionsTable.grantReadData(listSessionClipsFn);
     sessionClipsResource.addMethod('GET', new apigateway.LambdaIntegration(listSessionClipsFn));
 
-    const clipsResource = api.root.addResource('clips');
+    const clipsResource = api.root.addResource('clips', defaultCors);
     const clipByIdResource = clipsResource.addResource('{clipId}');
 
     const getClipFn = new NodejsFunction(this, 'GetClipHandler', {
@@ -342,7 +388,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Phase 5: Scheduled sessions ===
     // ============================================================
-    const goLiveResource = sessionIdResource.addResource('go-live');
+    const goLiveResource = sessionIdResource.addResource('go-live', defaultCors);
     const goLiveFn = new NodejsFunction(this, 'GoLive', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -360,7 +406,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const rsvpResource = sessionIdResource.addResource('rsvp');
+    const rsvpResource = sessionIdResource.addResource('rsvp', defaultCors);
     const rsvpFn = new NodejsFunction(this, 'RsvpSession', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -381,7 +427,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const rsvpsResource = sessionIdResource.addResource('rsvps');
+    const rsvpsResource = sessionIdResource.addResource('rsvps', defaultCors);
     const listSessionRsvpsFn = new NodejsFunction(this, 'ListSessionRsvps', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -395,7 +441,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const icsResource = sessionIdResource.addResource('ics');
+    const icsResource = sessionIdResource.addResource('ics', defaultCors);
     const downloadEventIcsFn = new NodejsFunction(this, 'DownloadEventIcs', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -407,7 +453,7 @@ export class ApiExtensionsStack extends Stack {
     sessionsTable.grantReadData(downloadEventIcsFn);
     icsResource.addMethod('GET', new apigateway.LambdaIntegration(downloadEventIcsFn));
 
-    const meRsvpsResource = meResource.addResource('rsvps');
+    const meRsvpsResource = meResource.addResource('rsvps', defaultCors);
     const listMyRsvpsFn = new NodejsFunction(this, 'ListMyRsvps', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -439,10 +485,9 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Migrated: Chat token (POST /sessions/{sessionId}/chat/token) ===
     // Note: /sessions/{sessionId}/chat exists in api-stack (send-message,
-    // get-chat-history live there). Reuse via resourceForPath.
+    // get-chat-history live there). We imported it above by resource ID.
     // ============================================================
-    const sessionChatResource = api.root.resourceForPath('sessions/{sessionId}/chat');
-    const chatTokenResource = sessionChatResource.addResource('token');
+    const chatTokenResource = sessionChatResource.addResource('token', defaultCors);
     const createChatTokenHandler = new NodejsFunction(this, 'CreateChatTokenHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/create-chat-token.ts'),
       handler: 'handler',
@@ -465,7 +510,7 @@ export class ApiExtensionsStack extends Stack {
     // === Migrated: Chat moderation classifier ===
     // POST /sessions/{sessionId}/chat/classify
     // ============================================================
-    const chatClassifyResource = sessionChatResource.addResource('classify');
+    const chatClassifyResource = sessionChatResource.addResource('classify', defaultCors);
     const classifyChatMessageHandler = new NodejsFunction(this, 'ClassifyChatMessageHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/classify-chat-message.ts'),
       handler: 'handler',
@@ -495,7 +540,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Migrated: Bounce user (POST /sessions/{sessionId}/bounce) ===
     // ============================================================
-    const bounceResource = sessionIdResource.addResource('bounce');
+    const bounceResource = sessionIdResource.addResource('bounce', defaultCors);
     const bounceUserHandler = new NodejsFunction(this, 'BounceUserHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/bounce-user.ts'),
       handler: 'handler',
@@ -515,7 +560,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Migrated: Submit appeal (POST /sessions/{sessionId}/appeal) ===
     // ============================================================
-    const appealResource = sessionIdResource.addResource('appeal');
+    const appealResource = sessionIdResource.addResource('appeal', defaultCors);
     const submitAppealHandler = new NodejsFunction(this, 'SubmitAppealHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/submit-appeal.ts'),
       handler: 'handler',
@@ -532,7 +577,7 @@ export class ApiExtensionsStack extends Stack {
     // === Migrated: Receive moderation frame ===
     // POST /sessions/{sessionId}/moderation-frame
     // ============================================================
-    const moderationFrameResource = sessionIdResource.addResource('moderation-frame');
+    const moderationFrameResource = sessionIdResource.addResource('moderation-frame', defaultCors);
     const receiveModerationFrameHandler = new NodejsFunction(this, 'ReceiveModerationFrameHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/receive-moderation-frame.ts'),
       handler: 'handler',
@@ -568,7 +613,7 @@ export class ApiExtensionsStack extends Stack {
     // moderation bucket has been provisioned.
     // ============================================================
     if (moderationBucket) {
-      const moderationUploadPath = sessionIdResource.addResource('moderation-upload');
+      const moderationUploadPath = sessionIdResource.addResource('moderation-upload', defaultCors);
       const requestModerationUploadFn = new NodejsFunction(this, 'RequestModerationUpload', {
         runtime: Runtime.NODEJS_20_X,
         handler: 'handler',
@@ -591,7 +636,7 @@ export class ApiExtensionsStack extends Stack {
     // === Migrated: Groups (Phase 1) ===
     // /groups, /groups/mine, /groups/{groupId}, /groups/{groupId}/members/{userId}
     // ============================================================
-    const groupsResource = api.root.addResource('groups');
+    const groupsResource = api.root.addResource('groups', defaultCors);
     const groupsMineResource = groupsResource.addResource('mine');
     const groupByIdResource = groupsResource.addResource('{groupId}');
     const groupMembersResource = groupByIdResource.addResource('members');
@@ -703,7 +748,7 @@ export class ApiExtensionsStack extends Stack {
     // === Migrated: Lobbies (Phase 2) ===
     // /sessions/{sessionId}/lobby/[{userId}/approve|deny]
     // ============================================================
-    const lobbyResource = sessionIdResource.addResource('lobby');
+    const lobbyResource = sessionIdResource.addResource('lobby', defaultCors);
 
     const listLobbyRequestsFn = new NodejsFunction(this, 'ListLobbyRequestsHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/list-lobby-requests.ts'),
@@ -772,7 +817,7 @@ export class ApiExtensionsStack extends Stack {
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
     };
 
-    const inviteGroupResource = sessionIdResource.addResource('invite-group');
+    const inviteGroupResource = sessionIdResource.addResource('invite-group', defaultCors);
     const inviteGroupFn = new NodejsFunction(this, 'InviteGroupToSession', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -789,7 +834,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const invitesResource = api.root.addResource('invites');
+    const invitesResource = api.root.addResource('invites', defaultCors);
     const invitesMineResource = invitesResource.addResource('mine');
     const invitesBySessionResource = invitesResource.addResource('{sessionId}');
     const invitesRespondResource = invitesBySessionResource.addResource('respond');
@@ -824,7 +869,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     const surveyEnv = { TABLE_NAME: sessionsTable.tableName };
 
-    const surveyResource = sessionIdResource.addResource('survey');
+    const surveyResource = sessionIdResource.addResource('survey', defaultCors);
     const surveyMineResource = surveyResource.addResource('mine');
 
     const submitSurveyFn = new NodejsFunction(this, 'SubmitSurvey', {
@@ -856,7 +901,7 @@ export class ApiExtensionsStack extends Stack {
     // ============================================================
     // === Migrated: /sessions/mine — owner-scoped session list ===
     // ============================================================
-    const sessionsMineResource = api.root.resourceForPath('sessions/mine');
+    const sessionsMineResource = sessionsResource.addResource('mine', defaultCors);
     const listMySessionsFn = new NodejsFunction(this, 'ListMySessions', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -891,7 +936,7 @@ export class ApiExtensionsStack extends Stack {
       VNL_ADS_FEATURE_ENABLED: vnlAdsFeatureEnabled,
     };
 
-    const promoResource = sessionIdResource.addResource('promo');
+    const promoResource = sessionIdResource.addResource('promo', defaultCors);
     const promoDrawerResource = promoResource.addResource('drawer');
     const getPromoDrawerFn = new NodejsFunction(this, 'GetPromoDrawerHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-promo-drawer.ts'),
@@ -945,7 +990,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const meEarningsResource = meResource.addResource('earnings');
+    const meEarningsResource = meResource.addResource('earnings', defaultCors);
     const getMyEarningsFn = new NodejsFunction(this, 'GetMyEarnings', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -958,7 +1003,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const meImpressionSeriesResource = meResource.addResource('impression-series');
+    const meImpressionSeriesResource = meResource.addResource('impression-series', defaultCors);
     const getMyImpressionSeriesFn = new NodejsFunction(this, 'GetMyImpressionSeries', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -971,7 +1016,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const meTrainingDueResource = meResource.addResource('training-due');
+    const meTrainingDueResource = meResource.addResource('training-due', defaultCors);
     const getMyTrainingDueFn = new NodejsFunction(this, 'GetMyTrainingDue', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
@@ -984,7 +1029,7 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    const meTrainingClaimResource = meResource.addResource('training-claim');
+    const meTrainingClaimResource = meResource.addResource('training-claim', defaultCors);
     const claimMyTrainingFn = new NodejsFunction(this, 'ClaimMyTraining', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',

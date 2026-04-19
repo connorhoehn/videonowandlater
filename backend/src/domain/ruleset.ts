@@ -17,6 +17,34 @@ export interface Ruleset {
   createdBy: string;
   createdAt: string;
   active: boolean;
+  /**
+   * Frame capture interval (seconds). Client samples a video frame every N seconds,
+   * uploads to S3, triggers a Nova Lite classification. Lower = more aggressive,
+   * higher cost. Default 10s. Valid range: 3-60.
+   */
+  frameIntervalSec?: number;
+  /**
+   * Auto-bounce strike threshold. When a user's flagged-frame count on a session
+   * reaches this value, they get kicked. Default 3. Valid range: 1-10.
+   */
+  autoBounceThreshold?: number;
+}
+
+export const DEFAULT_FRAME_INTERVAL_SEC = 10;
+export const DEFAULT_AUTO_BOUNCE_THRESHOLD = 3;
+export const FRAME_INTERVAL_MIN = 3;
+export const FRAME_INTERVAL_MAX = 60;
+export const AUTO_BOUNCE_THRESHOLD_MIN = 1;
+export const AUTO_BOUNCE_THRESHOLD_MAX = 10;
+
+export function clampFrameInterval(v: number | undefined): number {
+  if (typeof v !== 'number' || Number.isNaN(v)) return DEFAULT_FRAME_INTERVAL_SEC;
+  return Math.max(FRAME_INTERVAL_MIN, Math.min(FRAME_INTERVAL_MAX, Math.round(v)));
+}
+
+export function clampAutoBounceThreshold(v: number | undefined): number {
+  if (typeof v !== 'number' || Number.isNaN(v)) return DEFAULT_AUTO_BOUNCE_THRESHOLD;
+  return Math.max(AUTO_BOUNCE_THRESHOLD_MIN, Math.min(AUTO_BOUNCE_THRESHOLD_MAX, Math.round(v)));
 }
 
 export interface RulesetCurrentPointer {

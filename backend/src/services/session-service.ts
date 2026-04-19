@@ -18,6 +18,8 @@ interface CreateSessionRequest {
   moderationEnabled?: boolean;
   rulesetName?: string;
   rulesetVersion?: number;
+  frameIntervalSec?: number;
+  autoBounceThreshold?: number;
   // Live captions — opt-in; defaults to false when omitted
   captionsEnabled?: boolean;
   // Phase 5: scheduled sessions — when set, skips pool claim and stores in SCHEDULED state.
@@ -89,6 +91,7 @@ interface GetSessionResponse {
   // Phase 4: image moderation
   moderationEnabled?: boolean;
   rulesetName?: string;
+  frameIntervalSec?: number;
 }
 
 /**
@@ -133,6 +136,8 @@ export async function createNewSession(
             rulesetName: request.rulesetName,
             rulesetVersion: request.rulesetVersion,
             moderationStrikes: 0,
+            ...(request.frameIntervalSec !== undefined ? { frameIntervalSec: request.frameIntervalSec } : {}),
+            ...(request.autoBounceThreshold !== undefined ? { autoBounceThreshold: request.autoBounceThreshold } : {}),
           }
         : {}),
     };
@@ -251,5 +256,6 @@ export async function getSession(tableName: string, sessionId: string): Promise<
     // Phase 4: safe-to-expose fields for moderation UI (version/strikes are NOT exposed)
     moderationEnabled: session.moderationEnabled,
     rulesetName: session.rulesetName,
+    frameIntervalSec: session.frameIntervalSec,
   };
 }

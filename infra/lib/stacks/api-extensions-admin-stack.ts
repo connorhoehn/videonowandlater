@@ -50,8 +50,19 @@ export class ApiExtensionsAdminStack extends Stack {
       cognitoUserPools: [userPool],
     });
 
+    // CORS defaults propagate down through addResource, so setting this on
+    // `/admin` covers every /admin/* route declared below. The imported
+    // RestApi's default preflight isn't inherited across stack boundaries.
+    const defaultCors: apigateway.ResourceOptions = {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['*'],
+      },
+    };
+
     // This stack OWNS /admin.
-    const admin = api.root.addResource('admin');
+    const admin = api.root.addResource('admin', defaultCors);
 
     const tableEnv = { TABLE_NAME: sessionsTable.tableName };
 

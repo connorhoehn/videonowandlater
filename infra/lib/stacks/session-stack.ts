@@ -742,6 +742,12 @@ export class SessionStack extends Stack {
     // Grant MediaConvert job role S3 write access to transcription bucket (for MP4 output)
     transcriptionBucket.grantWrite(mediaConvertRole);
 
+    // Grant MediaConvert job role S3 read access to transcription bucket too —
+    // the clip pipeline uses the MP4 sitting there as its INPUT (IVS's native HLS
+    // is v7 which MediaConvert can't ingest), so without read here every clip
+    // encode job errors with "Access denied" on recording.mp4.
+    transcriptionBucket.grantRead(mediaConvertRole);
+
     // Grant MediaConvert permissions to recording-ended handler for job submission
     recordingEndedFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['mediaconvert:CreateJob', 'mediaconvert:TagResource'],

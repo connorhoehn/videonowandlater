@@ -30,7 +30,7 @@ import { getDocumentClient } from '../lib/dynamodb-client';
 import { getSessionById, getHangoutParticipants } from '../repositories/session-repository';
 import { getRuleset } from '../repositories/ruleset-repository';
 import { classifyImage } from '../lib/nova-moderation';
-import { thresholdForSeverity } from '../domain/ruleset';
+import { thresholdForSeverity, DEFAULT_AUTO_BOUNCE_THRESHOLD } from '../domain/ruleset';
 import { SessionType } from '../domain/session';
 import { emitSessionEvent } from '../lib/emit-session-event';
 import { SessionEventType } from '../domain/session-event';
@@ -57,8 +57,6 @@ function getIvs(): IvsClient {
   if (!ivs) ivs = new IvsClient({});
   return ivs;
 }
-
-const STRIKE_LIMIT = 3;
 
 interface ParsedKey {
   sessionId: string;
@@ -257,7 +255,8 @@ async function handleFlaggedFrame(args: {
     });
   } catch { /* non-blocking */ }
 
-  if (newStrikes >= STRIKE_LIMIT) {
+  const strikeLimit = ruleset.autoBounceThreshold ?? DEFAULT_AUTO_BOUNCE_THRESHOLD;
+  if (newStrikes >= strikeLimit) {
     await bounceUser({ tableName, session, userId, reason: 'Content moderation violations' });
   }
 }

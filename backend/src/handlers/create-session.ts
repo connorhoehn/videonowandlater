@@ -11,7 +11,7 @@ import { emitSessionEvent } from '../lib/emit-session-event';
 import { startAdsSession } from '../lib/ad-service-client';
 import { SessionEventType } from '../domain/session-event';
 import { getDocumentClient } from '../lib/dynamodb-client';
-import { getCurrentVersion } from '../repositories/ruleset-repository';
+import { getCurrentVersion, getRuleset } from '../repositories/ruleset-repository';
 import { v4 as uuidv4 } from 'uuid';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -120,9 +120,11 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     };
   }
 
-  // Phase 4: pin ruleset version at session start if moderation enabled
+  // Phase 4: pin ruleset version + tunables at session start if moderation enabled
   let rulesetName: string | undefined;
   let rulesetVersion: number | undefined;
+  let frameIntervalSec: number | undefined;
+  let autoBounceThreshold: number | undefined;
   if (body.moderationEnabled && body.rulesetName) {
     try {
       const version = await getCurrentVersion(tableName, body.rulesetName);
@@ -138,6 +140,11 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       }
       rulesetName = body.rulesetName;
       rulesetVersion = version;
+      const ruleset = await getRuleset(tableName, body.rulesetName, version);
+      if (ruleset) {
+        frameIntervalSec = ruleset.frameIntervalSec;
+        autoBounceThreshold = ruleset.autoBounceThreshold;
+      }
     } catch (err) {
       // Non-blocking: fail closed only on validation error above; treat loader errors as soft-fail
     }
@@ -149,6 +156,8 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     moderationEnabled: Boolean(body.moderationEnabled && rulesetName && rulesetVersion !== undefined),
     rulesetName,
     rulesetVersion,
+    frameIntervalSec,
+    autoBounceThreshold,
     // Live captions flag — only persisted when explicitly true; default is off
     captionsEnabled: body.captionsEnabled === true,
     // Phase 5: scheduled sessions

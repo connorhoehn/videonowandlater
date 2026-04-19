@@ -14,6 +14,8 @@ import { ApiExtensionsStack } from './api-extensions-stack';
 export interface ApiStackProps extends StackProps {
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
+  /** Cognito Identity Pool — hosts mint Transcribe Streaming creds through this. */
+  identityPoolId?: string;
   sessionsTable: dynamodb.ITable;
   recordingsBucket?: s3.IBucket;
   mediaConvertTopic?: sns.ITopic;
@@ -32,6 +34,14 @@ export class ApiStack extends Stack {
   public readonly api: apigateway.RestApi;
   /** Cognito authorizer exposed so sibling stacks can reuse it. */
   public readonly authorizer: apigateway.CognitoUserPoolsAuthorizer;
+  /** Resource ID for `/sessions` — sibling stacks must import this, not re-create. */
+  public readonly sessionsResourceId: string;
+  /** Resource ID for `/me` — sibling stacks must import this, not re-create. */
+  public readonly meResourceId: string;
+  /** Resource ID for `/sessions/{sessionId}` — sibling stacks must import this. */
+  public readonly sessionIdResourceId: string;
+  /** Resource ID for `/sessions/{sessionId}/chat` — sibling stacks must import this. */
+  public readonly sessionChatResourceId: string;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -50,6 +60,28 @@ export class ApiStack extends Stack {
       },
     });
     this.api = api;
+
+    // Ensure 4xx/5xx error responses include CORS headers. Without this,
+    // backend errors (like a Lambda timeout returning 502) come back without
+    // Access-Control-Allow-Origin, and browsers surface "blocked by CORS" —
+    // which misleads debugging into chasing a CORS issue instead of the
+    // underlying 5xx. The CORS_HEADERS set here must stay in sync with
+    // `defaultCorsPreflightOptions` above.
+    const CORS_RESPONSE_HEADERS = {
+      'gatewayresponse.header.Access-Control-Allow-Origin': "'*'",
+      'gatewayresponse.header.Access-Control-Allow-Methods': "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'",
+      'gatewayresponse.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+    };
+    for (const type of [
+      apigateway.ResponseType.DEFAULT_4XX,
+      apigateway.ResponseType.DEFAULT_5XX,
+    ]) {
+      new apigateway.GatewayResponse(this, `Gw${type.responseType}`, {
+        restApi: api,
+        type,
+        responseHeaders: CORS_RESPONSE_HEADERS,
+      });
+    }
 
     // Health check endpoint (no auth required)
     const health = api.root.addResource('health');
@@ -75,6 +107,7 @@ export class ApiStack extends Stack {
 
     // Protected /me endpoint with Cognito authorizer
     const me = api.root.addResource('me');
+    this.meResourceId = me.resourceId;
     const meHandler = new NodejsFunction(this, 'MeHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/me.ts'),
       handler: 'handler',
@@ -89,6 +122,7 @@ export class ApiStack extends Stack {
 
     // Sessions resource
     const sessions = api.root.addResource('sessions');
+    this.sessionsResourceId = sessions.resourceId;
 
     // POST /sessions (create session)
     const createSessionHandler = new NodejsFunction(this, 'CreateSessionHandler', {
@@ -129,6 +163,7 @@ export class ApiStack extends Stack {
 
     // GET /sessions/{sessionId} — migrated to ApiExtensionsStack
     const sessionIdResource = sessions.addResource('{sessionId}');
+    this.sessionIdResourceId = sessionIdResource.resourceId;
 
     // POST /sessions/{sessionId}/start (start broadcast)
     const sessionStartResource = sessionIdResource.addResource('start');
@@ -212,6 +247,7 @@ export class ApiStack extends Stack {
     // Chat endpoints
     // NOTE: POST /sessions/{sessionId}/chat/token was migrated to ApiExtensionsStack.
     const sessionChatResource = sessionIdResource.addResource('chat');
+    this.sessionChatResourceId = sessionChatResource.resourceId;
 
     // POST /sessions/{sessionId}/playback-token (generate playback token)
     const playbackTokenResource = sessionIdResource.addResource('playback-token');
@@ -276,7 +312,12 @@ export class ApiStack extends Stack {
     const sessionTranscriptResource = sessionIdResource.addResource('transcript');
 
     // GET /sessions/{sessionId}/transcript (get transcript)
-    const transcriptionBucketName = 'vnl-transcription-vnl-session';
+    // NOTE: bucket name must be resolved from the actual Storage stack prop —
+    // a prior refactor moved transcription ownership from VNL-Session to VNL-Storage,
+    // which changed the physical bucket name (…-session → …-storage). The
+    // hardcoded string here used to be `vnl-transcription-vnl-session`, which
+    // 403'd every transcript fetch in prod after the move.
+    const transcriptionBucketName = props.transcriptionBucket?.bucketName ?? 'vnl-transcription-vnl-storage';
     const getTranscriptHandler = new NodejsFunction(this, 'GetTranscriptHandler', {
       entry: path.join(__dirname, '../../../backend/src/handlers/get-transcript.ts'),
       handler: 'handler',
@@ -291,12 +332,16 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadData(getTranscriptHandler);
 
     // Grant S3 read access to transcription bucket
-    getTranscriptHandler.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
-      })
-    );
+    if (props.transcriptionBucket) {
+      props.transcriptionBucket.grantRead(getTranscriptHandler);
+    } else {
+      getTranscriptHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['s3:GetObject'],
+          resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+        }),
+      );
+    }
 
     sessionTranscriptResource.addMethod('GET', new apigateway.LambdaIntegration(getTranscriptHandler), {
       authorizer,
@@ -363,8 +408,9 @@ export class ApiStack extends Stack {
     const captionsEnv: Record<string, string> = {
       TABLE_NAME: props.sessionsTable.tableName,
     };
-    if (process.env.CAPTIONS_IDENTITY_POOL_ID) {
-      captionsEnv.IDENTITY_POOL_ID = process.env.CAPTIONS_IDENTITY_POOL_ID;
+    const resolvedIdentityPoolId = props.identityPoolId ?? process.env.CAPTIONS_IDENTITY_POOL_ID;
+    if (resolvedIdentityPoolId) {
+      captionsEnv.IDENTITY_POOL_ID = resolvedIdentityPoolId;
     }
 
     // POST /sessions/{sessionId}/captions — broadcast + persist caption segment
@@ -502,6 +548,9 @@ export class ApiStack extends Stack {
       entry: path.join(__dirname, '../../../backend/src/handlers/join-hangout.ts'),
       handler: 'handler',
       runtime: Runtime.NODEJS_20_X,
+      // IVS CreateParticipantToken can take 2-5s on cold start; default 3s times out.
+      timeout: Duration.seconds(15),
+      memorySize: 256,
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
       },

@@ -7,6 +7,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { isAdmin, getAdminUserId } from '../lib/admin-auth';
 import { createRulesetVersion } from '../repositories/ruleset-repository';
 import type { RulesetSeverity } from '../domain/ruleset';
+import { clampFrameInterval, clampAutoBounceThreshold } from '../domain/ruleset';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'admin-upsert-ruleset' } });
@@ -38,6 +39,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     description?: string;
     disallowedItems?: unknown;
     severity?: RulesetSeverity;
+    frameIntervalSec?: number;
+    autoBounceThreshold?: number;
   };
   try {
     body = JSON.parse(event.body ?? '{}');
@@ -63,6 +66,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       description,
       disallowedItems: disallowedItems as string[],
       severity,
+      frameIntervalSec: clampFrameInterval(body.frameIntervalSec),
+      autoBounceThreshold: clampAutoBounceThreshold(body.autoBounceThreshold),
       createdBy: adminUserId,
     });
     logger.info('Created new ruleset version', { name, version: row.version, adminUserId });

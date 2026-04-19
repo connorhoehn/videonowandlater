@@ -8,12 +8,14 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
-    "@vnl/ads-admin-ui": "file:../../vnl-ads/admin-ui",
     "@casl/ability": "^6.8.0",
     "@types/uuid": "^10.0.0",
+    "@vnl/ads-admin-ui": "file:../../vnl-ads/admin-ui",
     "amazon-ivs-chat-messaging": "^1.1.1",
     "amazon-ivs-player": "^1.49.0",
     "amazon-ivs-web-broadcast": "^1.32.0",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

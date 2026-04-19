@@ -12,6 +12,11 @@ cdk-outputs-*.json
 # Claude Code worktrees / transient agent state
 .claude/
 
+# Playwright
+web/test-results/
+web/playwright-report/
+web/.playwright/
+
 # Generated frontend config
 web/public/aws-config.json
 

@@ -20,6 +20,7 @@ import { getHangoutParticipants, updateSessionStatus } from '../repositories/ses
 import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import { emitSessionEvent } from '../lib/emit-session-event';
+import { endAdsSession } from '../lib/ad-service-client';
 import { SessionEventType } from '../domain/session-event';
 
 const logger = new Logger({
@@ -110,6 +111,9 @@ async function killLiveSession(tableName: string, session: any): Promise<void> {
 
   // Transition to ENDING
   await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
+
+  // Notify vnl-ads so the scheduler stops firing into this session.
+  void endAdsSession(sessionId);
 
   try {
     await emitSessionEvent(tableName, {

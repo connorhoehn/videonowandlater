@@ -8,6 +8,7 @@ import { SessionType } from '../domain/session';
 import { createNewSession } from '../services/session-service';
 import { createStorySession } from '../repositories/story-repository';
 import { emitSessionEvent } from '../lib/emit-session-event';
+import { startAdsSession } from '../lib/ad-service-client';
 import { SessionEventType } from '../domain/session-event';
 import { getDocumentClient } from '../lib/dynamodb-client';
 import { getCurrentVersion } from '../repositories/ruleset-repository';
@@ -145,6 +146,10 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       actorType: 'user', details: { sessionType: body.sessionType, requireApproval },
     });
   } catch { /* non-blocking */ }
+
+  // Notify vnl-ads that this creator is now LIVE so scheduled campaigns can fire.
+  // Fire-and-forget; feature-flag off / SDK failures are swallowed inside.
+  void startAdsSession(result.sessionId, userId);
 
   return {
     statusCode: 201,

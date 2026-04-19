@@ -91,17 +91,23 @@ export const handler: APIGatewayProxyHandler = async (
     return resp(200, { delivered: false, reason: 'ads_disabled' });
   }
 
-  const overlay = await triggerAd({
+  const outcome = await triggerAd({
     creativeId,
     sessionId,
     creatorId: session.userId,
     triggerType,
   });
-  if (!overlay) {
-    return resp(200, { delivered: false, reason: 'no_overlay' });
+  // v0.3: overlayPayload can be null with an explicit reason ('cap_reached',
+  // 'schedule_out_of_window', 'no_creative'). Surface it verbatim so telemetry
+  // sees why nothing was broadcast.
+  if (!outcome.overlayPayload) {
+    return resp(200, {
+      delivered: false,
+      reason: outcome.reason ?? 'no_overlay',
+    });
   }
 
-  const overlayWithCreative: OverlayPayload = { ...overlay, creativeId };
+  const overlayWithCreative: OverlayPayload = { ...outcome.overlayPayload, creativeId };
   const { json: metadataJson, truncated } = serializeOverlayForIvs(overlayWithCreative);
   if (truncated) {
     logger.warn('Overlay payload exceeded 1KB — truncated for IVS PutMetadata', {

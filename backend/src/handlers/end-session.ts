@@ -11,6 +11,7 @@ import { releasePoolResource } from '../repositories/resource-pool-repository';
 import { SessionStatus, SessionType } from '../domain/session';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { emitSessionEvent } from '../lib/emit-session-event';
+import { endAdsSession } from '../lib/ad-service-client';
 import { SessionEventType } from '../domain/session-event';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -45,6 +46,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (session.status === SessionStatus.ENDING || session.status === SessionStatus.ENDED) {
       return resp(200, { message: 'Session already ending/ended', status: session.status });
     }
+
+    // Notify vnl-ads on every legitimate end so the scheduler stops firing
+    // into this session. Fire-and-forget; idempotent on the vnl-ads side.
+    void endAdsSession(sessionId);
 
     // Hangout sessions transition to ENDING to wait for per-participant recording events.
     // recording-ended handler will transition ENDING → ENDED once all participant recordings arrive.

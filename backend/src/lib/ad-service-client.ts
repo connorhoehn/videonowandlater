@@ -49,6 +49,13 @@ export interface TriggerAdInput {
   triggerType: 'manual' | 'scheduled';
 }
 
+/** Outcome of a trigger call including the new v0.3 `reason` field. */
+export interface TriggerAdOutcome {
+  overlayPayload: OverlayPayload | null;
+  /** v0.3+: non-null when overlayPayload is null and the service explained why. */
+  reason?: 'cap_reached' | 'schedule_out_of_window' | 'no_creative' | string;
+}
+
 export interface TrackClickInput {
   creativeId: string;
   sessionId: string;
@@ -122,9 +129,9 @@ export async function getDrawer(userId: string, sessionId: string): Promise<Draw
   }
 }
 
-export async function triggerAd(input: TriggerAdInput): Promise<OverlayPayload | null> {
+export async function triggerAd(input: TriggerAdInput): Promise<TriggerAdOutcome> {
   const client = getClient();
-  if (!client) return null;
+  if (!client) return { overlayPayload: null };
 
   try {
     const body: TriggerRequest = {
@@ -133,12 +140,46 @@ export async function triggerAd(input: TriggerAdInput): Promise<OverlayPayload |
       creatorId: input.creatorId,
       triggerType: input.triggerType,
     };
-    const res: TriggerResponse = await client.trigger(body);
-    const payload = (res as { overlayPayload?: OverlayPayload })?.overlayPayload;
-    return payload ?? null;
+    const res = (await client.trigger(body)) as {
+      overlayPayload?: OverlayPayload | null;
+      reason?: string;
+    };
+    return {
+      overlayPayload: res?.overlayPayload ?? null,
+      reason: res?.reason,
+    };
   } catch (err) {
     logFailure('trigger', { sessionId: input.sessionId, creativeId: input.creativeId }, err);
-    return null;
+    return { overlayPayload: null };
+  }
+}
+
+/**
+ * POST /v1/sessions/{sessionId}/start — tells vnl-ads a creator just went LIVE.
+ * Fire-and-forget; vnl-ads uses this to know which sessions are eligible for
+ * scheduled campaign triggers. Idempotent on the vnl-ads side.
+ */
+export async function startAdsSession(sessionId: string, creatorId: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    await client.startSession(sessionId, { creatorId });
+  } catch (err) {
+    logFailure('startSession', { sessionId, creatorId }, err);
+  }
+}
+
+/**
+ * POST /v1/sessions/{sessionId}/end — tells vnl-ads a session is done so the
+ * scheduler stops firing triggers into it. Fire-and-forget; idempotent.
+ */
+export async function endAdsSession(sessionId: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    await client.endSession(sessionId);
+  } catch (err) {
+    logFailure('endSession', { sessionId }, err);
   }
 }
 

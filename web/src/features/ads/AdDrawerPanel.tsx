@@ -15,12 +15,12 @@ interface AdDrawerPanelProps {
 
 export function AdDrawerPanel({ sessionId }: AdDrawerPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const { items, loading, triggering, refresh, trigger } = useAdDrawer(sessionId);
-  const [lastStatus, setLastStatus] = useState<{ creativeId: string; delivered: boolean } | null>(null);
+  const { items, loading, triggering, cappedCreativeIds, refresh, trigger } = useAdDrawer(sessionId);
+  const [lastStatus, setLastStatus] = useState<{ creativeId: string; delivered: boolean; reason?: string } | null>(null);
 
   const handleShowNow = async (creativeId: string) => {
-    const { delivered } = await trigger(creativeId);
-    setLastStatus({ creativeId, delivered });
+    const { delivered, reason } = await trigger(creativeId);
+    setLastStatus({ creativeId, delivered, reason });
   };
 
   return (
@@ -64,36 +64,48 @@ export function AdDrawerPanel({ sessionId }: AdDrawerPanelProps) {
             </div>
           ) : (
             <ul className="flex flex-col gap-2">
-              {items.map((item) => (
-                <li
-                  key={item.creativeId}
-                  className="flex items-center gap-2 p-2 border border-gray-100 rounded-md hover:bg-gray-50"
-                >
-                  <img
-                    src={item.thumbnail}
-                    alt=""
-                    className="w-12 h-12 rounded object-cover flex-shrink-0 bg-gray-100"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-gray-800 truncate" title={item.title}>
-                      {item.title}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                      {item.type} · {(item.durationMs / 1000).toFixed(1)}s
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => void handleShowNow(item.creativeId)}
-                    disabled={triggering}
-                    className="px-2 py-1 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              {items.map((item) => {
+                const capped = cappedCreativeIds.has(item.creativeId);
+                return (
+                  <li
+                    key={item.creativeId}
+                    className={`flex items-center gap-2 p-2 border border-gray-100 rounded-md ${
+                      capped ? 'opacity-60 bg-gray-50' : 'hover:bg-gray-50'
+                    }`}
                   >
-                    Show now
-                  </button>
-                </li>
-              ))}
+                    <img
+                      src={item.thumbnail}
+                      alt=""
+                      className="w-12 h-12 rounded object-cover flex-shrink-0 bg-gray-100"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-gray-800 truncate" title={item.title}>
+                        {item.title}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400 flex items-center gap-1">
+                        <span>
+                          {item.type} · {item.durationMs !== null && item.durationMs !== undefined ? `${(item.durationMs / 1000).toFixed(1)}s` : '—'}
+                        </span>
+                        {capped && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 tracking-normal normal-case font-medium">
+                            Cap reached
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void handleShowNow(item.creativeId)}
+                      disabled={triggering || capped}
+                      className="px-2 py-1 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {capped ? 'Capped' : 'Show now'}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
           {lastStatus && (
@@ -106,7 +118,11 @@ export function AdDrawerPanel({ sessionId }: AdDrawerPanelProps) {
             >
               {lastStatus.delivered
                 ? 'Overlay sent to viewers.'
-                : 'Not delivered (service unavailable).'}
+                : lastStatus.reason === 'cap_reached'
+                  ? 'Frequency cap reached — creative greyed out.'
+                  : lastStatus.reason === 'schedule_out_of_window'
+                    ? 'Campaign is outside its scheduled window.'
+                    : 'Not delivered.'}
             </div>
           )}
         </div>

@@ -131,7 +131,7 @@ describe('trigger-promo handler', () => {
 
   test('BROADCAST path → PutMetadataCommand with {type:"ad", ...}', async () => {
     mockGetSessionById.mockResolvedValue(broadcastSession);
-    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'sponsor_card', banner: 'https://cdn/img.png' });
+    mockTriggerAd.mockResolvedValue({ overlayPayload: { schemaVersion: 1, type: 'sponsor_card', banner: 'https://cdn/img.png' } });
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
@@ -149,7 +149,7 @@ describe('trigger-promo handler', () => {
 
   test('HANGOUT path → SendEventCommand with eventName=ad_overlay', async () => {
     mockGetSessionById.mockResolvedValue(hangoutSession);
-    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'product_pin', sku: 'SKU-1' });
+    mockTriggerAd.mockResolvedValue({ overlayPayload: { schemaVersion: 1, type: 'product_pin', sku: 'SKU-1' } });
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
@@ -165,19 +165,28 @@ describe('trigger-promo handler', () => {
     expect(payload.sku).toBe('SKU-1');
   });
 
-  test('triggerAd returns null → 200 delivered=false, no IVS call', async () => {
+  test('triggerAd returns null with reason → 200 delivered=false, reason passed through', async () => {
     mockGetSessionById.mockResolvedValue(broadcastSession);
-    mockTriggerAd.mockResolvedValue(null);
+    mockTriggerAd.mockResolvedValue({ overlayPayload: null, reason: 'cap_reached' });
+    const event = createEvent({ actorId: OWNER_ID });
+    const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ delivered: false, reason: 'cap_reached' });
+    expect(mockIvsSend).not.toHaveBeenCalled();
+  });
+
+  test('triggerAd returns null with no reason → falls back to "no_overlay"', async () => {
+    mockGetSessionById.mockResolvedValue(broadcastSession);
+    mockTriggerAd.mockResolvedValue({ overlayPayload: null });
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ delivered: false, reason: 'no_overlay' });
-    expect(mockIvsSend).not.toHaveBeenCalled();
   });
 
   test('IVS PutMetadata throws → 200 delivered=false, no 500', async () => {
     mockGetSessionById.mockResolvedValue(broadcastSession);
-    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'sponsor_card' });
+    mockTriggerAd.mockResolvedValue({ overlayPayload: { schemaVersion: 1, type: 'sponsor_card' } });
     mockIvsSend.mockRejectedValueOnce(new Error('Channel offline'));
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;

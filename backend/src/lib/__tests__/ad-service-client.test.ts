@@ -9,6 +9,8 @@ import { AdsHttpError, AdsUnavailableError } from '@vnl/ads-client';
 const mockGetDrawer = jest.fn();
 const mockTrigger = jest.fn();
 const mockClick = jest.fn();
+const mockStartSession = jest.fn();
+const mockEndSession = jest.fn();
 
 jest.mock('@vnl/ads-client', () => {
   const actual = jest.requireActual('@vnl/ads-client');
@@ -18,6 +20,8 @@ jest.mock('@vnl/ads-client', () => {
       getDrawer: mockGetDrawer,
       trigger: mockTrigger,
       click: mockClick,
+      startSession: mockStartSession,
+      endSession: mockEndSession,
     })),
   };
 });
@@ -40,6 +44,8 @@ describe('ad-service-client', () => {
     mockGetDrawer.mockReset();
     mockTrigger.mockReset();
     mockClick.mockReset();
+    mockStartSession.mockReset();
+    mockEndSession.mockReset();
   });
 
   afterEach(() => {
@@ -84,10 +90,10 @@ describe('ad-service-client', () => {
     expect(mockGetDrawer).not.toHaveBeenCalled();
   });
 
-  test('triggerAd returns null when disabled', async () => {
+  test('triggerAd returns {overlayPayload: null} when disabled', async () => {
     const { triggerAd } = await import('../ad-service-client.js');
     const result = await triggerAd({ creativeId: 'c1', sessionId: 's1', creatorId: 'u1', triggerType: 'manual' });
-    expect(result).toBeNull();
+    expect(result).toEqual({ overlayPayload: null });
     expect(mockTrigger).not.toHaveBeenCalled();
   });
 
@@ -115,7 +121,7 @@ describe('ad-service-client', () => {
     expect(mockGetDrawer).toHaveBeenCalledWith('u1', 's1');
   });
 
-  test('triggerAd returns overlayPayload from SDK response', async () => {
+  test('triggerAd returns {overlayPayload, reason?} from SDK response', async () => {
     enableAds();
     mockTrigger.mockResolvedValue({
       overlayPayload: { schemaVersion: 1, type: 'PROMO', cta: { clickResolveEndpoint: '/v1/click' } },
@@ -124,7 +130,17 @@ describe('ad-service-client', () => {
     const { triggerAd, __resetClientForTests } = await import('../ad-service-client.js');
     __resetClientForTests();
     const result = await triggerAd({ creativeId: 'c1', sessionId: 's1', creatorId: 'u1', triggerType: 'manual' });
-    expect(result).toEqual({ schemaVersion: 1, type: 'PROMO', cta: { clickResolveEndpoint: '/v1/click' } });
+    expect(result.overlayPayload).toEqual({ schemaVersion: 1, type: 'PROMO', cta: { clickResolveEndpoint: '/v1/click' } });
+    expect(result.reason).toBeUndefined();
+  });
+
+  test('triggerAd passes through v0.3 reason when overlayPayload is null', async () => {
+    enableAds();
+    mockTrigger.mockResolvedValue({ overlayPayload: null, reason: 'cap_reached' });
+    const { triggerAd, __resetClientForTests } = await import('../ad-service-client.js');
+    __resetClientForTests();
+    const result = await triggerAd({ creativeId: 'c1', sessionId: 's1', creatorId: 'u1', triggerType: 'manual' });
+    expect(result).toEqual({ overlayPayload: null, reason: 'cap_reached' });
   });
 
   test('trackClick returns ctaUrl from SDK response', async () => {
@@ -147,13 +163,47 @@ describe('ad-service-client', () => {
     expect(result).toEqual([]);
   });
 
-  test('triggerAd returns null on AdsUnavailableError', async () => {
+  test('triggerAd returns {overlayPayload: null} on AdsUnavailableError', async () => {
     enableAds();
     mockTrigger.mockRejectedValue(new AdsUnavailableError('breaker open'));
     const { triggerAd, __resetClientForTests } = await import('../ad-service-client.js');
     __resetClientForTests();
     const result = await triggerAd({ creativeId: 'c1', sessionId: 's1', creatorId: 'u1', triggerType: 'manual' });
-    expect(result).toBeNull();
+    expect(result).toEqual({ overlayPayload: null });
+  });
+
+  // ── v0.3 session lifecycle ─────────────────────────────────────────────
+
+  test('startAdsSession no-op when feature flag off', async () => {
+    const { startAdsSession } = await import('../ad-service-client.js');
+    await startAdsSession('s1', 'u1');
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  test('startAdsSession forwards to SDK with {creatorId} body', async () => {
+    enableAds();
+    mockStartSession.mockResolvedValue({ id: 's1', creatorId: 'u1', state: 'LIVE' });
+    const { startAdsSession, __resetClientForTests } = await import('../ad-service-client.js');
+    __resetClientForTests();
+    await startAdsSession('s1', 'u1');
+    expect(mockStartSession).toHaveBeenCalledWith('s1', { creatorId: 'u1' });
+  });
+
+  test('startAdsSession swallows SDK errors (fire-and-forget)', async () => {
+    enableAds();
+    mockStartSession.mockRejectedValue(new AdsUnavailableError('down'));
+    const { startAdsSession, __resetClientForTests } = await import('../ad-service-client.js');
+    __resetClientForTests();
+    await expect(startAdsSession('s1', 'u1')).resolves.toBeUndefined();
+  });
+
+  test('endAdsSession forwards to SDK and swallows errors', async () => {
+    enableAds();
+    mockEndSession.mockResolvedValue({ id: 's1', creatorId: 'u1', state: 'ENDED' });
+    const { endAdsSession, __resetClientForTests } = await import('../ad-service-client.js');
+    __resetClientForTests();
+    await endAdsSession('s1');
+    expect(mockEndSession).toHaveBeenCalledWith('s1');
   });
 
   test('trackClick returns null on unknown error', async () => {

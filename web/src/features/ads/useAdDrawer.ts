@@ -13,13 +13,31 @@ import { fetchToken } from '../../auth/fetchToken';
 import { getConfig } from '../../config/aws-config';
 import type { DrawerItem } from './types';
 
+export type TriggerReason =
+  | 'cap_reached'
+  | 'schedule_out_of_window'
+  | 'no_creative'
+  | 'no_overlay'
+  | 'ads_disabled'
+  | 'no_channel'
+  | 'no_chat_room'
+  | 'unsupported_session_type'
+  | string;
+
+export interface TriggerResult {
+  delivered: boolean;
+  reason?: TriggerReason;
+}
+
 interface UseAdDrawerResult {
   items: DrawerItem[];
   loading: boolean;
   error: string | null;
   triggering: boolean;
+  /** creativeIds that returned a capped/out-of-window reason this session. */
+  cappedCreativeIds: Set<string>;
   refresh: () => Promise<void>;
-  trigger: (creativeId: string) => Promise<{ delivered: boolean }>;
+  trigger: (creativeId: string) => Promise<TriggerResult>;
 }
 
 export function useAdDrawer(sessionId: string | undefined): UseAdDrawerResult {
@@ -27,6 +45,7 @@ export function useAdDrawer(sessionId: string | undefined): UseAdDrawerResult {
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cappedCreativeIds, setCappedCreativeIds] = useState<Set<string>>(() => new Set());
 
   const apiBaseUrl = getConfig()?.apiUrl || 'http://localhost:3000/api';
 
@@ -55,7 +74,7 @@ export function useAdDrawer(sessionId: string | undefined): UseAdDrawerResult {
   }, [apiBaseUrl, sessionId]);
 
   const trigger = useCallback(
-    async (creativeId: string): Promise<{ delivered: boolean }> => {
+    async (creativeId: string): Promise<TriggerResult> => {
       if (!sessionId) return { delivered: false };
       setTriggering(true);
       try {
@@ -70,7 +89,19 @@ export function useAdDrawer(sessionId: string | undefined): UseAdDrawerResult {
         });
         if (!res.ok) return { delivered: false };
         const data = await res.json();
-        return { delivered: !!data?.delivered };
+        const reason: TriggerReason | undefined = data?.reason;
+        // Track creatives that vnl-ads reports capped/out-of-window so the UI
+        // can grey them out. Other reasons (unsupported session type, feature
+        // flag off) aren't per-creative and don't affect the drawer.
+        if (reason === 'cap_reached' || reason === 'schedule_out_of_window') {
+          setCappedCreativeIds((prev) => {
+            if (prev.has(creativeId)) return prev;
+            const next = new Set(prev);
+            next.add(creativeId);
+            return next;
+          });
+        }
+        return { delivered: !!data?.delivered, reason };
       } catch {
         return { delivered: false };
       } finally {
@@ -84,5 +115,5 @@ export function useAdDrawer(sessionId: string | undefined): UseAdDrawerResult {
     void refresh();
   }, [refresh]);
 
-  return { items, loading, error, triggering, refresh, trigger };
+  return { items, loading, error, triggering, cappedCreativeIds, refresh, trigger };
 }

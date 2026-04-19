@@ -3,7 +3,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import { Runtime } from 'aws-cdk-lib/aws-lambda';
+import { Runtime, Alias } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
@@ -217,6 +217,45 @@ export class ApiStack extends Stack {
 
     // No authorizer - public endpoint for viewers
     sessionPlaybackResource.addMethod('GET', new apigateway.LambdaIntegration(getPlaybackHandler));
+
+    // GET /sessions/{sessionId}/live-channel — service-to-service endpoint for
+    // vnl-ads. Resolves a LIVE broadcast to its IVS channelArn + playbackUrl so
+    // MediaTailor can stitch SSAI ads. Authed via reverse-direction HS256 JWT
+    // (iss=vnl-ads, aud=vnl) using the shared SERVICE_JWT_SECRET — not Cognito.
+    // BROADCAST only; HANGOUT returns 404. Provisioned concurrency on the alias
+    // keeps p99 < 50ms for MediaTailor session init.
+    const sessionLiveChannelResource = sessionIdResource.addResource('live-channel');
+
+    const vnlAdsJwtSecret = (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '';
+    const vnlServiceJwtIncomingIssuer = (this.node.tryGetContext('vnlServiceJwtIncomingIssuer') as string | undefined) ?? 'vnl-ads';
+    const vnlServiceJwtIncomingAudience = (this.node.tryGetContext('vnlServiceJwtIncomingAudience') as string | undefined) ?? 'vnl';
+
+    const getLiveChannelHandler = new NodejsFunction(this, 'GetLiveChannelHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-live-channel.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(3),
+      memorySize: 256,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        VNL_ADS_JWT_SECRET: vnlAdsJwtSecret,
+        VNL_SERVICE_JWT_INCOMING_ISSUER: vnlServiceJwtIncomingIssuer,
+        VNL_SERVICE_JWT_INCOMING_AUDIENCE: vnlServiceJwtIncomingAudience,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+
+    props.sessionsTable.grantReadData(getLiveChannelHandler);
+
+    // Alias with provisioned concurrency so MediaTailor's first-request cold
+    // start doesn't blow the p99 < 50ms SLA negotiated with vnl-ads.
+    const getLiveChannelAlias = new Alias(this, 'GetLiveChannelAlias', {
+      aliasName: 'live',
+      version: getLiveChannelHandler.currentVersion,
+      provisionedConcurrentExecutions: 1,
+    });
+
+    sessionLiveChannelResource.addMethod('GET', new apigateway.LambdaIntegration(getLiveChannelAlias));
 
     // GET /sessions/{sessionId}/viewers (get viewer count) - public endpoint
     const sessionViewersResource = sessionIdResource.addResource('viewers');

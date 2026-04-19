@@ -2145,6 +2145,44 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === vnl-ads admin UI + creator earnings (SDK v0.2+) ===
+    // ============================================================
+    // POST /admin/ads/mint-token — returns a short-lived admin JWT so the
+    // embedded <AdsAdminPanel/> can call vnl-ads directly. Secret stays server-side.
+    const adminAds = admin.addResource('ads');
+    const adminAdsMint = adminAds.addResource('mint-token');
+    const adminMintAdsTokenFn = new NodejsFunction(this, 'AdminMintAdsToken', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-mint-ads-token.ts'),
+      timeout: Duration.seconds(5),
+      environment: {
+        VNL_ADS_JWT_SECRET: (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '',
+        VNL_ADS_JWT_ISSUER: (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl',
+        VNL_ADS_ADMIN_JWT_AUDIENCE: (this.node.tryGetContext('vnlAdsAdminJwtAudience') as string | undefined) ?? 'vnl-ads-admin',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminAdsMint.addMethod('POST', new apigateway.LambdaIntegration(adminMintAdsTokenFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /me/earnings — passthrough to vnl-ads `/v1/creators/{userId}/payouts`.
+    const meResource = api.root.addResource('me');
+    const meEarningsResource = meResource.addResource('earnings');
+    const getMyEarningsFn = new NodejsFunction(this, 'GetMyEarnings', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-earnings.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meEarningsResource.addMethod('GET', new apigateway.LambdaIntegration(getMyEarningsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

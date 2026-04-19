@@ -12,9 +12,10 @@ import { RulesetEditor } from '../admin/settings/RulesetEditor';
 import { RolesPanel } from '../admin/settings/RolesPanel';
 import { ChatFlagsPanel } from '../admin/settings/ChatFlagsPanel';
 import { SurveysPanel } from '../admin/settings/SurveysPanel';
+import { CampaignsPanel } from '../admin/settings/CampaignsPanel';
 import { BannedUsersPanel } from '../admin/BannedUsersPanel';
 
-type AdminTab = 'rulesets' | 'bans' | 'roles' | 'chat-flags' | 'surveys';
+type AdminTab = 'rulesets' | 'bans' | 'roles' | 'chat-flags' | 'surveys' | 'campaigns';
 
 const TABS: { key: AdminTab; label: string }[] = [
   { key: 'rulesets', label: 'Rulesets' },
@@ -22,6 +23,7 @@ const TABS: { key: AdminTab; label: string }[] = [
   { key: 'roles', label: 'Roles' },
   { key: 'chat-flags', label: 'Chat Flags' },
   { key: 'surveys', label: 'Surveys' },
+  { key: 'campaigns', label: 'Campaigns' },
 ];
 
 export function AdminSettingsPanel() {
@@ -63,6 +65,7 @@ export function AdminSettingsPanel() {
       {tab === 'roles' && <RolesPanel />}
       {tab === 'chat-flags' && <ChatFlagsPanel />}
       {tab === 'surveys' && <SurveysPanel />}
+      {tab === 'campaigns' && <CampaignsPanel />}
     </section>
   );
 }

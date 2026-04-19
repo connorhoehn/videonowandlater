@@ -11,6 +11,7 @@ import { isAdmin, getAdminUserId } from '../lib/admin-auth';
 import { getRuleset } from '../repositories/ruleset-repository';
 import { classifyImage } from '../lib/nova-moderation';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { getDocumentClient } from '../lib/dynamodb-client';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { handler: 'admin-test-ruleset' } });
 
@@ -26,18 +27,43 @@ function resp(statusCode: number, body: object): APIGatewayProxyResult {
 
 const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB raw — generous for a JPEG frame
 const MAX_CALLS_PER_MINUTE = 10;
-const rateBuckets = new Map<string, { resetAt: number; count: number }>();
+const RATE_WINDOW_SECONDS = 60;
 
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const bucket = rateBuckets.get(userId);
-  if (!bucket || bucket.resetAt < now) {
-    rateBuckets.set(userId, { resetAt: now + 60_000, count: 1 });
+/**
+ * DynamoDB-backed rate limiter — coordinates across warm Lambda containers.
+ * Uses the main table with a minute-aligned bucket key; TTL cleans up stale rows.
+ *
+ * Row shape:
+ *   PK: RATE#admin-test-ruleset#<userId>
+ *   SK: BUCKET#<minuteEpoch>
+ *   count: <int>
+ *   ttl: <unix seconds — minute end + slack>
+ */
+async function checkRateLimit(tableName: string, userId: string): Promise<boolean> {
+  const { UpdateCommand } = await import('@aws-sdk/lib-dynamodb');
+  const nowSec = Math.floor(Date.now() / 1000);
+  const minute = Math.floor(nowSec / RATE_WINDOW_SECONDS);
+  const ttl = (minute + 2) * RATE_WINDOW_SECONDS; // bucket end + one minute slack
+
+  try {
+    const res = await getDocumentClient().send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `RATE#admin-test-ruleset#${userId}`,
+        SK: `BUCKET#${minute}`,
+      },
+      UpdateExpression: 'ADD #count :inc SET #ttl = if_not_exists(#ttl, :ttl)',
+      ExpressionAttributeNames: { '#count': 'count', '#ttl': 'ttl' },
+      ExpressionAttributeValues: { ':inc': 1, ':ttl': ttl },
+      ReturnValues: 'ALL_NEW',
+    }));
+    const count = (res.Attributes?.count as number | undefined) ?? 1;
+    return count <= MAX_CALLS_PER_MINUTE;
+  } catch {
+    // Fail open on DDB errors — better to occasionally over-serve than to
+    // brick a real admin retry.
     return true;
   }
-  if (bucket.count >= MAX_CALLS_PER_MINUTE) return false;
-  bucket.count += 1;
-  return true;
 }
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
@@ -49,7 +75,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const adminUserId = getAdminUserId(event);
   if (!adminUserId) return resp(401, { error: 'Unauthorized' });
 
-  if (!checkRateLimit(adminUserId)) {
+  if (!(await checkRateLimit(tableName, adminUserId))) {
     return resp(429, { error: 'Rate limit exceeded (10 req/min)' });
   }
 
@@ -100,4 +126,4 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 }
 
 // Exported for testing
-export const __test = { checkRateLimit, rateBuckets };
+export const __test = { checkRateLimit };

@@ -511,7 +511,7 @@ export class ApiStack extends Stack {
     joinHangoutHandler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:CreateParticipantToken'],
-        resources: ['*'], // IVS doesn't support resource-level permissions for CreateParticipantToken
+        resources: ['arn:aws:ivs:*:*:stage/*'], // IVS doesn't support resource-level permissions for CreateParticipantToken
       })
     );
 
@@ -537,15 +537,15 @@ export class ApiStack extends Stack {
     }));
     receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivs:StopStream'],
-      resources: ['*'],
+      resources: ['arn:aws:ivs:*:*:channel/*'],
     }));
     receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivs:DisconnectParticipant'],
-      resources: ['*'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
     }));
     receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivschat:SendEvent'],
-      resources: ['*'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
     }));
     moderationFrameResource.addMethod('POST', new apigateway.LambdaIntegration(receiveModerationFrameHandler), {
       authorizer,
@@ -1067,21 +1067,21 @@ export class ApiStack extends Stack {
     adminKillSessionFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:StopStream'],
-        resources: ['*'],
+        resources: ['arn:aws:ivs:*:*:channel/*'],
       })
     );
 
     adminKillSessionFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:DisconnectParticipant'],
-        resources: ['*'],
+        resources: ['arn:aws:ivs:*:*:stage/*'],
       })
     );
 
     adminKillSessionFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivschat:SendEvent'],
-        resources: ['*'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
       })
     );
 
@@ -1239,21 +1239,21 @@ export class ApiStack extends Stack {
     adminReviewModerationFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:StopStream'],
-        resources: ['*'],
+        resources: ['arn:aws:ivs:*:*:channel/*'],
       })
     );
 
     adminReviewModerationFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:DisconnectParticipant'],
-        resources: ['*'],
+        resources: ['arn:aws:ivs:*:*:stage/*'],
       })
     );
 
     adminReviewModerationFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivschat:SendEvent'],
-        resources: ['*'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
       })
     );
 
@@ -1512,7 +1512,7 @@ export class ApiStack extends Stack {
     adminCreateGlobalBanFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
-        resources: ['*'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
       }),
     );
     adminBans.addMethod('POST', new apigateway.LambdaIntegration(adminCreateGlobalBanFn), {
@@ -1587,7 +1587,7 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadWriteData(approveLobbyFn);
     approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivs:CreateParticipantToken'],
-      resources: ['*'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
     }));
     approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivschat:SendEvent'],
@@ -1610,7 +1610,7 @@ export class ApiStack extends Stack {
     props.sessionsTable.grantReadWriteData(denyLobbyFn);
     denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivs:DisconnectParticipant'],
-      resources: ['*'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
     }));
     denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ivschat:SendEvent'],
@@ -2023,7 +2023,7 @@ export class ApiStack extends Stack {
     triggerPromoFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ivs:PutMetadata'],
-        resources: ['*'],
+        resources: ['arn:aws:ivs:*:*:channel/*'],
       }),
     );
     triggerPromoFn.addToRolePolicy(

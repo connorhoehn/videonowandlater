@@ -383,13 +383,20 @@ export class SessionStack extends Stack {
 
     this.table.grantReadWriteData(scanActiveSessionsFn);
 
+    // IVS IAM actions all share the `ivs:` namespace (both Low-Latency and
+    // Real-Time). Scope each by ARN shape so a mistake in one handler can't
+    // e.g. stop unrelated channels.
     scanActiveSessionsFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'ivs:StopStream',
-        'ivs-realtime:DisconnectParticipant',
-        'ivschat:SendEvent',
-      ],
-      resources: ['*'],
+      actions: ['ivs:StopStream'],
+      resources: ['arn:aws:ivs:*:*:channel/*'],
+    }));
+    scanActiveSessionsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:DisconnectParticipant'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
+    }));
+    scanActiveSessionsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
     }));
 
     new events.Rule(this, 'ScanActiveSessionsSchedule', {

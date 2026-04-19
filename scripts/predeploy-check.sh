@@ -158,7 +158,7 @@ echo -e "${GREEN}${STORAGE_CONFIGS} existing${RESET}"
 # 8d. Check CloudFormation stack status (detect ROLLBACK states, auto-fix ROLLBACK_COMPLETE)
 echo -n "  CloudFormation stack status... "
 STACK_ERRORS=0
-for STACK in VNL-Storage VNL-Session VNL-Api VNL-Auth VNL-Web VNL-Monitoring VNL-Agent; do
+for STACK in VNL-Storage VNL-Session VNL-Api VNL-Api-Ext VNL-Auth VNL-Web VNL-Monitoring VNL-Agent; do
   STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
   if [ "$STATUS" = "ROLLBACK_COMPLETE" ]; then
     # Stack failed on first create and rolled back — must be deleted before CDK can recreate

@@ -2,6 +2,7 @@ import { App } from 'aws-cdk-lib';
 import { AuthStack } from '../lib/stacks/auth-stack';
 import { AgentStack } from '../lib/stacks/agent-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
+import { ApiExtensionsStack } from '../lib/stacks/api-extensions-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { SessionStack } from '../lib/stacks/session-stack';
 import { StorageStack } from '../lib/stacks/storage-stack';
@@ -19,7 +20,7 @@ const sessionStack = new SessionStack(app, 'VNL-Session', {
   transcriptionBucket: storageStack.transcriptionBucket,
   cloudfrontDomainName: storageStack.cloudfrontDomainName,
 });
-new ApiStack(app, 'VNL-Api', {
+const apiStack = new ApiStack(app, 'VNL-Api', {
   env,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
@@ -32,6 +33,21 @@ new ApiStack(app, 'VNL-Api', {
   moderationBucket: sessionStack.moderationBucket,
   mediaConvertJobRoleArn: sessionStack.mediaConvertJobRoleArn,
   transcriptionBucket: storageStack.transcriptionBucket,
+});
+
+// Phase 1-5 routes live in a sibling stack to stay under the CFN 500-resource
+// limit per stack (VNL-Api hit ~1000 after all phases landed).
+new ApiExtensionsStack(app, 'VNL-Api-Ext', {
+  env,
+  restApiId: apiStack.api.restApiId,
+  restApiRootResourceId: apiStack.api.restApiRootResourceId,
+  userPool: authStack.userPool,
+  userPoolClient: authStack.userPoolClient,
+  sessionsTable: sessionStack.table,
+  recordingsBucket: storageStack.recordingsBucket,
+  transcriptionBucket: storageStack.transcriptionBucket,
+  mediaConvertJobRoleArn: sessionStack.mediaConvertJobRoleArn,
+  transcriptionBucketName: storageStack.transcriptionBucket.bucketName,
 });
 new AgentStack(app, 'VNL-Agent', {
   env,

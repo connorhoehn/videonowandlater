@@ -9,6 +9,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import { ApiExtensionsStack } from './api-extensions-stack';
 
 export interface ApiStackProps extends StackProps {
   userPool: cognito.UserPool;
@@ -27,12 +28,18 @@ export interface ApiStackProps extends StackProps {
 }
 
 export class ApiStack extends Stack {
+  /** RestApi exposed so sibling stacks (e.g. ApiExtensionsStack) can attach routes. */
+  public readonly api: apigateway.RestApi;
+  /** Cognito authorizer exposed so sibling stacks can reuse it. */
+  public readonly authorizer: apigateway.CognitoUserPoolsAuthorizer;
+
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'Authorizer', {
       cognitoUserPools: [props.userPool],
     });
+    this.authorizer = authorizer;
 
     const api = new apigateway.RestApi(this, 'Api', {
       restApiName: 'vnl-api',
@@ -42,6 +49,7 @@ export class ApiStack extends Stack {
         allowHeaders: ['Content-Type', 'Authorization'],
       },
     });
+    this.api = api;
 
     // Health check endpoint (no auth required)
     const health = api.root.addResource('health');
@@ -2239,7 +2247,8 @@ export class ApiStack extends Stack {
     });
 
     // GET /me/earnings — passthrough to vnl-ads `/v1/creators/{userId}/payouts`.
-    const meResource = api.root.addResource('me');
+    // Reuse the existing `/me` resource created above for the base handler.
+    const meResource = me;
     const meEarningsResource = meResource.addResource('earnings');
     const getMyEarningsFn = new NodejsFunction(this, 'GetMyEarnings', {
       runtime: Runtime.NODEJS_20_X,
@@ -2295,381 +2304,8 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    // ============================================================
-    // === Phase 1: Profiles, Follow, Notifications ===
-    // ============================================================
-    const profileEnv = { TABLE_NAME: props.sessionsTable.tableName };
-
-    // GET /me/profile — returns caller's profile + stats (creates skeleton on first call)
-    const meProfile = meResource.addResource('profile');
-    const getMyProfileFn = new NodejsFunction(this, 'GetMyProfile', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-profile.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(getMyProfileFn);
-    meProfile.addMethod('GET', new apigateway.LambdaIntegration(getMyProfileFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // PATCH /me/profile — update profile (handle claim is atomic; 409 if taken)
-    const updateMyProfileFn = new NodejsFunction(this, 'UpdateMyProfile', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/update-my-profile.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(updateMyProfileFn);
-    meProfile.addMethod('PATCH', new apigateway.LambdaIntegration(updateMyProfileFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /creators/{handle} — public profile page (no auth)
-    const creatorsResource = api.root.addResource('creators');
-    const creatorByHandle = creatorsResource.addResource('{handle}');
-    const getPublicProfileFn = new NodejsFunction(this, 'GetPublicProfile', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-public-profile.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getPublicProfileFn);
-    creatorByHandle.addMethod('GET', new apigateway.LambdaIntegration(getPublicProfileFn));
-
-    // POST/DELETE /users/{userId}/follow
-    const usersResource = api.root.addResource('users');
-    const userById = usersResource.addResource('{userId}');
-    const followResource = userById.addResource('follow');
-    const followUserFn = new NodejsFunction(this, 'FollowUser', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/follow-user.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(followUserFn);
-    followResource.addMethod('POST', new apigateway.LambdaIntegration(followUserFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-    followResource.addMethod('DELETE', new apigateway.LambdaIntegration(followUserFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /me/notifications — list inbox
-    const meNotifsResource = meResource.addResource('notifications');
-    const listNotificationsFn = new NodejsFunction(this, 'ListNotifications', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/list-notifications.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(listNotificationsFn);
-    meNotifsResource.addMethod('GET', new apigateway.LambdaIntegration(listNotificationsFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // POST /me/notifications/{notificationId}/read
-    const notifById = meNotifsResource.addResource('{notificationId}');
-    const notifReadResource = notifById.addResource('read');
-    const markNotifReadFn = new NodejsFunction(this, 'MarkNotificationRead', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/mark-notification-read.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(markNotifReadFn);
-    notifReadResource.addMethod('POST', new apigateway.LambdaIntegration(markNotifReadFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // ============================================================
-    // === Phase 4a: Playback Polish ===
-    // ============================================================
-    // GET /sessions/{sessionId}/chapters — return AI-generated chapter markers
-    const sessionChaptersResource = sessionIdResource.addResource('chapters');
-    const getSessionChaptersFn = new NodejsFunction(this, 'GetSessionChaptersHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-session-chapters.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      environment: {
-        TABLE_NAME: props.sessionsTable.tableName,
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getSessionChaptersFn);
-    sessionChaptersResource.addMethod('GET', new apigateway.LambdaIntegration(getSessionChaptersFn), {
-      authorizer,
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /sessions/{sessionId}/recording/download — return short-lived signed download URL
-    const sessionRecordingResource = sessionIdResource.addResource('recording');
-    const sessionRecordingDownloadResource = sessionRecordingResource.addResource('download');
-    const getRecordingDownloadUrlFn = new NodejsFunction(this, 'GetRecordingDownloadUrlHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-recording-download-url.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      environment: {
-        TABLE_NAME: props.sessionsTable.tableName,
-        TRANSCRIPTION_BUCKET: transcriptionBucketName,
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getRecordingDownloadUrlFn);
-    getRecordingDownloadUrlFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
-      }),
-    );
-    sessionRecordingDownloadResource.addMethod(
-      'GET',
-      new apigateway.LambdaIntegration(getRecordingDownloadUrlFn),
-      {
-        authorizer,
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-      },
-    );
-
-    // ============================================================
-    // === Phase 2: Discovery ===
-    // ============================================================
-    // GET /search?q=...&filter=... — public discovery search (no auth)
-    const searchResource = api.root.addResource('search');
-    const searchSessionsFn = new NodejsFunction(this, 'SearchSessions', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/search-sessions.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(searchSessionsFn);
-    searchResource.addMethod('GET', new apigateway.LambdaIntegration(searchSessionsFn));
-
-    // GET /feed?tab=live|upcoming|recent|following — discovery feed.
-    // Cognito authorizer attached so the handler can identify the caller for
-    // the `following` tab; for other tabs the handler simply ignores auth.
-    const feedResource = api.root.addResource('feed');
-    const getFeedFn = new NodejsFunction(this, 'GetFeed', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-feed.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getFeedFn);
-    feedResource.addMethod('GET', new apigateway.LambdaIntegration(getFeedFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /creators/{handle}/sessions — creator page session grid (no auth)
-    const creatorSessionsResource = creatorByHandle.addResource('sessions');
-    const getCreatorSessionsFn = new NodejsFunction(this, 'GetCreatorSessions', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-creator-sessions.ts'),
-      timeout: Duration.seconds(10),
-      environment: profileEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getCreatorSessionsFn);
-    creatorSessionsResource.addMethod('GET', new apigateway.LambdaIntegration(getCreatorSessionsFn));
-
-    // ============================================================
-    // === Phase 4b: Clips ===
-    // Viewer-initiated highlights: 5-180s MP4 extracted from an ended session
-    // via MediaConvert InputClippings, shareable via a public /clip/:id route.
-    // ============================================================
-    const clipsEnv: Record<string, string> = {
-      TABLE_NAME: props.sessionsTable.tableName,
-      RECORDINGS_BUCKET: props.recordingsBucket?.bucketName ?? '',
-      MEDIACONVERT_ROLE_ARN: props.mediaConvertJobRoleArn ?? '',
-      TRANSCRIPTION_BUCKET: props.transcriptionBucket?.bucketName ?? '',
-      AWS_ACCOUNT_ID: this.account,
-    };
-
-    // POST /sessions/{sessionId}/clips — submit a MediaConvert clip job
-    const createClipFn = new NodejsFunction(this, 'CreateClipHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/create-clip.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      timeout: Duration.seconds(15),
-      environment: clipsEnv,
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(createClipFn);
-    if (props.recordingsBucket) props.recordingsBucket.grantWrite(createClipFn);
-    if (props.transcriptionBucket) props.transcriptionBucket.grantRead(createClipFn);
-    createClipFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['mediaconvert:CreateJob', 'mediaconvert:TagResource', 'mediaconvert:DescribeEndpoints'],
-      resources: ['*'],
-    }));
-    if (props.mediaConvertJobRoleArn) {
-      createClipFn.addToRolePolicy(new iam.PolicyStatement({
-        actions: ['iam:PassRole'],
-        resources: [props.mediaConvertJobRoleArn],
-        conditions: {
-          StringEquals: { 'iam:PassedToService': 'mediaconvert.amazonaws.com' },
-        },
-      }));
-    }
-
-    const sessionClipsResource = sessionIdResource.addResource('clips');
-    sessionClipsResource.addMethod('POST', new apigateway.LambdaIntegration(createClipFn), {
-      authorizer,
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /sessions/{sessionId}/clips — public when session is public (Lambda enforces)
-    const listSessionClipsFn = new NodejsFunction(this, 'ListSessionClipsHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/list-session-clips.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(listSessionClipsFn);
-    sessionClipsResource.addMethod('GET', new apigateway.LambdaIntegration(listSessionClipsFn));
-
-    // Clips resource — public by default, Lambdas enforce access control
-    const clipsResource = api.root.addResource('clips');
-    const clipByIdResource = clipsResource.addResource('{clipId}');
-
-    // GET /clips/{clipId} — public (Lambda enforces based on session.isPrivate)
-    const getClipFn = new NodejsFunction(this, 'GetClipHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/get-clip.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      timeout: Duration.seconds(10),
-      environment: {
-        TABLE_NAME: props.sessionsTable.tableName,
-        RECORDINGS_BUCKET: props.recordingsBucket?.bucketName ?? '',
-      },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(getClipFn);
-    if (props.recordingsBucket) props.recordingsBucket.grantRead(getClipFn);
-    clipByIdResource.addMethod('GET', new apigateway.LambdaIntegration(getClipFn));
-
-    // DELETE /clips/{clipId} — author or admin only (Cognito authorizer)
-    const deleteClipFn = new NodejsFunction(this, 'DeleteClipHandler', {
-      entry: path.join(__dirname, '../../../backend/src/handlers/delete-clip.ts'),
-      handler: 'handler',
-      runtime: Runtime.NODEJS_20_X,
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(deleteClipFn);
-    clipByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(deleteClipFn), {
-      authorizer,
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // ============================================================
-    // === Phase 5: Scheduled sessions ===
-    // Wires /sessions/{id}/go-live, /sessions/{id}/rsvp, /sessions/{id}/rsvps,
-    // /sessions/{id}/ics, and /me/rsvps.
-    // ============================================================
-
-    // POST /sessions/{sessionId}/go-live — owner-only, SCHEDULED → CREATING
-    const goLiveResource = sessionIdResource.addResource('go-live');
-    const goLiveFn = new NodejsFunction(this, 'GoLive', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/go-live.ts'),
-      timeout: Duration.seconds(15),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(goLiveFn);
-    goLiveFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['events:PutEvents'],
-      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
-    }));
-    goLiveResource.addMethod('POST', new apigateway.LambdaIntegration(goLiveFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // POST / DELETE /sessions/{sessionId}/rsvp — create / remove RSVP
-    const rsvpResource = sessionIdResource.addResource('rsvp');
-    const rsvpFn = new NodejsFunction(this, 'RsvpSession', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/rsvp-session.ts'),
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadWriteData(rsvpFn);
-    rsvpFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['events:PutEvents'],
-      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
-    }));
-    rsvpResource.addMethod('POST', new apigateway.LambdaIntegration(rsvpFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-    rsvpResource.addMethod('DELETE', new apigateway.LambdaIntegration(rsvpFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /sessions/{sessionId}/rsvps — list attendees + counts
-    const rsvpsResource = sessionIdResource.addResource('rsvps');
-    const listSessionRsvpsFn = new NodejsFunction(this, 'ListSessionRsvps', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/list-session-rsvps.ts'),
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(listSessionRsvpsFn);
-    rsvpsResource.addMethod('GET', new apigateway.LambdaIntegration(listSessionRsvpsFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
-
-    // GET /sessions/{sessionId}/ics — calendar download (public for public sessions)
-    const icsResource = sessionIdResource.addResource('ics');
-    const downloadEventIcsFn = new NodejsFunction(this, 'DownloadEventIcs', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/download-event-ics.ts'),
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(downloadEventIcsFn);
-    icsResource.addMethod('GET', new apigateway.LambdaIntegration(downloadEventIcsFn));
-
-    // GET /me/rsvps?upcoming=1 — caller's RSVPs joined with session metadata
-    const meRsvpsResource = meResource.addResource('rsvps');
-    const listMyRsvpsFn = new NodejsFunction(this, 'ListMyRsvps', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-rsvps.ts'),
-      timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: props.sessionsTable.tableName },
-      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
-    });
-    props.sessionsTable.grantReadData(listMyRsvpsFn);
-    meRsvpsResource.addMethod('GET', new apigateway.LambdaIntegration(listMyRsvpsFn), {
-      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
-    });
+    // Phases 1-5 routes live in the sibling ApiExtensionsStack (VNL-Api-Ext)
+    // to stay under the 500-resource CFN limit. Instantiated in bin/app.ts.
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

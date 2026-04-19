@@ -24,7 +24,7 @@ RESET='\033[0m'
 
 AUTO_YES="${1:-}"
 TABLE="vnl-sessions"
-ALL_STACKS=(VNL-Agent VNL-Api VNL-Session VNL-Storage VNL-Monitoring VNL-Web VNL-Auth)
+ALL_STACKS=(VNL-Agent VNL-Api-Ext VNL-Api VNL-Session VNL-Storage VNL-Monitoring VNL-Web VNL-Auth)
 
 echo ""
 echo -e "${BOLD}${RED}VideoNowAndLater — Full Destroy${RESET}"

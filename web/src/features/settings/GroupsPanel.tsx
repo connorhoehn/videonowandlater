@@ -248,10 +248,7 @@ function GroupDetail({
   useEffect(() => { load(); }, [load]);
 
   // Load the caller's active (LIVE) sessions so owners/admins can bulk-invite
-  // the group to one. The backend has no /sessions/mine endpoint yet; we
-  // filter GET /sessions/live (which already excludes the caller server-side)
-  // — but since we want the caller's OWN sessions here, we request the full
-  // live list and filter client-side by hostUserId.
+  // the group to one. Backed by GET /sessions/mine (owner-scoped, server-side filter).
   useEffect(() => {
     if (!isOwnerOrAdmin) return;
     let cancelled = false;
@@ -260,18 +257,10 @@ function GroupDetail({
         const res = await api<{ sessions: LiveSessionSummary[] }>(
           token,
           apiBaseUrl,
-          '/sessions/live',
+          '/sessions/mine?status=LIVE',
         );
-        // The live endpoint excludes the caller's own sessions, so we can't
-        // discover them from there. Until a /sessions/mine endpoint exists,
-        // we leave the list as-is (any sessions returned where the caller is
-        // somehow still listed). In practice this means the host must be on
-        // the HangoutPage and invite from there — the Groups panel path is a
-        // no-op until /sessions/mine ships.
         if (!cancelled) {
-          const ownSessions = (res.sessions ?? []).filter(
-            (s) => s.userId === currentUserId,
-          );
+          const ownSessions = res.sessions ?? [];
           setMySessions(ownSessions);
           if (ownSessions.length > 0) setSelectedSessionId(ownSessions[0].sessionId);
         }
@@ -280,7 +269,7 @@ function GroupDetail({
       }
     })();
     return () => { cancelled = true; };
-  }, [isOwnerOrAdmin, token, apiBaseUrl, currentUserId]);
+  }, [isOwnerOrAdmin, token, apiBaseUrl]);
 
   const inviteGroupToSession = async () => {
     if (!selectedSessionId) return;

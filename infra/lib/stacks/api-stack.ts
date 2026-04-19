@@ -2052,6 +2052,23 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === /sessions/mine — owner-scoped session list ===
+    // ============================================================
+    const sessionsMineResource = api.root.resourceForPath('sessions/mine');
+    const listMySessionsFn = new NodejsFunction(this, 'ListMySessions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-sessions.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listMySessionsFn);
+    sessionsMineResource.addMethod('GET', new apigateway.LambdaIntegration(listMySessionsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

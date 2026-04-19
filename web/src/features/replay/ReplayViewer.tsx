@@ -22,6 +22,8 @@ import { ContextSidebar } from './ContextSidebar';
 import { SummaryDisplay } from './SummaryDisplay';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ChapterList } from './ChapterList';
+import { ChapterMarkerStrip, type ChapterMarker } from './ChapterMarkerStrip';
+import { PlaybackSpeedControl } from './PlaybackSpeedControl';
 import { HighlightReelPlayer } from './HighlightReelPlayer';
 import { Card } from '../../components/social';
 import type { Chapter } from './ChapterList';
@@ -77,6 +79,8 @@ export function ReplayViewer() {
   const [viewMode, setViewMode] = useState<'replay' | 'highlights'>(
     searchParams.get('view') === 'highlights' ? 'highlights' : 'replay'
   );
+  const [chapterMarkers, setChapterMarkers] = useState<ChapterMarker[]>([]);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
@@ -207,6 +211,80 @@ export function ReplayViewer() {
     fetchReactions();
   }, [sessionId, authToken]);
 
+  // Fetch chapter markers (new endpoint). If the session already carries a
+  // `chapters` field via the get-session payload we prefer that snapshot,
+  // but this endpoint is authoritative and may include additional metadata
+  // (e.g. stable ids) once we extend it.
+  useEffect(() => {
+    if (!sessionId || !authToken) return;
+
+    let cancelled = false;
+    (async () => {
+      const cfg = getConfig();
+      const base = cfg?.apiUrl || 'http://localhost:3000/api';
+      try {
+        const res = await fetch(`${base}/sessions/${sessionId}/chapters`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(data.chapters)) {
+          setChapterMarkers(data.chapters as ChapterMarker[]);
+        }
+      } catch (err) {
+        console.warn('[ReplayViewer] failed to load chapters', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, authToken]);
+
+  // Fetch a short-lived signed MP4 download URL once the recording and
+  // MediaConvert-produced MP4 are both ready. Silently no-ops (leaves button
+  // hidden) for sessions where the recording isn't downloadable yet.
+  useEffect(() => {
+    if (!sessionId || !authToken) return;
+    if (!session) return;
+    const convertReady =
+      session.convertStatus === undefined || session.convertStatus === 'available';
+    const recordingReady =
+      session.recordingStatus === 'available' ||
+      (!!session.recordingHlsUrl && session.recordingStatus !== 'failed');
+    if (!convertReady || !recordingReady) {
+      setDownloadUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const cfg = getConfig();
+      const base = cfg?.apiUrl || 'http://localhost:3000/api';
+      try {
+        const res = await fetch(`${base}/sessions/${sessionId}/recording/download`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) {
+          if (!cancelled) setDownloadUrl(null);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled && typeof data.url === 'string') {
+          setDownloadUrl(data.url);
+        }
+      } catch (err) {
+        console.warn('[ReplayViewer] failed to load download URL', err);
+        if (!cancelled) setDownloadUrl(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, authToken, session?.convertStatus, session?.recordingStatus, session?.recordingHlsUrl]);
+
   // Filter reactions by syncTime
   const visibleReactions = useReactionSync(allReactions, syncTime);
 
@@ -332,7 +410,7 @@ export function ReplayViewer() {
 
       {/* Reaction timeline + picker bar */}
       <div className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-2">
+        <div className="max-w-7xl mx-auto px-4 py-2 space-y-2">
           <div className="flex items-center gap-4">
             <div className="flex-1">
               {session?.recordingDuration && (
@@ -343,11 +421,20 @@ export function ReplayViewer() {
                 />
               )}
             </div>
+            <PlaybackSpeedControl videoRef={videoRef} />
             <ReplayReactionPicker
               onReaction={handleReaction}
               disabled={!authToken}
             />
           </div>
+          {chapterMarkers.length > 0 && session?.recordingDuration && (
+            <ChapterMarkerStrip
+              chapters={chapterMarkers}
+              currentTimeSec={syncTime / 1000}
+              durationSec={session.recordingDuration / 1000}
+              onSeek={(sec) => handleSeek(sec * 1000)}
+            />
+          )}
         </div>
       </div>
 
@@ -402,9 +489,27 @@ export function ReplayViewer() {
         {/* Title bar with back button */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {session.userId}'s {session.sessionType === 'UPLOAD' ? 'Video' : 'Broadcast'}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {session.userId}'s {session.sessionType === 'UPLOAD' ? 'Video' : 'Broadcast'}
+              </h1>
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  data-testid="download-mp4-button"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  title="Download MP4"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                  Download MP4
+                </a>
+              )}
+            </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
               {session.recordingDuration !== undefined && (
                 <span>{formatDuration(session.recordingDuration)}</span>

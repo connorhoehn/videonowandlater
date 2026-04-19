@@ -257,6 +257,39 @@ else
   echo -e "  ${DIM}No vnl user pool found${RESET}"
 fi
 
+# ── 4d. Purge orphaned SQS queues (clip pipeline + webhook DLQ) ─────────────
+# CFN normally cleans these up, but DLQs can be stuck if messages linger past
+# the stack delete. Belt+suspenders.
+echo ""
+echo -e "${BOLD}Step 4d: Draining vnl-* SQS queues${RESET}"
+VNL_QUEUES=$(aws sqs list-queues --queue-name-prefix VNL- --query 'QueueUrls[]' --output text 2>/dev/null || true)
+if [ -n "$VNL_QUEUES" ] && [ "$VNL_QUEUES" != "None" ]; then
+  for Q_URL in $VNL_QUEUES; do
+    echo -e "  Purging ${DIM}$Q_URL${RESET}"
+    aws sqs purge-queue --queue-url "$Q_URL" > /dev/null 2>&1 || true
+  done
+  echo -e "  ${GREEN}Queues drained${RESET}"
+else
+  echo -e "  ${DIM}No vnl-* queues${RESET}"
+fi
+
+# ── 4e. Disable EventBridge rules owned by stacks about to be deleted ───────
+# EventBridge cron rules (AutoStartScheduledSession, scan-active-sessions,
+# GoLiveNotificationsRule, ClipCompleteRule) get auto-deleted with CFN, but
+# disabling them first prevents a race where a fire happens mid-destroy and
+# invokes a Lambda that's partially deleted.
+echo ""
+echo -e "${BOLD}Step 4e: Disabling EventBridge rules${RESET}"
+RULES=$(aws events list-rules --query 'Rules[?starts_with(Name, `VNL-`)].Name' --output text 2>/dev/null || true)
+if [ -n "$RULES" ] && [ "$RULES" != "None" ]; then
+  for R in $RULES; do
+    aws events disable-rule --name "$R" > /dev/null 2>&1 || true
+  done
+  echo -e "  ${GREEN}Disabled $(echo $RULES | wc -w | tr -d ' ') rule(s)${RESET}"
+else
+  echo -e "  ${DIM}No vnl-* rules${RESET}"
+fi
+
 # ── 5. Flush DynamoDB Pool Items ────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}Step 5/7: Flushing DynamoDB Pool Items${RESET}"

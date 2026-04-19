@@ -228,6 +228,26 @@ else
   echo -e "${DIM}not found (will be created by VNL-Agent deploy)${RESET}"
 fi
 
+# 8i. CFN 500-resource-per-stack limit — surface before synth attempts it
+echo -n "  CDK synth resource counts... "
+if SYNTH=$(npx cdk synth --json 2>&1 > /dev/null); then
+  echo -e "${GREEN}OK${RESET}"
+elif echo "$SYNTH" | grep -q "greater than allowed maximum of 500"; then
+  COUNT=$(echo "$SYNTH" | grep -oE "stack '[^']+': [0-9]+" | head -1)
+  echo -e "${RED}RESOURCE LIMIT${RESET} — $COUNT"
+  echo -e "    ${DIM}CFN hard-caps 500 resources per stack. Split ApiStack into more sibling stacks.${RESET}"
+  ERRORS=$((ERRORS + 1))
+elif echo "$SYNTH" | grep -q "already a Construct with name"; then
+  DUPE=$(echo "$SYNTH" | grep -oE "name '[^']+'" | head -1)
+  echo -e "${RED}DUPLICATE CONSTRUCT${RESET} — $DUPE"
+  echo -e "    ${DIM}Two agents likely added the same CDK resource. Find and dedupe.${RESET}"
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${YELLOW}synth issue${RESET}"
+  echo "$SYNTH" | tail -3 | sed 's/^/    /'
+  ERRORS=$((ERRORS + 1))
+fi
+
 # ── 9. vnl-ads integration sanity (CDK context) ─────────────────────────────
 echo ""
 echo -e "${BOLD}  vnl-ads Integration${RESET}"

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchToken } from '../auth/fetchToken';
 import { useAuth } from '../auth/useAuth';
@@ -7,10 +7,12 @@ import { ActivityFeed } from '../features/activity/ActivityFeed';
 import { VideoUploadForm } from '../features/upload/VideoUploadForm';
 import { CreatePostCard } from '../components/social/CreatePostCard';
 import { CameraIcon, UsersIcon, UploadIcon, PhotoIcon } from '../components/social/Icons';
-import { StoriesSlider, StoryViewer, StoryCreator, Skeleton } from '../components/social';
+import { StoriesSlider, StoryViewer, StoryCreator, Skeleton, TabNav, SearchInput, type Tab } from '../components/social';
 import { useActivityData } from '../hooks/useActivityData';
 import { useStories } from '../hooks/useStories';
 import { useStoryViewState } from '../hooks/useStoryViewState';
+import { SessionCardGrid } from '../features/common/SessionCard';
+import { useFeed, type FeedTab } from '../features/common/useDiscovery';
 
 function formatRelativeTime(isoDate?: string): string {
   if (!isoDate) return '';
@@ -46,6 +48,20 @@ export function HomePage() {
   const [requireApproval, setRequireApproval] = useState(false);
   // Live captions (beta) — opt-in flag for both BROADCAST and HANGOUT creation
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
+
+  // Phase 2: Discovery tabs — tabs switch between /feed partitions.
+  const { isAuthenticated } = useAuth();
+  const [activeTab, setActiveTab] = useState<FeedTab>('live');
+  const { items: feedItems, loading: feedLoading, error: feedError } = useFeed(activeTab);
+  const discoveryTabs = useMemo<Tab[]>(() => {
+    const t: Tab[] = [
+      { id: 'live', label: 'Live now' },
+      { id: 'upcoming', label: 'Upcoming' },
+      { id: 'recent', label: 'Recent' },
+    ];
+    if (isAuthenticated) t.push({ id: 'following', label: 'Following' });
+    return t;
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const initAuth = async () => {

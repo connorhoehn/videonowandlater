@@ -3,6 +3,7 @@ import { AuthStack } from '../lib/stacks/auth-stack';
 import { AgentStack } from '../lib/stacks/agent-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
 import { ApiExtensionsStack } from '../lib/stacks/api-extensions-stack';
+import { ApiExtensionsAdminStack } from '../lib/stacks/api-extensions-admin-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { SessionStack } from '../lib/stacks/session-stack';
 import { StorageStack } from '../lib/stacks/storage-stack';
@@ -35,8 +36,11 @@ const apiStack = new ApiStack(app, 'VNL-Api', {
   transcriptionBucket: storageStack.transcriptionBucket,
 });
 
-// Phase 1-5 routes live in a sibling stack to stay under the CFN 500-resource
-// limit per stack (VNL-Api hit ~1000 after all phases landed).
+// Non-core routes live in two sibling stacks to stay under the CFN
+// 500-resource limit per stack.
+// - VNL-Api-Ext: Phase 1-5 + non-admin features (groups, invites, lobby,
+//   surveys, moderation, vnl-ads passthroughs, appeals, sessions/mine, etc.)
+// - VNL-Api-Ext-Admin: everything under /admin/*
 new ApiExtensionsStack(app, 'VNL-Api-Ext', {
   env,
   restApiId: apiStack.api.restApiId,
@@ -48,6 +52,16 @@ new ApiExtensionsStack(app, 'VNL-Api-Ext', {
   transcriptionBucket: storageStack.transcriptionBucket,
   mediaConvertJobRoleArn: sessionStack.mediaConvertJobRoleArn,
   transcriptionBucketName: storageStack.transcriptionBucket.bucketName,
+  moderationBucket: sessionStack.moderationBucket,
+});
+new ApiExtensionsAdminStack(app, 'VNL-Api-Ext-Admin', {
+  env,
+  restApiId: apiStack.api.restApiId,
+  restApiRootResourceId: apiStack.api.restApiRootResourceId,
+  userPool: authStack.userPool,
+  sessionsTable: sessionStack.table,
+  webhookQueueUrl: sessionStack.webhookDeliveryQueue.queueUrl,
+  webhookQueueArn: sessionStack.webhookDeliveryQueue.queueArn,
 });
 new AgentStack(app, 'VNL-Agent', {
   env,

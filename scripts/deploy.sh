@@ -16,7 +16,7 @@ fi
 
 # Phase 1: Deploy everything except Web (so Auth/Api outputs exist for config)
 echo "Deploying backend stacks..."
-npx cdk deploy VNL-Storage VNL-Auth VNL-Session VNL-Api VNL-Monitoring VNL-Agent \
+npx cdk deploy VNL-Storage VNL-Auth VNL-Session VNL-Api VNL-Api-Ext VNL-Api-Ext-Admin VNL-Monitoring VNL-Agent \
   --require-approval never --outputs-file cdk-outputs.json
 
 # Phase 2: Generate frontend config from outputs

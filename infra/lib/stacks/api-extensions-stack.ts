@@ -1,17 +1,15 @@
 /**
- * ApiExtensionsStack — NestedStack that holds Phase 1-5 API Gateway routes.
- *
- * Background: the parent ApiStack hit the 500-resource CloudFormation limit
- * after adding ~50 new routes across phases 1-5 (profiles / follow / discovery /
- * playback / clips / scheduled sessions). A NestedStack is the cleanest split:
- * CDK tracks it as a single CfnStack resource in the parent, and the nested
- * stack has its own independent 500-resource budget.
+ * ApiExtensionsStack — sibling Stack that holds non-core API Gateway routes
+ * (Phase 1-5 features PLUS admin / groups / moderation / surveys / invites /
+ * lobby / vnl-ads passthroughs / appeals) so the parent ApiStack stays under
+ * the 500-resource-per-stack CloudFormation limit.
  *
  * All routes declared here attach to the parent's existing `RestApi` via
  * `api.root.resourceForPath(...)`, which reuses existing path prefixes
- * (e.g. `/sessions/{sessionId}`) when present and creates new resources when
- * not. This keeps URL structure identical to if the routes were declared in
- * the parent.
+ * (e.g. `/sessions/{sessionId}`, `/me`) when present and creates new resources
+ * when not. CDK places API Gateway `Method`/`Resource` constructs in the stack
+ * that CALLS `addResource`/`addMethod` — so resources added here land in THIS
+ * stack's CFN template, not the parent's.
  */
 
 import { Stack, StackProps, Duration } from 'aws-cdk-lib';
@@ -42,15 +40,12 @@ export interface ApiExtensionsStackProps extends StackProps {
   mediaConvertJobRoleArn?: string;
   /** Bucket name — for Phase 4a signed-download URLs. */
   transcriptionBucketName: string;
+  /** Phase 4: image-moderation frames bucket (optional; routes degrade if absent). */
+  moderationBucket?: s3.IBucket;
 }
 
 /**
- * Sibling Stack (not nested) that holds Phase 1-5 API Gateway routes.
- *
- * CDK places API Gateway `Method` and `Resource` constructs in the stack that
- * CALLS `addResource` / `addMethod`, even when the RestApi itself lives in a
- * different stack. That's how we split the 500-resource CFN limit: ApiStack
- * keeps the RestApi + legacy routes; this stack holds Phase 1-5 additions.
+ * Sibling Stack (not nested) that holds non-core API Gateway routes.
  */
 export class ApiExtensionsStack extends Stack {
   constructor(scope: Construct, id: string, props: ApiExtensionsStackProps) {
@@ -60,11 +55,13 @@ export class ApiExtensionsStack extends Stack {
       restApiId,
       restApiRootResourceId,
       userPool,
+      userPoolClient,
       sessionsTable,
       recordingsBucket,
       transcriptionBucket,
       mediaConvertJobRoleArn,
       transcriptionBucketName,
+      moderationBucket,
     } = props;
 
     // Import the RestApi so CDK knows we're extending an existing gateway.
@@ -84,19 +81,11 @@ export class ApiExtensionsStack extends Stack {
     // creates child resources in THIS stack when accessed for the first time,
     // but for paths that already exist on the parent (e.g. 'sessions/{sessionId}'
     // or 'me') we need to manually re-acquire them as children of the imported root.
-    // `Resource.root.addResource` is idempotent on name — but across stacks, it
-    // will create a NEW resource in this stack's CFN template with the same URL
-    // path, and API Gateway resolves by path name, so we simply re-declare.
-    //
-    // NOTE: paths that ARE defined in the parent ApiStack (sessions/{sessionId},
-    // me, admin) — CFN will let us add children to those via resourceForPath.
-    // Duplicate resources with the same name in different stacks will collide
-    // at deploy time. For this migration, we assume these path segments are
-    // only declared in ONE place (the ext stack owns them now that we moved
-    // the phase 1-5 routes out of ApiStack).
     const sessionIdResource = api.root.resourceForPath('sessions/{sessionId}');
     const meResource = api.root.resourceForPath('me');
-    const admin = api.root.resourceForPath('admin');
+
+    // `/groups`, `/invites` are OWNED by this stack (removed from api-stack).
+    // `/admin` is OWNED by `ApiExtensionsAdminStack` (separate sibling).
 
     // ============================================================
     // === Phase 1: Profiles, Follow, Notifications ===
@@ -432,8 +421,580 @@ export class ApiExtensionsStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
-    // Suppress unused-param lint on admin (reserved for future use if we add
-    // admin routes that migrate over).
-    void admin;
+    // ============================================================
+    // === Migrated: Session detail (GET /sessions/{sessionId}) ===
+    // ============================================================
+    const getSessionHandler = new NodejsFunction(this, 'GetSessionHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-session.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(getSessionHandler);
+    sessionIdResource.addMethod('GET', new apigateway.LambdaIntegration(getSessionHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Chat token (POST /sessions/{sessionId}/chat/token) ===
+    // Note: /sessions/{sessionId}/chat exists in api-stack (send-message,
+    // get-chat-history live there). Reuse via resourceForPath.
+    // ============================================================
+    const sessionChatResource = api.root.resourceForPath('sessions/{sessionId}/chat');
+    const chatTokenResource = sessionChatResource.addResource('token');
+    const createChatTokenHandler = new NodejsFunction(this, 'CreateChatTokenHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-chat-token.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(createChatTokenHandler);
+    createChatTokenHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:CreateChatToken'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
+      })
+    );
+    chatTokenResource.addMethod('POST', new apigateway.LambdaIntegration(createChatTokenHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Chat moderation classifier ===
+    // POST /sessions/{sessionId}/chat/classify
+    // ============================================================
+    const chatClassifyResource = sessionChatResource.addResource('classify');
+    const classifyChatMessageHandler = new NodejsFunction(this, 'ClassifyChatMessageHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/classify-chat-message.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(15),
+      environment: {
+        TABLE_NAME: sessionsTable.tableName,
+        NOVA_MODEL_ID: 'amazon.nova-lite-v1:0',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(classifyChatMessageHandler);
+    classifyChatMessageHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+      ],
+    }));
+    classifyChatMessageHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent', 'ivschat:DisconnectUser'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    chatClassifyResource.addMethod('POST', new apigateway.LambdaIntegration(classifyChatMessageHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Bounce user (POST /sessions/{sessionId}/bounce) ===
+    // ============================================================
+    const bounceResource = sessionIdResource.addResource('bounce');
+    const bounceUserHandler = new NodejsFunction(this, 'BounceUserHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/bounce-user.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(bounceUserHandler);
+    bounceUserHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:DisconnectUser'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    bounceResource.addMethod('POST', new apigateway.LambdaIntegration(bounceUserHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Submit appeal (POST /sessions/{sessionId}/appeal) ===
+    // ============================================================
+    const appealResource = sessionIdResource.addResource('appeal');
+    const submitAppealHandler = new NodejsFunction(this, 'SubmitAppealHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/submit-appeal.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(submitAppealHandler);
+    appealResource.addMethod('POST', new apigateway.LambdaIntegration(submitAppealHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Receive moderation frame ===
+    // POST /sessions/{sessionId}/moderation-frame
+    // ============================================================
+    const moderationFrameResource = sessionIdResource.addResource('moderation-frame');
+    const receiveModerationFrameHandler = new NodejsFunction(this, 'ReceiveModerationFrameHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/receive-moderation-frame.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(30),
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(receiveModerationFrameHandler);
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['rekognition:DetectModerationLabels'],
+      resources: ['*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:StopStream'],
+      resources: ['arn:aws:ivs:*:*:channel/*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:DisconnectParticipant'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
+    }));
+    receiveModerationFrameHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    moderationFrameResource.addMethod('POST', new apigateway.LambdaIntegration(receiveModerationFrameHandler), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Moderation upload (conditional) ===
+    // POST /sessions/{sessionId}/moderation-upload — only wired if a
+    // moderation bucket has been provisioned.
+    // ============================================================
+    if (moderationBucket) {
+      const moderationUploadPath = sessionIdResource.addResource('moderation-upload');
+      const requestModerationUploadFn = new NodejsFunction(this, 'RequestModerationUpload', {
+        runtime: Runtime.NODEJS_20_X,
+        handler: 'handler',
+        entry: path.join(__dirname, '../../../backend/src/handlers/request-moderation-upload.ts'),
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: sessionsTable.tableName,
+          MODERATION_BUCKET: moderationBucket.bucketName,
+        },
+        depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      });
+      sessionsTable.grantReadData(requestModerationUploadFn);
+      moderationBucket.grantPut(requestModerationUploadFn);
+      moderationUploadPath.addMethod('POST', new apigateway.LambdaIntegration(requestModerationUploadFn), {
+        authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+      });
+    }
+
+    // ============================================================
+    // === Migrated: Groups (Phase 1) ===
+    // /groups, /groups/mine, /groups/{groupId}, /groups/{groupId}/members/{userId}
+    // ============================================================
+    const groupsResource = api.root.addResource('groups');
+    const groupsMineResource = groupsResource.addResource('mine');
+    const groupByIdResource = groupsResource.addResource('{groupId}');
+    const groupMembersResource = groupByIdResource.addResource('members');
+    const groupMemberByIdResource = groupMembersResource.addResource('{userId}');
+
+    const phase1GroupsEnv = {
+      TABLE_NAME: sessionsTable.tableName,
+      USER_POOL_ID: userPool.userPoolId,
+      USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+    };
+
+    const groupCreateFn = new NodejsFunction(this, 'GroupCreate', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-create.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupCreateFn);
+    groupsResource.addMethod('POST', new apigateway.LambdaIntegration(groupCreateFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupListMineFn = new NodejsFunction(this, 'GroupListMine', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-list-mine.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(groupListMineFn);
+    groupsMineResource.addMethod('GET', new apigateway.LambdaIntegration(groupListMineFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupGetFn = new NodejsFunction(this, 'GroupGet', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-get.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(groupGetFn);
+    groupByIdResource.addMethod('GET', new apigateway.LambdaIntegration(groupGetFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupUpdateFn = new NodejsFunction(this, 'GroupUpdate', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-update.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupUpdateFn);
+    groupByIdResource.addMethod('PATCH', new apigateway.LambdaIntegration(groupUpdateFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupDeleteFn = new NodejsFunction(this, 'GroupDelete', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-delete.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupDeleteFn);
+    groupByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(groupDeleteFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupAddMemberFn = new NodejsFunction(this, 'GroupAddMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-add-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupAddMemberFn);
+    groupMembersResource.addMethod('POST', new apigateway.LambdaIntegration(groupAddMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupRemoveMemberFn = new NodejsFunction(this, 'GroupRemoveMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-remove-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupRemoveMemberFn);
+    groupMemberByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(groupRemoveMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const groupPromoteMemberFn = new NodejsFunction(this, 'GroupPromoteMember', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/group-promote-member.ts'),
+      environment: phase1GroupsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(groupPromoteMemberFn);
+    groupMemberByIdResource.addMethod('PATCH', new apigateway.LambdaIntegration(groupPromoteMemberFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Lobbies (Phase 2) ===
+    // /sessions/{sessionId}/lobby/[{userId}/approve|deny]
+    // ============================================================
+    const lobbyResource = sessionIdResource.addResource('lobby');
+
+    const listLobbyRequestsFn = new NodejsFunction(this, 'ListLobbyRequestsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-lobby-requests.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listLobbyRequestsFn);
+    lobbyResource.addMethod('GET', new apigateway.LambdaIntegration(listLobbyRequestsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const lobbyUserResource = lobbyResource.addResource('{userId}');
+
+    const approveLobbyFn = new NodejsFunction(this, 'ApproveLobbyRequestHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/approve-lobby-request.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(approveLobbyFn);
+    approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:CreateParticipantToken'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
+    }));
+    approveLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    const approveResource = lobbyUserResource.addResource('approve');
+    approveResource.addMethod('POST', new apigateway.LambdaIntegration(approveLobbyFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const denyLobbyFn = new NodejsFunction(this, 'DenyLobbyRequestHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/deny-lobby-request.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(denyLobbyFn);
+    denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivs:DisconnectParticipant'],
+      resources: ['arn:aws:ivs:*:*:stage/*'],
+    }));
+    denyLobbyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    const denyResource = lobbyUserResource.addResource('deny');
+    denyResource.addMethod('POST', new apigateway.LambdaIntegration(denyLobbyFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Invitations ===
+    // /sessions/{sessionId}/invite-group
+    // /invites/mine, /invites/{sessionId}/respond
+    // ============================================================
+    const invitationsEnv = {
+      TABLE_NAME: sessionsTable.tableName,
+      USER_POOL_ID: userPool.userPoolId,
+      USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+    };
+
+    const inviteGroupResource = sessionIdResource.addResource('invite-group');
+    const inviteGroupFn = new NodejsFunction(this, 'InviteGroupToSession', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/invite-group-to-session.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(inviteGroupFn);
+    inviteGroupFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    inviteGroupResource.addMethod('POST', new apigateway.LambdaIntegration(inviteGroupFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const invitesResource = api.root.addResource('invites');
+    const invitesMineResource = invitesResource.addResource('mine');
+    const invitesBySessionResource = invitesResource.addResource('{sessionId}');
+    const invitesRespondResource = invitesBySessionResource.addResource('respond');
+
+    const listMyInvitesFn = new NodejsFunction(this, 'ListMyInvites', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-invites.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listMyInvitesFn);
+    invitesMineResource.addMethod('GET', new apigateway.LambdaIntegration(listMyInvitesFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const respondToInviteFn = new NodejsFunction(this, 'RespondToInvite', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/respond-to-invite.ts'),
+      environment: invitationsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(respondToInviteFn);
+    invitesRespondResource.addMethod('POST', new apigateway.LambdaIntegration(respondToInviteFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: Surveys ===
+    // /sessions/{sessionId}/survey, /sessions/{sessionId}/survey/mine
+    // ============================================================
+    const surveyEnv = { TABLE_NAME: sessionsTable.tableName };
+
+    const surveyResource = sessionIdResource.addResource('survey');
+    const surveyMineResource = surveyResource.addResource('mine');
+
+    const submitSurveyFn = new NodejsFunction(this, 'SubmitSurvey', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/submit-survey.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(submitSurveyFn);
+    surveyResource.addMethod('POST', new apigateway.LambdaIntegration(submitSurveyFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const getMySurveyFn = new NodejsFunction(this, 'GetMySurvey', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-survey.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: surveyEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(getMySurveyFn);
+    surveyMineResource.addMethod('GET', new apigateway.LambdaIntegration(getMySurveyFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: /sessions/mine — owner-scoped session list ===
+    // ============================================================
+    const sessionsMineResource = api.root.resourceForPath('sessions/mine');
+    const listMySessionsFn = new NodejsFunction(this, 'ListMySessions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-sessions.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listMySessionsFn);
+    sessionsMineResource.addMethod('GET', new apigateway.LambdaIntegration(listMySessionsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Migrated: vnl-ads passthroughs ===
+    // /sessions/{sessionId}/promo/[drawer|trigger|click]
+    // /me/[earnings|impression-series|training-due|training-claim]
+    // ============================================================
+    const vnlAdsBaseUrl = (this.node.tryGetContext('vnlAdsBaseUrl') as string | undefined) ?? '';
+    const vnlAdsJwtSecret = (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '';
+    const vnlAdsJwtIssuer = (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl';
+    const vnlAdsJwtAudience = (this.node.tryGetContext('vnlAdsJwtAudience') as string | undefined) ?? 'vnl-ads';
+    const vnlAdsTimeoutMs = (this.node.tryGetContext('vnlAdsTimeoutMs') as string | undefined) ?? '2000';
+    const vnlAdsFeatureEnabled = (this.node.tryGetContext('vnlAdsFeatureEnabled') as string | undefined) ?? 'false';
+    const adsEnv: Record<string, string> = {
+      TABLE_NAME: sessionsTable.tableName,
+      VNL_ADS_BASE_URL: vnlAdsBaseUrl,
+      VNL_ADS_JWT_SECRET: vnlAdsJwtSecret,
+      VNL_ADS_JWT_ISSUER: vnlAdsJwtIssuer,
+      VNL_ADS_JWT_AUDIENCE: vnlAdsJwtAudience,
+      VNL_ADS_TIMEOUT_MS: vnlAdsTimeoutMs,
+      VNL_ADS_FEATURE_ENABLED: vnlAdsFeatureEnabled,
+    };
+
+    const promoResource = sessionIdResource.addResource('promo');
+    const promoDrawerResource = promoResource.addResource('drawer');
+    const getPromoDrawerFn = new NodejsFunction(this, 'GetPromoDrawerHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-promo-drawer.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(getPromoDrawerFn);
+    promoDrawerResource.addMethod('GET', new apigateway.LambdaIntegration(getPromoDrawerFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const promoTriggerResource = promoResource.addResource('trigger');
+    const triggerPromoFn = new NodejsFunction(this, 'TriggerPromoHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/trigger-promo.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(triggerPromoFn);
+    triggerPromoFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivs:PutMetadata'],
+        resources: ['arn:aws:ivs:*:*:channel/*'],
+      }),
+    );
+    triggerPromoFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ivschat:SendEvent'],
+        resources: ['arn:aws:ivschat:*:*:room/*'],
+      }),
+    );
+    promoTriggerResource.addMethod('POST', new apigateway.LambdaIntegration(triggerPromoFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const promoClickResource = promoResource.addResource('click');
+    const trackAdClickFn = new NodejsFunction(this, 'TrackAdClickHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/track-ad-click.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    promoClickResource.addMethod('POST', new apigateway.LambdaIntegration(trackAdClickFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const meEarningsResource = meResource.addResource('earnings');
+    const getMyEarningsFn = new NodejsFunction(this, 'GetMyEarnings', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-earnings.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meEarningsResource.addMethod('GET', new apigateway.LambdaIntegration(getMyEarningsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const meImpressionSeriesResource = meResource.addResource('impression-series');
+    const getMyImpressionSeriesFn = new NodejsFunction(this, 'GetMyImpressionSeries', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-impression-series.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meImpressionSeriesResource.addMethod('GET', new apigateway.LambdaIntegration(getMyImpressionSeriesFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const meTrainingDueResource = meResource.addResource('training-due');
+    const getMyTrainingDueFn = new NodejsFunction(this, 'GetMyTrainingDue', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-training-due.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meTrainingDueResource.addMethod('GET', new apigateway.LambdaIntegration(getMyTrainingDueFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const meTrainingClaimResource = meResource.addResource('training-claim');
+    const claimMyTrainingFn = new NodejsFunction(this, 'ClaimMyTraining', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/claim-my-training.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meTrainingClaimResource.addMethod('POST', new apigateway.LambdaIntegration(claimMyTrainingFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
   }
 }

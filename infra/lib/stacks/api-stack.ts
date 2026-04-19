@@ -2225,6 +2225,55 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === Playback Polish ===
+    // ============================================================
+    // GET /sessions/{sessionId}/chapters — return AI-generated chapter markers
+    const sessionChaptersResource = sessionIdResource.addResource('chapters');
+    const getSessionChaptersFn = new NodejsFunction(this, 'GetSessionChaptersHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-session-chapters.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getSessionChaptersFn);
+    sessionChaptersResource.addMethod('GET', new apigateway.LambdaIntegration(getSessionChaptersFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/recording/download — return short-lived signed download URL
+    const sessionRecordingResource = sessionIdResource.addResource('recording');
+    const sessionRecordingDownloadResource = sessionRecordingResource.addResource('download');
+    const getRecordingDownloadUrlFn = new NodejsFunction(this, 'GetRecordingDownloadUrlHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-recording-download-url.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        TRANSCRIPTION_BUCKET: transcriptionBucketName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getRecordingDownloadUrlFn);
+    getRecordingDownloadUrlFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${transcriptionBucketName}/*`],
+      }),
+    );
+    sessionRecordingDownloadResource.addMethod(
+      'GET',
+      new apigateway.LambdaIntegration(getRecordingDownloadUrlFn),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      },
+    );
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

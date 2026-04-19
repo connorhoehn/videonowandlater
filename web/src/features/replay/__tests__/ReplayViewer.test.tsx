@@ -125,6 +125,19 @@ describe('ReplayViewer', () => {
           json: () => Promise.resolve({ reactions: [] }),
         } as Response);
       }
+      if (url.includes('/chapters')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ chapters: [] }),
+        } as Response);
+      }
+      if (url.includes('/recording/download')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'not available' }),
+        } as Response);
+      }
       return Promise.reject(new Error('Unknown URL'));
     });
 
@@ -151,6 +164,19 @@ describe('ReplayViewer', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ reactions: [] }),
+        } as Response);
+      }
+      if (url.includes('/chapters')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ chapters: [] }),
+        } as Response);
+      }
+      if (url.includes('/recording/download')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'not available' }),
         } as Response);
       }
       return Promise.reject(new Error('Unknown URL'));
@@ -181,6 +207,19 @@ describe('ReplayViewer', () => {
           json: () => Promise.resolve({ reactions: [] }),
         } as Response);
       }
+      if (url.includes('/chapters')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ chapters: [] }),
+        } as Response);
+      }
+      if (url.includes('/recording/download')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'not available' }),
+        } as Response);
+      }
       return Promise.reject(new Error('Unknown URL'));
     });
 
@@ -207,6 +246,19 @@ describe('ReplayViewer', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ reactions: [] }),
+        } as Response);
+      }
+      if (url.includes('/chapters')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ chapters: [] }),
+        } as Response);
+      }
+      if (url.includes('/recording/download')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'not available' }),
         } as Response);
       }
       return Promise.reject(new Error('Unknown URL'));

@@ -15,6 +15,7 @@ import {
   getSessionById,
   addHangoutParticipant,
   updateLobbyRequestStatus,
+  getLobbyRequest,
 } from '../repositories/session-repository';
 import { SessionType } from '../domain/session';
 import { isAdmin } from '../lib/admin-auth';
@@ -58,6 +59,20 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   const stageArn = session.claimedResources?.stage;
   if (!stageArn) return resp(500, { error: 'Stage ARN not found in session resources' });
+
+  // Idempotency guard — if the lobby row is already approved, don't re-mint.
+  // IVS CreateParticipantToken + an extra PARTICIPANT row per re-call cost money;
+  // retries can happen freely (e.g. host double-clicks). Return 200 with the
+  // same shape minus the token — the client already has one from the first call.
+  const existingLobby = await getLobbyRequest(tableName, sessionId, targetUserId);
+  if (existingLobby?.status === 'approved') {
+    logger.info('Lobby request already approved — short-circuiting', { sessionId, targetUserId });
+    return resp(200, {
+      status: 'approved',
+      userId: targetUserId,
+      alreadyApproved: true,
+    });
+  }
 
   // Mint upgraded PUBLISH+SUBSCRIBE token for the approved user
   let participantToken;

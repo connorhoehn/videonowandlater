@@ -368,60 +368,31 @@ describe('end-session integration', () => {
   );
 
   test(
-    'HANGOUT with 0 participants: session starts in ENDING, then ends',
+    'HANGOUT with 0 participants: LIVE → ENDING → ENDED + pool released',
     async () => {
-      // NOTE: the end-session handler attempts to jump LIVE → ENDED directly
-      // for empty hangouts, but the domain's `canTransition` state machine
-      // only allows LIVE → ENDING → ENDED. Calling from LIVE therefore
-      // surfaces a 500 (latent bug in the handler — tracked separately).
-      //
-      // This test seeds the session already in ENDING so the transition is
-      // legal and we can verify the direct-to-ended path + pool release
-      // happens as intended for empty hangouts.
+      // Handler finalizes empty hangouts by stepping LIVE→ENDING→ENDED
+      // (canTransition only allows one hop at a time). Pool resources are
+      // released inline since there are no recordings to wait for.
       const sessionId = 'hangout-end-empty';
       const owner = 'eve';
-      const { stageArn, roomArn } = await seedLiveHangout(sessionId, owner);
-      // no participants seeded
+      await seedLiveHangout(sessionId, owner);
+      // no participants seeded — this is the empty-hangout path
 
-      // Move the seeded row to ENDING so the LIVE-guard passes and the
-      // transition is valid.
-      await rawClient.send(
-        new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: `SESSION#${sessionId}`,
-            SK: 'METADATA',
-            GSI1PK: 'STATUS#ENDING',
-            GSI1SK: nowIso,
-            entityType: 'SESSION',
-            sessionId,
-            userId: owner,
-            sessionType: 'HANGOUT',
-            status: 'ending',
-            createdAt: nowIso,
-            stageArn,
-            claimedResources: { stage: stageArn, chatRoom: roomArn },
-            version: 2,
-          },
-        }),
-      );
-
-      // Handler short-circuits when status is already ENDING — returns 200
-      // with an "already ending/ended" payload (no mutation, no pool release).
       const res = await handler(createEvent(owner, sessionId));
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.message).toMatch(/already/i);
+      expect(body.status).toBe('ended');
 
       const session = await getSessionRow(sessionId);
-      expect(session!.status).toBe('ending');
+      expect(session!.status).toBe('ended');
+      expect(session!.GSI1PK).toBe('STATUS#ENDED');
+      expect(session!.endedAt).toBeDefined();
 
-      // Pool rows remain CLAIMED in the short-circuit path; the release
-      // lifecycle is driven by recording-ended once recordings finish.
+      // Pool resources released inline.
       const stagePool = await getPoolRow(`POOL#STAGE#${sessionId}-st`);
-      expect(stagePool!.status).toBe('CLAIMED');
+      expect(stagePool!.status).toBe('AVAILABLE');
       const roomPool = await getPoolRow(`POOL#ROOM#${sessionId}-room`);
-      expect(roomPool!.status).toBe('CLAIMED');
+      expect(roomPool!.status).toBe('AVAILABLE');
     },
     60_000,
   );

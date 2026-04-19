@@ -52,9 +52,11 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const participants = await getHangoutParticipants(tableName, sessionId);
 
       if (participants.length === 0) {
-        // No participants ever joined — go directly to ENDED
-        await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED, 'endedAt');
-        logger.info('Hangout session with 0 participants transitioned directly to ENDED', { sessionId, userId });
+        // No participants ever joined — finalize straight through ENDING → ENDED.
+        // canTransition only permits LIVE→ENDING and ENDING→ENDED, so we step through.
+        await updateSessionStatus(tableName, sessionId, SessionStatus.ENDING, 'endedAt');
+        await updateSessionStatus(tableName, sessionId, SessionStatus.ENDED);
+        logger.info('Hangout session with 0 participants finalized (LIVE→ENDING→ENDED)', { sessionId, userId });
 
         try {
           await updateSpotlight(tableName, sessionId, null, null);

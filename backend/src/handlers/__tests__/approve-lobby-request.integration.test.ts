@@ -298,7 +298,7 @@ describe('approve-lobby-request integration', () => {
   );
 
   test(
-    'already-approved lobby row: re-approval returns 200; row stays approved',
+    'already-approved lobby row: short-circuit with alreadyApproved flag, no new token minted',
     async () => {
       const sessionId = 'lobby-reapprove-4';
       const owner = 'host-alice';
@@ -306,8 +306,18 @@ describe('approve-lobby-request integration', () => {
       await seedHangoutWithApproval(sessionId, owner);
       await seedLobbyRequest(sessionId, target, 'approved');
 
+      ivsRealtimeMock.reset();
+      ivsChatMock.reset();
+
       const res = await handler(createEvent(owner, sessionId, target));
       expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.alreadyApproved).toBe(true);
+      expect(body.token).toBeUndefined();
+
+      // Handler short-circuits: no CreateParticipantToken call, no lobby_update event.
+      expect(ivsRealtimeMock.calls()).toHaveLength(0);
+      expect(ivsChatMock.calls()).toHaveLength(0);
 
       // Lobby row remains in approved state.
       const lobby = await getLobbyRow(sessionId, target);

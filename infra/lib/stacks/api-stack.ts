@@ -1972,17 +1972,24 @@ export class ApiStack extends Stack {
     // ============================================================
     // === vnl-ads Integration ===
     // Skeleton wiring for the sibling **vnl-ads** service. All three handlers
-    // read AD_SERVICE_URL + AD_SERVICE_SECRET from env; when either is missing
-    // they short-circuit to safe defaults (feature flag off).
+    // Contract + JWT spec: vnl-ads/docs/integration.md. Env vars match §1 of
+    // that document. Feature flag is OFF until VNL_ADS_FEATURE_ENABLED=true
+    // AND both base URL + secret are present.
     // ============================================================
-    const adServiceUrl = (this.node.tryGetContext('adServiceUrl') as string | undefined) ?? '';
-    const adServiceSecret = (this.node.tryGetContext('adServiceSecret') as string | undefined) ?? '';
-    const adServiceSecretArn = (this.node.tryGetContext('adServiceSecretArn') as string | undefined) ?? '';
+    const vnlAdsBaseUrl = (this.node.tryGetContext('vnlAdsBaseUrl') as string | undefined) ?? '';
+    const vnlAdsJwtSecret = (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '';
+    const vnlAdsJwtIssuer = (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl';
+    const vnlAdsJwtAudience = (this.node.tryGetContext('vnlAdsJwtAudience') as string | undefined) ?? 'vnl-ads';
+    const vnlAdsTimeoutMs = (this.node.tryGetContext('vnlAdsTimeoutMs') as string | undefined) ?? '2000';
+    const vnlAdsFeatureEnabled = (this.node.tryGetContext('vnlAdsFeatureEnabled') as string | undefined) ?? 'false';
     const adsEnv: Record<string, string> = {
       TABLE_NAME: props.sessionsTable.tableName,
-      AD_SERVICE_URL: adServiceUrl,
-      AD_SERVICE_SECRET: adServiceSecret,
-      AD_SERVICE_SECRET_ARN: adServiceSecretArn,
+      VNL_ADS_BASE_URL: vnlAdsBaseUrl,
+      VNL_ADS_JWT_SECRET: vnlAdsJwtSecret,
+      VNL_ADS_JWT_ISSUER: vnlAdsJwtIssuer,
+      VNL_ADS_JWT_AUDIENCE: vnlAdsJwtAudience,
+      VNL_ADS_TIMEOUT_MS: vnlAdsTimeoutMs,
+      VNL_ADS_FEATURE_ENABLED: vnlAdsFeatureEnabled,
     };
 
     // GET /sessions/{sessionId}/promo/drawer — list creatives (host only)

@@ -131,7 +131,7 @@ describe('trigger-promo handler', () => {
 
   test('BROADCAST path → PutMetadataCommand with {type:"ad", ...}', async () => {
     mockGetSessionById.mockResolvedValue(broadcastSession);
-    mockTriggerAd.mockResolvedValue({ type: 'sponsor_card', banner: 'https://cdn/img.png' });
+    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'sponsor_card', banner: 'https://cdn/img.png' });
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
@@ -149,7 +149,7 @@ describe('trigger-promo handler', () => {
 
   test('HANGOUT path → SendEventCommand with eventName=ad_overlay', async () => {
     mockGetSessionById.mockResolvedValue(hangoutSession);
-    mockTriggerAd.mockResolvedValue({ type: 'product_pin', sku: 'SKU-1' });
+    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'product_pin', sku: 'SKU-1' });
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
@@ -177,7 +177,7 @@ describe('trigger-promo handler', () => {
 
   test('IVS PutMetadata throws → 200 delivered=false, no 500', async () => {
     mockGetSessionById.mockResolvedValue(broadcastSession);
-    mockTriggerAd.mockResolvedValue({ type: 'sponsor_card' });
+    mockTriggerAd.mockResolvedValue({ schemaVersion: 1, type: 'sponsor_card' });
     mockIvsSend.mockRejectedValueOnce(new Error('Channel offline'));
     const event = createEvent({ actorId: OWNER_ID });
     const res = (await handler(event, mockContext, mockCallback)) as APIGatewayProxyResult;
@@ -189,6 +189,7 @@ describe('trigger-promo handler', () => {
 describe('serializeOverlayForIvs', () => {
   test('small payload → not truncated', () => {
     const { json, truncated } = serializeOverlayForIvs({
+      schemaVersion: 1,
       type: 'sponsor_card',
       creativeId: 'c1',
       title: 'Test',
@@ -200,6 +201,7 @@ describe('serializeOverlayForIvs', () => {
   test('oversize payload → truncated to minimal envelope', () => {
     const huge = 'x'.repeat(2000);
     const { json, truncated } = serializeOverlayForIvs({
+      schemaVersion: 1,
       type: 'sponsor_card',
       creativeId: 'c1',
       bigField: huge,

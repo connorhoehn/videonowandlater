@@ -20,6 +20,7 @@ import type { ChatRoom } from 'amazon-ivs-chat-messaging';
 import { fetchToken } from '../../auth/fetchToken';
 import { getConfig } from '../../config/aws-config';
 import type { OverlayPayload } from './types';
+import { OVERLAY_SCHEMA_VERSION } from './types';
 
 interface AdOverlayProps {
   sessionId: string;
@@ -43,6 +44,10 @@ export function AdOverlay({ sessionId, isBroadcast, player, room }: AdOverlayPro
   const apiBaseUrl = getConfig()?.apiUrl || 'http://localhost:3000/api';
 
   const show = useCallback((payload: OverlayPayload) => {
+    // Route on schemaVersion — skip unknown versions as per vnl-ads spec.
+    if (typeof payload.schemaVersion === 'number' && payload.schemaVersion !== OVERLAY_SCHEMA_VERSION) {
+      return;
+    }
     const duration =
       typeof payload.durationMs === 'number' && payload.durationMs > 0
         ? payload.durationMs

@@ -85,13 +85,21 @@ describe('get-promo-drawer handler', () => {
   test('happy path: returns items from ad-service-client', async () => {
     mockGetSessionById.mockResolvedValue(session);
     mockGetDrawer.mockResolvedValue([
-      { creativeId: 'c1', type: 'promo', thumbnail: 'https://img', title: 'Promo 1', durationMs: 5000 },
+      {
+        creativeId: 'c1',
+        campaignId: 'camp-1',
+        type: 'PROMO',
+        thumbnail: 'https://img',
+        title: 'Promo 1',
+        durationMs: 5000,
+        productId: null,
+      },
     ]);
     const res = (await handler(createEvent({ actorId: OWNER_ID }), mockContext, mockCallback)) as APIGatewayProxyResult;
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.items).toHaveLength(1);
-    expect(body.items[0]).toMatchObject({ creativeId: 'c1', type: 'promo' });
+    expect(body.items[0]).toMatchObject({ creativeId: 'c1', type: 'PROMO' });
     expect(mockGetDrawer).toHaveBeenCalledWith(OWNER_ID, SESSION_ID);
   });
 

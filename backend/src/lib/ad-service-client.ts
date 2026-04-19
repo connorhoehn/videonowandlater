@@ -1,51 +1,36 @@
 /**
- * ad-service-client — typed fetch wrapper for sibling **vnl-ads** service.
+ * ad-service-client — thin wrapper around `@vnl/ads-client` (SDK published by
+ * the sibling vnl-ads service). Centralizes AdsClient construction so handlers
+ * don't re-read env vars on every call and don't need to catch SDK-specific
+ * error classes.
  *
- * Contract + JWT spec source of truth: `vnl-ads/docs/integration.md`.
- *
- * Endpoints:
- *   GET  {VNL_ADS_BASE_URL}/v1/creators/{userId}/drawer?sessionId=...
- *        → DrawerItem[]
- *   POST {VNL_ADS_BASE_URL}/v1/trigger
- *        body { creativeId, sessionId, creatorId, triggerType }
- *        → { overlayPayload }
- *   POST {VNL_ADS_BASE_URL}/v1/click
- *        body { creativeId, sessionId, viewerId }
- *        → { ctaUrl }
- *
- * Auth: HS256 JWT with iss=VNL_ADS_JWT_ISSUER, aud=VNL_ADS_JWT_AUDIENCE,
- * sub=vnl-api, 5-minute TTL, shared symmetric secret.
- *
- * Transport hardening: configurable timeout (default 2000ms), one retry on
- * 5xx, graceful network failure → logged warn + default return.
+ * Failure policy: SDK throws `AdsUnavailableError` on network/timeout/breaker,
+ * `AdsHttpError` on 4xx/5xx. We catch both and return safe defaults — the
+ * handlers never surface vnl-ads failures to end users.
  */
 
-import { createHmac } from 'node:crypto';
+import {
+  AdsClient,
+  AdsHttpError,
+  AdsUnavailableError,
+  type DrawerResponse,
+  type TriggerRequest,
+  type TriggerResponse,
+  type ClickRequest,
+  type ClickResponse,
+} from '@vnl/ads-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { component: 'ad-service-client' } });
 
-const DEFAULT_TIMEOUT_MS = 2000;
-const JWT_TTL_SECONDS = 300; // 5min
-const SERVICE_ACCOUNT_ID = 'vnl-api';
+// ── Re-exported types (kept for handler/test ergonomics) ───────────────────
 
-// ── Public types (exposed to handlers + web frontend) ───────────────────────
-
-export interface DrawerItem {
-  creativeId: string;
-  type: 'promo' | 'product' | 'PROMO' | 'PRODUCT';
-  thumbnail: string;
-  title: string;
-  durationMs: number;
-}
+export type DrawerItem = DrawerResponse['items'][number];
+export type { TriggerRequest, TriggerResponse, ClickRequest, ClickResponse };
 
 /**
- * Overlay payload returned by POST /v1/trigger — embedded into IVS Timed
- * Metadata (broadcast) or `ad_overlay` chat event (hangout).
- *
- * `schemaVersion` drives client routing — unknown versions should be skipped.
- * `cta.clickResolveEndpoint` is always `/v1/click` today but exists so
- * vnl-ads can move the resolver without a vnl redeploy.
+ * Overlay payload shape embedded into IVS Timed Metadata or chat events.
+ * `schemaVersion` drives client routing — unknown versions must be skipped.
  */
 export interface OverlayPayload {
   schemaVersion: number;
@@ -72,11 +57,6 @@ export interface TrackClickInput {
 
 // ── Feature flag ────────────────────────────────────────────────────────────
 
-/**
- * Returns false when the feature flag is off or required env vars are missing.
- * When false, every public fn in this module returns its safe default without
- * issuing a network call.
- */
 export function adsEnabled(): boolean {
   if (process.env.VNL_ADS_FEATURE_ENABLED !== 'true') return false;
   const url = process.env.VNL_ADS_BASE_URL;
@@ -84,181 +64,99 @@ export function adsEnabled(): boolean {
   return !!url && !!secret && url.length > 0 && secret.length > 0;
 }
 
-function timeoutMs(): number {
-  const raw = process.env.VNL_ADS_TIMEOUT_MS;
-  const parsed = raw ? parseInt(raw, 10) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+// ── Singleton AdsClient ─────────────────────────────────────────────────────
+
+let clientInstance: AdsClient | null = null;
+
+function getClient(): AdsClient | null {
+  if (!adsEnabled()) return null;
+  if (clientInstance) return clientInstance;
+
+  const timeoutRaw = process.env.VNL_ADS_TIMEOUT_MS;
+  const timeoutMs = timeoutRaw && !Number.isNaN(parseInt(timeoutRaw, 10))
+    ? parseInt(timeoutRaw, 10)
+    : 2000;
+
+  clientInstance = new AdsClient({
+    baseUrl: process.env.VNL_ADS_BASE_URL!,
+    jwtSecret: process.env.VNL_ADS_JWT_SECRET!,
+    jwtIssuer: process.env.VNL_ADS_JWT_ISSUER || 'vnl',
+    jwtAudience: process.env.VNL_ADS_JWT_AUDIENCE || 'vnl-ads',
+    serviceSub: 'vnl-api',
+    timeoutMs,
+    enabled: true,
+  });
+  return clientInstance;
 }
 
-// ── HS256 JWT signing (Node crypto — no extra deps) ─────────────────────────
-
-function base64UrlEncode(input: Buffer | string): string {
-  const buf = typeof input === 'string' ? Buffer.from(input) : input;
-  return buf
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+/** Reset singleton — for test isolation only. */
+export function __resetClientForTests(): void {
+  clientInstance = null;
 }
 
-/**
- * Sign a short-lived HS256 JWT for service-to-service auth with vnl-ads.
- * Claims match vnl-ads/docs/integration.md §1:
- *   iss=VNL_ADS_JWT_ISSUER (e.g. "vnl"), aud=VNL_ADS_JWT_AUDIENCE (e.g. "vnl-ads"),
- *   sub="vnl-api", iat, exp = iat + 300s.
- *
- * Exported for unit tests only — handlers should not call this directly.
- */
-export function signServiceJwt(secret: string): string {
-  const now = Math.floor(Date.now() / 1000);
-  const iss = process.env.VNL_ADS_JWT_ISSUER || 'vnl';
-  const aud = process.env.VNL_ADS_JWT_AUDIENCE || 'vnl-ads';
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const payload = {
-    iss,
-    aud,
-    sub: SERVICE_ACCOUNT_ID,
-    iat: now,
-    exp: now + JWT_TTL_SECONDS,
-  };
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = createHmac('sha256', secret).update(signingInput).digest();
-  return `${signingInput}.${base64UrlEncode(signature)}`;
-}
-
-// ── Low-level fetch with timeout + single 5xx retry ─────────────────────────
-
-interface FetchOptions {
-  method: 'GET' | 'POST';
-  url: string;
-  body?: unknown;
-}
-
-async function fetchWithTimeoutAndRetry(opts: FetchOptions): Promise<Response> {
-  const secret = process.env.VNL_ADS_JWT_SECRET!;
-  const jwt = signServiceJwt(secret);
-  const ms = timeoutMs();
-
-  const doFetch = async (): Promise<Response> => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ms);
-    try {
-      const res = await fetch(opts.url, {
-        method: opts.method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-        signal: controller.signal,
-      });
-      return res;
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  const first = await doFetch();
-  if (first.status >= 500 && first.status < 600) {
-    logger.warn('vnl-ads 5xx — retrying once', { url: opts.url, status: first.status });
-    return doFetch();
+function logFailure(op: string, ctx: Record<string, unknown>, err: unknown): void {
+  if (err instanceof AdsUnavailableError) {
+    logger.warn(`vnl-ads unavailable on ${op}`, { ...ctx, message: err.message });
+  } else if (err instanceof AdsHttpError) {
+    logger.warn(`vnl-ads non-2xx on ${op}`, { ...ctx, status: err.status, code: err.code });
+  } else {
+    logger.warn(`vnl-ads ${op} unexpected error`, {
+      ...ctx,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
-  return first;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-/**
- * GET the creator's promo drawer from vnl-ads.
- * Returns [] if the feature flag is off or the call fails.
- */
 export async function getDrawer(userId: string, sessionId: string): Promise<DrawerItem[]> {
-  if (!adsEnabled()) return [];
-
-  const base = process.env.VNL_ADS_BASE_URL!.replace(/\/$/, '');
-  const url = `${base}/v1/creators/${encodeURIComponent(userId)}/drawer?sessionId=${encodeURIComponent(sessionId)}`;
+  const client = getClient();
+  if (!client) return [];
 
   try {
-    const res = await fetchWithTimeoutAndRetry({ method: 'GET', url });
-    if (!res.ok) {
-      logger.warn('vnl-ads getDrawer non-2xx', { status: res.status, userId, sessionId });
-      return [];
-    }
-    const data = (await res.json()) as DrawerItem[];
-    return Array.isArray(data) ? data : [];
+    const res = await client.getDrawer(userId, sessionId);
+    return Array.isArray(res?.items) ? res.items : [];
   } catch (err) {
-    logger.warn('vnl-ads getDrawer network error', {
-      userId,
-      sessionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logFailure('getDrawer', { userId, sessionId }, err);
     return [];
   }
 }
 
-/**
- * POST /v1/trigger — request an overlay payload for a chosen creative.
- * Returns null if the feature flag is off or the call fails.
- */
 export async function triggerAd(input: TriggerAdInput): Promise<OverlayPayload | null> {
-  if (!adsEnabled()) return null;
-
-  const base = process.env.VNL_ADS_BASE_URL!.replace(/\/$/, '');
-  const url = `${base}/v1/trigger`;
+  const client = getClient();
+  if (!client) return null;
 
   try {
-    const res = await fetchWithTimeoutAndRetry({ method: 'POST', url, body: input });
-    if (!res.ok) {
-      logger.warn('vnl-ads triggerAd non-2xx', {
-        status: res.status,
-        creativeId: input.creativeId,
-        sessionId: input.sessionId,
-      });
-      return null;
-    }
-    const data = (await res.json()) as { overlayPayload?: OverlayPayload };
-    return data?.overlayPayload ?? null;
-  } catch (err) {
-    logger.warn('vnl-ads triggerAd network error', {
+    const body: TriggerRequest = {
       creativeId: input.creativeId,
       sessionId: input.sessionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+      creatorId: input.creatorId,
+      triggerType: input.triggerType,
+    };
+    const res: TriggerResponse = await client.trigger(body);
+    const payload = (res as { overlayPayload?: OverlayPayload })?.overlayPayload;
+    return payload ?? null;
+  } catch (err) {
+    logFailure('trigger', { sessionId: input.sessionId, creativeId: input.creativeId }, err);
     return null;
   }
 }
 
-/**
- * POST /v1/click — record a click-through and fetch the destination URL.
- * Returns null if the feature flag is off or the call fails.
- */
 export async function trackClick(input: TrackClickInput): Promise<{ ctaUrl: string } | null> {
-  if (!adsEnabled()) return null;
-
-  const base = process.env.VNL_ADS_BASE_URL!.replace(/\/$/, '');
-  const url = `${base}/v1/click`;
+  const client = getClient();
+  if (!client) return null;
 
   try {
-    const res = await fetchWithTimeoutAndRetry({ method: 'POST', url, body: input });
-    if (!res.ok) {
-      logger.warn('vnl-ads trackClick non-2xx', {
-        status: res.status,
-        creativeId: input.creativeId,
-        sessionId: input.sessionId,
-      });
-      return null;
-    }
-    const data = (await res.json()) as { ctaUrl?: string };
-    if (!data?.ctaUrl) return null;
-    return { ctaUrl: data.ctaUrl };
-  } catch (err) {
-    logger.warn('vnl-ads trackClick network error', {
+    const body: ClickRequest = {
       creativeId: input.creativeId,
       sessionId: input.sessionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+      viewerId: input.viewerId,
+    };
+    const res: ClickResponse = await client.click(body);
+    const ctaUrl = (res as { ctaUrl?: string })?.ctaUrl;
+    return ctaUrl ? { ctaUrl } : null;
+  } catch (err) {
+    logFailure('trackClick', { sessionId: input.sessionId, creativeId: input.creativeId }, err);
     return null;
   }
 }

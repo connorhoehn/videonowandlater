@@ -12,6 +12,7 @@
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules PATH=\"/opt/homebrew/opt/openjdk@17/bin:$PATH\" jest --selectProjects integration --runInBand"
   },
   "dependencies": {
+    "@vnl/ads-client": "file:../../vnl-ads/client",
     "@aws-lambda-powertools/logger": "^2.31.0",
     "@aws-lambda-powertools/tracer": "^2.31.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",

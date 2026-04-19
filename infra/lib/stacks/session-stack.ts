@@ -1603,5 +1603,57 @@ export class SessionStack extends Stack {
       value: moderationBucket.bucketName,
       description: 'S3 bucket for Phase 4 moderation frames',
     });
+
+    // ============================================================
+    // Go-Live Notifications (fan-out to followers)
+    // Triggered by:
+    //   - session.SESSION_CREATED     (covers BROADCAST where stream start is
+    //                                  the moment of intent)
+    //   - session.SESSION_STARTED     (covers HANGOUT — emitted only when the
+    //                                  first participant joins, so we don't
+    //                                  notify followers for empty shells)
+    // ============================================================
+    const onSessionCreatedFn = new nodejs.NodejsFunction(this, 'OnSessionCreated', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/on-session-created.ts'),
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        NOTIFICATION_EMAIL_ENABLED: 'false', // SES off by default
+        // NOTIFICATION_EMAIL_FROM: set this to flip email on in the future
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'OnSessionCreatedLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+
+    // BatchWrite + read followers + read profile → read/write on the sessions table
+    this.table.grantReadWriteData(onSessionCreatedFn);
+
+    // Best-effort email (stubbed today — the SDK isn't wired in). Permission
+    // is scoped to SendEmail so the future implementation can drop it in.
+    onSessionCreatedFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+        resources: ['*'],
+      }),
+    );
+
+    const goLiveNotificationsRule = new events.Rule(this, 'GoLiveNotificationsRule', {
+      eventPattern: {
+        source: ['custom.vnl'],
+        // emit-session-event formats DetailType as `session.${eventType}`
+        detailType: ['session.SESSION_CREATED', 'session.SESSION_STARTED'],
+      },
+      description: 'Fan out go-live notifications to followers when a creator starts a session',
+      targets: [new targets.LambdaFunction(onSessionCreatedFn)],
+    });
+    onSessionCreatedFn.addPermission('AllowEBGoLiveInvoke', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: goLiveNotificationsRule.ruleArn,
+    });
   }
 }

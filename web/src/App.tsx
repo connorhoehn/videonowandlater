@@ -23,6 +23,7 @@ import { SettingsShell } from './features/settings/SettingsShell';
 import { ProfilePanel } from './features/settings/ProfilePanel';
 import { GroupsPanel } from './features/settings/GroupsPanel';
 import { InvitesPanel } from './features/settings/InvitesPanel';
+import { NotificationsPanel } from './features/settings/NotificationsPanel';
 import { EarningsPanel } from './features/settings/EarningsPanel';
 import { AdminSettingsPanel } from './features/settings/AdminSettingsPanel';
 import { ToastProvider } from './components/social';
@@ -100,6 +101,7 @@ function App() {
               <Route path="profile" element={<ProfilePanel />} />
               <Route path="groups" element={<GroupsPanel />} />
               <Route path="invites" element={<InvitesPanel />} />
+              <Route path="notifications" element={<NotificationsPanel />} />
               <Route path="earnings" element={<EarningsPanel />} />
               <Route path="admin" element={<AdminSettingsPanel />} />
             </Route>

@@ -2440,6 +2440,52 @@ export class ApiStack extends Stack {
       },
     );
 
+    // ============================================================
+    // === Phase 2: Discovery ===
+    // ============================================================
+    // GET /search?q=...&filter=... — public discovery search (no auth)
+    const searchResource = api.root.addResource('search');
+    const searchSessionsFn = new NodejsFunction(this, 'SearchSessions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/search-sessions.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(searchSessionsFn);
+    searchResource.addMethod('GET', new apigateway.LambdaIntegration(searchSessionsFn));
+
+    // GET /feed?tab=live|upcoming|recent|following — discovery feed.
+    // Cognito authorizer attached so the handler can identify the caller for
+    // the `following` tab; for other tabs the handler simply ignores auth.
+    const feedResource = api.root.addResource('feed');
+    const getFeedFn = new NodejsFunction(this, 'GetFeed', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-feed.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getFeedFn);
+    feedResource.addMethod('GET', new apigateway.LambdaIntegration(getFeedFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /creators/{handle}/sessions — creator page session grid (no auth)
+    const creatorSessionsResource = creatorByHandle.addResource('sessions');
+    const getCreatorSessionsFn = new NodejsFunction(this, 'GetCreatorSessions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-creator-sessions.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getCreatorSessionsFn);
+    creatorSessionsResource.addMethod('GET', new apigateway.LambdaIntegration(getCreatorSessionsFn));
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

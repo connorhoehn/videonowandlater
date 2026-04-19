@@ -33,6 +33,10 @@ import { AdDrawerPanel } from '../ads/AdDrawerPanel';
 import { AdOverlay } from '../ads/AdOverlay';
 import { TrainingOverlay } from '../training/TrainingOverlay';
 import { SurveyModal } from '../survey/SurveyModal';
+import { CaptionsOverlay } from '../captions/CaptionsOverlay';
+import { CaptionsToggleButton } from '../captions/CaptionsToggleButton';
+import { useCaptionsToggle } from '../captions/useCaptionsToggle';
+import { useCaptionsCapture } from '../captions/useCaptionsCapture';
 
 export function HangoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -181,6 +185,41 @@ export function HangoutPage() {
   }, [authToken, sessionId, apiBaseUrl]);
 
   useModerationCapture(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined && moderationEnabled);
+
+  // Live captions — fetch initial captionsEnabled from session metadata.
+  const [initialCaptionsEnabled, setInitialCaptionsEnabled] = useState<boolean>(false);
+  React.useEffect(() => {
+    if (!authToken || !sessionId || !apiBaseUrl) return;
+    let cancelled = false;
+    fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { captionsEnabled?: boolean } | null) => {
+        if (!cancelled && data?.captionsEnabled) setInitialCaptionsEnabled(true);
+      })
+      .catch(() => { /* non-blocking */ });
+    return () => { cancelled = true; };
+  }, [authToken, sessionId, apiBaseUrl]);
+
+  const isCaptionsHost = Boolean(sessionOwnerId && sessionOwnerId === userId);
+  const {
+    enabled: captionsEnabled,
+    busy: captionsBusy,
+    toggle: toggleCaptions,
+  } = useCaptionsToggle({
+    sessionId: sessionId || '',
+    apiBaseUrl,
+    authToken,
+    initialEnabled: initialCaptionsEnabled,
+  });
+  const { status: captionsStatus } = useCaptionsCapture({
+    sessionId: sessionId || '',
+    apiBaseUrl,
+    authToken,
+    isHost: isCaptionsHost,
+    enabled: captionsEnabled && isJoined,
+  });
 
   const { activeSpeakerId } = useActiveSpeaker({ participants });
   const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId: sessionId || '', authToken });
@@ -525,6 +564,14 @@ export function HangoutPage() {
                 <TrainingOverlay sessionId={sessionId} />
               </>
             )}
+            {/* Live captions overlay — visible to everyone; gated on host toggle. */}
+            {sessionId && (
+              <CaptionsOverlay
+                room={room}
+                initialEnabled={captionsEnabled}
+                sessionId={sessionId}
+              />
+            )}
             <FloatingReactions
               reactions={floatingReactions}
             />
@@ -594,6 +641,18 @@ export function HangoutPage() {
                 </button>
                 {isJoined && (
                   <ReactionPicker onReaction={handleReaction} />
+                )}
+                {isJoined && isCaptionsHost && (
+                  <CaptionsToggleButton
+                    enabled={captionsEnabled}
+                    busy={captionsBusy}
+                    onClick={toggleCaptions}
+                    statusHint={
+                      captionsEnabled && captionsStatus === 'unavailable'
+                        ? '(unavailable)'
+                        : undefined
+                    }
+                  />
                 )}
                 <button
                   onClick={() => setShowLeaveConfirm(true)}

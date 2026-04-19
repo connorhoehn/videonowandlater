@@ -44,6 +44,8 @@ export function HomePage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   // Phase 2: Hangout lobby options
   const [requireApproval, setRequireApproval] = useState(false);
+  // Live captions (beta) — opt-in flag for both BROADCAST and HANGOUT creation
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -67,7 +69,7 @@ export function HomePage() {
       const response = await fetch(`${config.apiUrl}/sessions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionType: 'BROADCAST' }),
+        body: JSON.stringify({ sessionType: 'BROADCAST', captionsEnabled }),
       });
       if (!response.ok) throw new Error(`${response.status}`);
       const sessionData = await response.json();
@@ -112,7 +114,7 @@ export function HomePage() {
     setShowHangoutOptions(false);
     try {
       const { token: authToken } = await fetchToken();
-      const body: Record<string, unknown> = { sessionType: 'HANGOUT', requireApproval };
+      const body: Record<string, unknown> = { sessionType: 'HANGOUT', requireApproval, captionsEnabled };
       if (modEnabled && modRulesetName) {
         body.moderationEnabled = true;
         body.rulesetName = modRulesetName;
@@ -291,6 +293,20 @@ export function HomePage() {
                 </div>
               </div>
             </label>
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={captionsEnabled}
+                onChange={(e) => setCaptionsEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Enable live captions (beta)</div>
+                <div className="text-xs text-gray-500">
+                  Real-time closed captions shown to all participants. Off by default.
+                </div>
+              </div>
+            </label>
             <div className="flex gap-3 justify-end mt-5">
               <button
                 onClick={() => setShowHangoutOptions(false)}
@@ -343,6 +359,20 @@ export function HomePage() {
                 <span className="block text-sm font-medium text-gray-800">Enable image moderation</span>
                 <span className="block text-xs text-gray-500">
                   Captures a frame every 10s and runs it through a Nova Lite classifier.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={captionsEnabled}
+                onChange={(e) => setCaptionsEnabled(e.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-800">Enable live captions (beta)</span>
+                <span className="block text-xs text-gray-500">
+                  Real-time closed captions shown to all participants. Off by default.
                 </span>
               </span>
             </label>

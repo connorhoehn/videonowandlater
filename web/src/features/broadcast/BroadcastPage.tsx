@@ -29,6 +29,10 @@ import { Card, Avatar } from '../../components/social';
 import { AdDrawerPanel } from '../ads/AdDrawerPanel';
 import { AdOverlay } from '../ads/AdOverlay';
 import { SurveyModal } from '../survey/SurveyModal';
+import { CaptionsOverlay } from '../captions/CaptionsOverlay';
+import { CaptionsToggleButton } from '../captions/CaptionsToggleButton';
+import { useCaptionsToggle } from '../captions/useCaptionsToggle';
+import { useCaptionsCapture } from '../captions/useCaptionsCapture';
 
 // ── Participants panel shown alongside the camera preview ──────────────────
 function ParticipantsPanel({
@@ -114,6 +118,9 @@ function BroadcastContent({
   const [linkCopied, setLinkCopied] = React.useState(false);
   const [showStopConfirm, setShowStopConfirm] = React.useState(false);
   const [killError, setKillError] = React.useState<string | null>(null);
+  // Live captions — host-controlled opt-in. Initial value is read from the
+  // session metadata once on mount; runtime toggles flow through the server.
+  const [initialCaptionsEnabled, setInitialCaptionsEnabled] = React.useState<boolean>(false);
   // Post-call survey: mounted after the broadcaster confirms stopping, so
   // the host gets prompted for NPS feedback. The modal self-gates on whether
   // the user already submitted.
@@ -164,6 +171,39 @@ function BroadcastContent({
   });
 
   const { viewerCount } = useViewerCount({ sessionId, apiBaseUrl, isLive });
+
+  // Fetch session metadata once to seed initial captionsEnabled state.
+  React.useEffect(() => {
+    if (!authToken || !sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!cancelled) setInitialCaptionsEnabled(Boolean(data.captionsEnabled));
+      } catch {
+        /* non-blocking */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiBaseUrl, authToken, sessionId]);
+
+  // Captions: host toggle + audio capture (gated on `enabled`).
+  const {
+    enabled: captionsEnabled,
+    busy: captionsBusy,
+    toggle: toggleCaptions,
+  } = useCaptionsToggle({ sessionId, apiBaseUrl, authToken, initialEnabled: initialCaptionsEnabled });
+  const { status: captionsStatus } = useCaptionsCapture({
+    sessionId,
+    apiBaseUrl,
+    authToken,
+    isHost: true,
+    enabled: captionsEnabled && isLive,
+  });
 
   // NEW: Add metrics hook
   const { metrics, healthScore } = useStreamMetrics(client, isLive);
@@ -312,6 +352,8 @@ function BroadcastContent({
                 />
                 {/* Ad overlay — broadcaster preview (chat-room fallback only; no HLS player ref here) */}
                 <AdOverlay sessionId={sessionId} isBroadcast={true} room={room} />
+                {/* Live captions overlay — shown to host as a preview of what viewers see. */}
+                <CaptionsOverlay room={room} initialEnabled={captionsEnabled} sessionId={sessionId} />
               </div>
 
               {/* Status row */}
@@ -392,6 +434,17 @@ function BroadcastContent({
                     <ReactionPicker
                       onReaction={handleReaction}
                       disabled={sending}
+                    />
+
+                    <CaptionsToggleButton
+                      enabled={captionsEnabled}
+                      busy={captionsBusy}
+                      onClick={toggleCaptions}
+                      statusHint={
+                        captionsEnabled && captionsStatus === 'unavailable'
+                          ? '(unavailable)'
+                          : undefined
+                      }
                     />
 
                     <button

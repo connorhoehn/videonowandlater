@@ -22,6 +22,7 @@ import { SpotlightBadge } from '../spotlight/SpotlightBadge';
 import { Card, Avatar, useToast } from '../../components/social';
 import { AdOverlay } from '../ads/AdOverlay';
 import { TrainingOverlay } from '../training/TrainingOverlay';
+import { CaptionsOverlay } from '../captions/CaptionsOverlay';
 
 export function ViewerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -231,6 +232,14 @@ export function ViewerPage() {
                   {/* Ad overlay — BROADCAST path: subscribes to IVS Player TEXT_METADATA_CUE */}
                   <AdOverlay sessionId={sessionId} isBroadcast={true} player={player} />
                   <TrainingOverlay sessionId={sessionId} />
+                  {/* Live captions overlay — hidden until host enables captions. */}
+                  {sessionId && (
+                    <CaptionsOverlay
+                      room={room}
+                      initialEnabled={Boolean(session?.captionsEnabled)}
+                      sessionId={sessionId}
+                    />
+                  )}
                 </div>
               </Card.Body>
             </Card>

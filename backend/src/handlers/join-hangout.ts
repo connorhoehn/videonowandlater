@@ -171,12 +171,30 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       logger.error('Failed to persist participant', { error: participantErr.message });
     }
 
-    // Transition session to LIVE so send-message accepts chat messages (HANG-11)
+    // Transition session to LIVE so send-message accepts chat messages (HANG-11).
+    // This succeeds exactly once — the first participant join triggers the
+    // CREATING→LIVE transition. Subsequent joins fall through to the catch.
+    // Emit SESSION_STARTED on the successful transition so go-live fan-out fires
+    // for hangouts (which don't use IVS streams and therefore never fire the
+    // IVS Stream Start path).
+    let transitionedToLive = false;
     try {
       await updateSessionStatus(tableName, sessionId, SessionStatus.LIVE, 'startedAt');
+      transitionedToLive = true;
     } catch (err: any) {
       // Already LIVE (second+ participant joining) — expected, not an error
       logger.info('Status transition skipped (likely already LIVE)', { error: err.message });
+    }
+    if (transitionedToLive) {
+      try {
+        await emitSessionEvent(tableName, {
+          eventId: uuidv4(), sessionId, eventType: SessionEventType.SESSION_STARTED,
+          timestamp: new Date().toISOString(), actorId: userId,
+          actorType: 'user', details: { sessionType: SessionType.HANGOUT },
+        });
+      } catch (err: any) {
+        logger.warn('Failed to emit SESSION_STARTED (non-fatal)', { sessionId, error: err.message });
+      }
     }
 
     if (!response.participantToken) {

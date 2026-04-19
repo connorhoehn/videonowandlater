@@ -18,11 +18,11 @@ import {
   NewsWidget,
   FooterLinks,
   UserAvatarDropdown,
-  NotificationDropdown,
   ChatLauncher,
   OffcanvasSidebar,
 } from './social';
 import { ChatIcon, MenuIcon } from './social/Icons';
+import { ActivityBell } from './ActivityBell';
 
 // Routes that should use full-width layout (no sidebars)
 const FULL_WIDTH_PATTERNS = ['/replay/', '/broadcast/', '/viewer/', '/hangout/', '/upload/', '/video/', '/admin', '/settings'];
@@ -125,7 +125,7 @@ export function AuthenticatedShell() {
               </span>
             )}
           </button>
-          <NotificationDropdown notifications={[]} unreadCount={0} />
+          <ActivityBell pendingInviteCount={pendingInviteCount} />
           <UserAvatarDropdown
             user={{ name: user?.username ?? '' }}
             onProfile={() => navigate('/')}

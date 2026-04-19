@@ -6,30 +6,18 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { upsertProfile, HandleTakenError } from '../repositories/profile-repository';
-
-const CORS = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': '*',
-};
-
-function resp(statusCode: number, body: object): APIGatewayProxyResult {
-  return { statusCode, headers: CORS, body: JSON.stringify(body) };
-}
+import { resp, getUserId, parseJsonBody } from '../lib/http';
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const tableName = process.env.TABLE_NAME;
   if (!tableName) return resp(500, { error: 'TABLE_NAME not set' });
 
-  const userId = event.requestContext.authorizer?.claims?.['cognito:username'];
+  const userId = getUserId(event);
   if (!userId) return resp(401, { error: 'Unauthorized' });
 
-  let body: Record<string, unknown>;
-  try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return resp(400, { error: 'Invalid JSON' });
-  }
+  const parsed = parseJsonBody<Record<string, unknown>>(event);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   const patch: { displayName?: string; handle?: string; bio?: string; avatarUrl?: string } = {};
   if (typeof body.displayName === 'string') patch.displayName = body.displayName.trim().slice(0, 80);

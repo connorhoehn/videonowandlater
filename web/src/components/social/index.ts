@@ -59,7 +59,6 @@ export { MentionInput } from './MentionInput';
 export type { MentionUser } from './MentionInput';
 export { PeopleCarousel } from './PeopleCarousel';
 export type { PersonCard, PeopleCarouselProps } from './PeopleCarousel';
-export { NotificationDropdown } from './NotificationDropdown';
 export { UserAvatarDropdown } from './UserAvatarDropdown';
 export { EmojiPicker } from './EmojiPicker';
 export type { EmojiPickerProps } from './EmojiPicker';

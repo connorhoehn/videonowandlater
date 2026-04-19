@@ -5,29 +5,18 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getProfile, getStats, upsertProfile } from '../repositories/profile-repository';
-
-const CORS = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': '*',
-};
-
-function resp(statusCode: number, body: object): APIGatewayProxyResult {
-  return { statusCode, headers: CORS, body: JSON.stringify(body) };
-}
+import { resp, getUserId } from '../lib/http';
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const tableName = process.env.TABLE_NAME;
   if (!tableName) return resp(500, { error: 'TABLE_NAME not set' });
 
-  const userId = event.requestContext.authorizer?.claims?.['cognito:username'];
+  const userId = getUserId(event);
   if (!userId) return resp(401, { error: 'Unauthorized' });
 
   let profile = await getProfile(tableName, userId);
   if (!profile) {
-    profile = await upsertProfile(tableName, userId, {
-      displayName: userId,
-    });
+    profile = await upsertProfile(tableName, userId, { displayName: userId });
   }
   const stats = await getStats(tableName, userId);
   return resp(200, { profile, stats });

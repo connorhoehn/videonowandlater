@@ -59,6 +59,8 @@ interface NavbarProps {
   brand?: { icon?: ReactNode; label?: string; href?: string };
   searchPlaceholder?: string;
   onSearch?: (query: string) => void;
+  /** Optional callback fired when the user presses Enter in the search box. */
+  onSearchSubmit?: (query: string) => void;
   navLinks?: { label: string; href?: string; onClick?: () => void; active?: boolean }[];
   actions?: ReactNode;
   children?: ReactNode;
@@ -68,6 +70,7 @@ export function Navbar({
   brand,
   searchPlaceholder = 'Search',
   onSearch,
+  onSearchSubmit,
   navLinks,
   actions,
   children,
@@ -78,6 +81,13 @@ export function Navbar({
   const handleSearch = (value: string) => {
     setQuery(value);
     onSearch?.(value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onSearchSubmit?.(query);
+    }
   };
 
   return (
@@ -104,6 +114,7 @@ export function Navbar({
                 type="text"
                 value={query}
                 onChange={(e) => handleSearch(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder={searchPlaceholder}
                 className="w-64 h-9 pl-9 pr-3 rounded-full bg-gray-100 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-blue-500/30 transition"
               />
@@ -169,6 +180,7 @@ export function Navbar({
                 type="text"
                 value={query}
                 onChange={(e) => handleSearch(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder={searchPlaceholder}
                 className="w-full h-9 pl-9 pr-3 rounded-full bg-gray-100 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-blue-500/30 transition"
               />

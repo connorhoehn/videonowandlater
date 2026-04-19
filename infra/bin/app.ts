@@ -30,6 +30,8 @@ new ApiStack(app, 'VNL-Api', {
   webhookQueueUrl: sessionStack.webhookDeliveryQueue.queueUrl,
   webhookQueueArn: sessionStack.webhookDeliveryQueue.queueArn,
   moderationBucket: sessionStack.moderationBucket,
+  mediaConvertJobRoleArn: sessionStack.mediaConvertJobRoleArn,
+  transcriptionBucket: storageStack.transcriptionBucket,
 });
 new AgentStack(app, 'VNL-Agent', {
   env,

@@ -174,6 +174,38 @@ export function HomePage() {
           ]}
         />
 
+        {/* Phase 2: Discovery — search + tabbed feed */}
+        <section className="bg-white dark:bg-gray-800 rounded-xl p-4 space-y-3">
+          <SearchInput
+            placeholder="Search sessions, creators, tags..."
+            onSubmit={(q) => {
+              const t = q.trim();
+              if (t) navigate(`/search?q=${encodeURIComponent(t)}`);
+            }}
+          />
+          <TabNav
+            tabs={discoveryTabs}
+            activeTab={activeTab}
+            onChange={(id) => setActiveTab(id as FeedTab)}
+            variant="underline"
+          />
+          {feedError ? (
+            <div className="text-center py-8 text-sm text-gray-500 dark:text-gray-400">{feedError}</div>
+          ) : (
+            <SessionCardGrid
+              items={feedItems}
+              loading={feedLoading}
+              emptyMessage={
+                activeTab === 'upcoming'
+                  ? 'No scheduled sessions yet.'
+                  : activeTab === 'following'
+                  ? 'Nobody you follow is live right now.'
+                  : 'Nothing here yet.'
+              }
+            />
+          )}
+        </section>
+
         {loadingActivity ? (
           <>
             {/* Skeleton for recording slider */}

@@ -25,9 +25,23 @@ import { ChapterList } from './ChapterList';
 import { ChapterMarkerStrip, type ChapterMarker } from './ChapterMarkerStrip';
 import { PlaybackSpeedControl } from './PlaybackSpeedControl';
 import { HighlightReelPlayer } from './HighlightReelPlayer';
+import { ClipCreator } from './ClipCreator';
 import { Card } from '../../components/social';
+import { Link } from 'react-router-dom';
 import type { Chapter } from './ChapterList';
 import type { Reaction } from '../../../../backend/src/domain/reaction';
+
+interface SessionClip {
+  clipId: string;
+  sessionId: string;
+  authorId: string;
+  title: string;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  createdAt: string;
+  status: 'processing' | 'ready' | 'failed' | 'deleted';
+}
 
 interface Session {
   sessionId: string;
@@ -81,6 +95,7 @@ export function ReplayViewer() {
   );
   const [chapterMarkers, setChapterMarkers] = useState<ChapterMarker[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [sessionClips, setSessionClips] = useState<SessionClip[]>([]);
 
   const config = getConfig();
   const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
@@ -211,13 +226,9 @@ export function ReplayViewer() {
     fetchReactions();
   }, [sessionId, authToken]);
 
-  // Fetch chapter markers (new endpoint). If the session already carries a
-  // `chapters` field via the get-session payload we prefer that snapshot,
-  // but this endpoint is authoritative and may include additional metadata
-  // (e.g. stable ids) once we extend it.
+  // Fetch chapter markers (Phase 4a endpoint).
   useEffect(() => {
     if (!sessionId || !authToken) return;
-
     let cancelled = false;
     (async () => {
       const cfg = getConfig();
@@ -236,18 +247,13 @@ export function ReplayViewer() {
         console.warn('[ReplayViewer] failed to load chapters', err);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [sessionId, authToken]);
 
   // Fetch a short-lived signed MP4 download URL once the recording and
-  // MediaConvert-produced MP4 are both ready. Silently no-ops (leaves button
-  // hidden) for sessions where the recording isn't downloadable yet.
+  // MediaConvert-produced MP4 are both ready.
   useEffect(() => {
-    if (!sessionId || !authToken) return;
-    if (!session) return;
+    if (!sessionId || !authToken || !session) return;
     const convertReady =
       session.convertStatus === undefined || session.convertStatus === 'available';
     const recordingReady =
@@ -257,7 +263,6 @@ export function ReplayViewer() {
       setDownloadUrl(null);
       return;
     }
-
     let cancelled = false;
     (async () => {
       const cfg = getConfig();
@@ -279,11 +284,29 @@ export function ReplayViewer() {
         if (!cancelled) setDownloadUrl(null);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [sessionId, authToken, session?.convertStatus, session?.recordingStatus, session?.recordingHlsUrl]);
+
+  // Fetch this session's existing clips (Phase 4b — public read).
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/sessions/${sessionId}/clips`, {
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setSessionClips(data.clips ?? []);
+        }
+      } catch {
+        /* non-blocking */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, authToken, apiBaseUrl]);
 
   // Filter reactions by syncTime
   const visibleReactions = useReactionSync(allReactions, syncTime);
@@ -426,6 +449,15 @@ export function ReplayViewer() {
               onReaction={handleReaction}
               disabled={!authToken}
             />
+            {session?.recordingDuration && session.recordingStatus === 'available' && (
+              <ClipCreator
+                sessionId={sessionId!}
+                apiBaseUrl={apiBaseUrl}
+                authToken={authToken}
+                durationSec={session.recordingDuration / 1000}
+                currentTimeSec={syncTime / 1000}
+              />
+            )}
           </div>
           {chapterMarkers.length > 0 && session?.recordingDuration && (
             <ChapterMarkerStrip
@@ -600,6 +632,36 @@ export function ReplayViewer() {
                 </div>
               </Card.Body>
             </Card>
+
+            {/* Session Clips */}
+            {sessionClips.length > 0 && (
+              <Card>
+                <Card.Header>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Clips ({sessionClips.length})
+                  </h3>
+                </Card.Header>
+                <Card.Body>
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {sessionClips.map((clip) => (
+                      <li key={clip.clipId} className="py-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to={`/clip/${clip.clipId}`}
+                            className="text-sm font-medium text-blue-600 hover:underline block truncate"
+                          >
+                            {clip.title}
+                          </Link>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {clip.authorId} · {clip.durationSec.toFixed(0)}s · {clip.status}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </Card.Body>
+              </Card>
+            )}
 
             {/* Processing Timeline */}
             <Card>

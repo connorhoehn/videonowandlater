@@ -72,6 +72,12 @@ export function AuthenticatedShell() {
   const navbar = (
     <Navbar
       brand={{ label: 'videonow', href: '/' }}
+      searchPlaceholder="Search sessions, creators, tags..."
+      onSearch={() => { /* typing — navigation only on Enter */ }}
+      onSearchSubmit={(q) => {
+        const t = q.trim();
+        if (t) navigate(`/search?q=${encodeURIComponent(t)}`);
+      }}
       actions={
         <div className="flex items-center gap-2">
           {/* Mobile sidebar hamburger — visible below lg */}

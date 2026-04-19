@@ -21,6 +21,9 @@ export interface ApiStackProps extends StackProps {
   webhookQueueArn?: string;
   // Phase 4: Image Moderation
   moderationBucket?: s3.IBucket;
+  // Clips feature — reuses MediaConvert role + transcription bucket (recording source)
+  mediaConvertJobRoleArn?: string;
+  transcriptionBucket?: s3.IBucket;
 }
 
 export class ApiStack extends Stack {
@@ -2485,6 +2488,98 @@ export class ApiStack extends Stack {
     });
     props.sessionsTable.grantReadData(getCreatorSessionsFn);
     creatorSessionsResource.addMethod('GET', new apigateway.LambdaIntegration(getCreatorSessionsFn));
+
+    // ============================================================
+    // === Phase 4b: Clips ===
+    // Viewer-initiated highlights: 5-180s MP4 extracted from an ended session
+    // via MediaConvert InputClippings, shareable via a public /clip/:id route.
+    // ============================================================
+    const clipsEnv: Record<string, string> = {
+      TABLE_NAME: props.sessionsTable.tableName,
+      RECORDINGS_BUCKET: props.recordingsBucket?.bucketName ?? '',
+      MEDIACONVERT_ROLE_ARN: props.mediaConvertJobRoleArn ?? '',
+      TRANSCRIPTION_BUCKET: props.transcriptionBucket?.bucketName ?? '',
+      AWS_ACCOUNT_ID: this.account,
+    };
+
+    // POST /sessions/{sessionId}/clips — submit a MediaConvert clip job
+    const createClipFn = new NodejsFunction(this, 'CreateClipHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-clip.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(15),
+      environment: clipsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(createClipFn);
+    if (props.recordingsBucket) props.recordingsBucket.grantWrite(createClipFn);
+    if (props.transcriptionBucket) props.transcriptionBucket.grantRead(createClipFn);
+    createClipFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['mediaconvert:CreateJob', 'mediaconvert:TagResource', 'mediaconvert:DescribeEndpoints'],
+      resources: ['*'],
+    }));
+    if (props.mediaConvertJobRoleArn) {
+      createClipFn.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [props.mediaConvertJobRoleArn],
+        conditions: {
+          StringEquals: { 'iam:PassedToService': 'mediaconvert.amazonaws.com' },
+        },
+      }));
+    }
+
+    const sessionClipsResource = sessionIdResource.addResource('clips');
+    sessionClipsResource.addMethod('POST', new apigateway.LambdaIntegration(createClipFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/clips — public when session is public (Lambda enforces)
+    const listSessionClipsFn = new NodejsFunction(this, 'ListSessionClipsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-session-clips.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listSessionClipsFn);
+    sessionClipsResource.addMethod('GET', new apigateway.LambdaIntegration(listSessionClipsFn));
+
+    // Clips resource — public by default, Lambdas enforce access control
+    const clipsResource = api.root.addResource('clips');
+    const clipByIdResource = clipsResource.addResource('{clipId}');
+
+    // GET /clips/{clipId} — public (Lambda enforces based on session.isPrivate)
+    const getClipFn = new NodejsFunction(this, 'GetClipHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-clip.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+        RECORDINGS_BUCKET: props.recordingsBucket?.bucketName ?? '',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getClipFn);
+    if (props.recordingsBucket) props.recordingsBucket.grantRead(getClipFn);
+    clipByIdResource.addMethod('GET', new apigateway.LambdaIntegration(getClipFn));
+
+    // DELETE /clips/{clipId} — author or admin only (Cognito authorizer)
+    const deleteClipFn = new NodejsFunction(this, 'DeleteClipHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/delete-clip.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(deleteClipFn);
+    clipByIdResource.addMethod('DELETE', new apigateway.LambdaIntegration(deleteClipFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
 
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,

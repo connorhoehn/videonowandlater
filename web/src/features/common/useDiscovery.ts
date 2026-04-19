@@ -2,7 +2,7 @@
  * Hooks for the Phase 2 discovery endpoints. Each hook is a thin fetch
  * wrapper that returns { items, loading, error, refresh }.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchToken } from '../../auth/fetchToken';
 import { getConfig } from '../../config/aws-config';
 import type { DiscoverySessionItem } from './SessionCard';

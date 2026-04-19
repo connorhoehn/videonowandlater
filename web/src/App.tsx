@@ -10,9 +10,12 @@ import { StackNotDeployed } from './components/StackNotDeployed';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { HomePage } from './pages/HomePage';
+import { SearchPage } from './pages/SearchPage';
+import { CreatorPage } from './features/creators/CreatorPage';
 import { BroadcastPage } from './features/broadcast/BroadcastPage';
 import { ViewerPage } from './features/viewer/ViewerPage';
 import { ReplayViewer } from './features/replay/ReplayViewer';
+import { ClipViewer } from './features/clips/ClipViewer';
 import { HangoutPage } from './features/hangout/HangoutPage';
 import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
@@ -87,8 +90,13 @@ function App() {
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          {/* Public clip share page — mounted outside the authenticated shell */}
+          <Route path="/clip/:clipId" element={<ClipViewer />} />
           <Route element={<ProtectedRoute><AuthenticatedShell /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/creators/:handle" element={<CreatorPage />} />
+            <Route path="/@:handle" element={<CreatorPage />} />
             <Route path="/broadcast/:sessionId" element={<BroadcastPage />} />
             <Route path="/viewer/:sessionId" element={<ViewerPage />} />
             <Route path="/replay/:sessionId" element={<ReplayViewer />} />

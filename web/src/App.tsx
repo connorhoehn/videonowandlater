@@ -13,6 +13,7 @@ import { HomePage } from './pages/HomePage';
 import { BroadcastPage } from './features/broadcast/BroadcastPage';
 import { ViewerPage } from './features/viewer/ViewerPage';
 import { ReplayViewer } from './features/replay/ReplayViewer';
+import { ClipViewer } from './features/clips/ClipViewer';
 import { HangoutPage } from './features/hangout/HangoutPage';
 import { UploadViewer } from './features/upload/UploadViewer';
 import { VideoPage } from './features/upload/VideoPage';
@@ -86,6 +87,8 @@ function App() {
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          {/* Public clip share page — mounted outside the authenticated shell */}
+          <Route path="/clip/:clipId" element={<ClipViewer />} />
           <Route element={<ProtectedRoute><AuthenticatedShell /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
             <Route path="/broadcast/:sessionId" element={<BroadcastPage />} />

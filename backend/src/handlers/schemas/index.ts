@@ -7,3 +7,4 @@ export { TranscribeJobDetailSchema, type TranscribeJobDetail } from './transcrib
 export { TranscriptStoreDetailSchema, type TranscriptStoreDetail } from './store-summary.schema';
 export { UploadRecordingAvailableDetailSchema, type UploadRecordingAvailableDetail } from './start-transcribe.schema';
 export { MediaConvertCompleteDetailSchema, type MediaConvertCompleteDetail } from './on-mediaconvert-complete.schema';
+export { OnClipCompleteDetailSchema, type OnClipCompleteDetail } from './on-clip-complete.schema';

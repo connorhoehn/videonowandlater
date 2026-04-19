@@ -44,6 +44,10 @@ export class SessionStack extends Stack {
   public readonly cloudfrontDomainName: string;
   public readonly webhookDeliveryQueue: sqs.Queue;
   public readonly moderationBucket!: s3.Bucket;
+  /** IAM role MediaConvert jobs assume — re-used by the clips pipeline for CreateJob permissions. */
+  public readonly mediaConvertJobRoleArn!: string;
+  /** Transcription bucket where per-session recording.mp4 outputs live — clip source input. */
+  public readonly transcriptionBucketRef!: s3.IBucket;
 
   constructor(scope: Construct, id: string, props: SessionStackProps) {
     super(scope, id, props);
@@ -1243,6 +1247,69 @@ export class SessionStack extends Stack {
     }));
 
     // Lifecycle rules are in StorageStack
+
+    // Expose shared MediaConvert role + transcription bucket so ApiStack
+    // can wire clip-creation Lambdas that reuse the same pipeline assets.
+    (this as any).mediaConvertJobRoleArn = mediaConvertRole.roleArn;
+    (this as any).transcriptionBucketRef = transcriptionBucket;
+
+    // ============================================================
+    // Clips Pipeline (viewer-initiated highlights)
+    // EventBridge rule for MediaConvert clip-job state changes → SQS → on-clip-complete.
+    // Filter: only events with UserMetadata.type == 'clip'.
+    // ============================================================
+    const onClipCompleteDlq = new sqs.Queue(this, 'OnClipCompleteDlq', {
+      queueName: 'vnl-on-clip-complete-dlq',
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const onClipCompleteQueue = new sqs.Queue(this, 'OnClipCompleteQueue', {
+      queueName: 'vnl-on-clip-complete',
+      visibilityTimeout: Duration.seconds(90),
+      deadLetterQueue: { queue: onClipCompleteDlq, maxReceiveCount: 3 },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    const onClipCompleteFn = new nodejs.NodejsFunction(this, 'OnClipComplete', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/on-clip-complete.ts'),
+      timeout: Duration.seconds(30),
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'OnClipCompleteLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+    this.table.grantReadWriteData(onClipCompleteFn);
+    onClipCompleteFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*'],
+    }));
+
+    const clipCompleteRule = new events.Rule(this, 'ClipCompleteRule', {
+      eventPattern: {
+        source: ['aws.mediaconvert'],
+        detailType: ['MediaConvert Job State Change'],
+        detail: {
+          status: ['COMPLETE', 'ERROR', 'CANCELED'],
+          userMetadata: { type: ['clip'] },
+        },
+      },
+      description: 'Handle MediaConvert clip-job completion',
+    });
+    clipCompleteRule.addTarget(new targets.SqsQueue(onClipCompleteQueue, {
+      deadLetterQueue: onClipCompleteDlq,
+      retryAttempts: 2,
+    }));
+    onClipCompleteFn.addEventSource(new SqsEventSource(onClipCompleteQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    }));
 
     // ============================================================
     // Webhook + EventBridge env vars & permissions for pipeline Lambdas

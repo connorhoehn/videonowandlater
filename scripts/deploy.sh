@@ -21,13 +21,7 @@ npx cdk deploy VNL-Storage VNL-Auth VNL-Session VNL-Api VNL-Monitoring VNL-Agent
 
 # Phase 2: Generate frontend config from outputs
 echo "Generating frontend config..."
-mkdir -p web/public
-jq '{
-  userPoolId: ."VNL-Auth".UserPoolId,
-  userPoolClientId: ."VNL-Auth".UserPoolClientId,
-  region: ."VNL-Auth".CognitoRegion,
-  apiUrl: (."VNL-Api".ApiUrl | rtrimstr("/"))
-}' cdk-outputs.json > web/public/aws-config.json
+./scripts/generate-frontend-config.sh cdk-outputs.json
 
 # Phase 3: Rebuild web so aws-config.json is copied into dist/
 echo "Rebuilding web with fresh config..."

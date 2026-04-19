@@ -7,6 +7,10 @@ cdk.out/
 
 # CDK outputs
 cdk-outputs.json
+cdk-outputs-*.json
+
+# Claude Code worktrees / transient agent state
+.claude/
 
 # Generated frontend config
 web/public/aws-config.json

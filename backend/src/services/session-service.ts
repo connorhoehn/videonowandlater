@@ -18,13 +18,52 @@ interface CreateSessionRequest {
   moderationEnabled?: boolean;
   rulesetName?: string;
   rulesetVersion?: number;
+  // Phase 5: scheduled sessions — when set, skips pool claim and stores in SCHEDULED state.
+  scheduledFor?: string;
+  scheduledEndsAt?: string;
+  title?: string;
+  description?: string;
+  coverImageUrl?: string;
 }
 
 interface CreateSessionResponse {
   sessionId: string;
   sessionType: SessionType;
   status: SessionStatus;
+  scheduledFor?: string;
+  scheduledEndsAt?: string;
   error?: string;
+}
+
+/**
+ * Claim pool resources (channel or stage + chat room) for a session.
+ * Shared between create-session (immediate) and go-live (scheduled → live).
+ * Returns error string if pool exhausted; otherwise ARNs.
+ */
+export async function claimSessionResources(
+  tableName: string,
+  sessionId: string,
+  sessionType: SessionType,
+): Promise<{ channelArn?: string; stageArn?: string; chatRoomArn?: string; error?: string }> {
+  let channelArn: string | undefined;
+  let stageArn: string | undefined;
+
+  if (sessionType === SessionType.BROADCAST) {
+    const channelResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.CHANNEL, MAX_RETRIES);
+    if (!channelResult) return { error: 'No available channels - pool exhausted' };
+    channelArn = channelResult.resourceArn;
+  } else if (sessionType === SessionType.HANGOUT) {
+    const stageResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.STAGE, MAX_RETRIES);
+    if (!stageResult) return { error: 'No available stages - pool exhausted' };
+    stageArn = stageResult.resourceArn;
+  } else {
+    return { error: `Unsupported session type for pool claim: ${sessionType}` };
+  }
+
+  const roomResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.ROOM, MAX_RETRIES);
+  if (!roomResult) return { error: 'No available chat rooms - pool exhausted' };
+
+  return { channelArn, stageArn, chatRoomArn: roomResult.resourceArn };
 }
 
 interface GetSessionResponse {
@@ -63,66 +102,75 @@ export async function createNewSession(
   request: CreateSessionRequest
 ): Promise<CreateSessionResponse> {
   const sessionId = uuidv4();
+  const now = new Date().toISOString();
 
-  // Claim resources with retry logic (per research Pitfall 1)
-  let channelArn: string | undefined;
-  let stageArn: string | undefined;
-  let chatRoomArn: string | undefined;
+  // Phase 5: Scheduled sessions — store without claiming pool resources.
+  // Pool claim happens later at go-live time.
+  if (request.scheduledFor) {
+    const scheduledEndsAt = request.scheduledEndsAt
+      ?? new Date(new Date(request.scheduledFor).getTime() + 60 * 60 * 1000).toISOString();
 
-  // Claim channel (for BROADCAST) or stage (for HANGOUT)
-  if (request.sessionType === SessionType.BROADCAST) {
-    const channelResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.CHANNEL, MAX_RETRIES);
-    if (!channelResult) {
-      return {
-        sessionId,
-        sessionType: request.sessionType,
-        status: SessionStatus.CREATING,
-        error: 'No available channels - pool exhausted',
-      };
-    }
-    channelArn = channelResult.resourceArn;
-  } else {
-    const stageResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.STAGE, MAX_RETRIES);
-    if (!stageResult) {
-      return {
-        sessionId,
-        sessionType: request.sessionType,
-        status: SessionStatus.CREATING,
-        error: 'No available stages - pool exhausted',
-      };
-    }
-    stageArn = stageResult.resourceArn;
+    const scheduledSession: Session = {
+      sessionId,
+      userId: request.userId,
+      sessionType: request.sessionType,
+      status: SessionStatus.SCHEDULED,
+      claimedResources: { chatRoom: '' }, // none yet
+      createdAt: now,
+      version: 1,
+      scheduledFor: request.scheduledFor,
+      scheduledEndsAt,
+      title: request.title,
+      description: request.description,
+      coverImageUrl: request.coverImageUrl,
+      rsvpGoingCount: 0,
+      rsvpInterestedCount: 0,
+      ...(request.moderationEnabled
+        ? {
+            moderationEnabled: true,
+            rulesetName: request.rulesetName,
+            rulesetVersion: request.rulesetVersion,
+            moderationStrikes: 0,
+          }
+        : {}),
+    };
+
+    await createSession(tableName, scheduledSession);
+
+    return {
+      sessionId,
+      sessionType: request.sessionType,
+      status: SessionStatus.SCHEDULED,
+      scheduledFor: request.scheduledFor,
+      scheduledEndsAt,
+    };
   }
 
-  // Claim chat room (for both types)
-  const roomResult = await claimResourceWithRetry(tableName, sessionId, ResourceType.ROOM, MAX_RETRIES);
-  if (!roomResult) {
+  // Immediate (live-now) path — claim resources via shared helper
+  const claim = await claimSessionResources(tableName, sessionId, request.sessionType);
+  if (claim.error) {
     return {
       sessionId,
       sessionType: request.sessionType,
       status: SessionStatus.CREATING,
-      error: 'No available chat rooms - pool exhausted',
+      error: claim.error,
     };
   }
-  chatRoomArn = roomResult.resourceArn;
 
-  // Create session in DynamoDB
   const session: Session = {
     sessionId,
     userId: request.userId,
     sessionType: request.sessionType,
     status: SessionStatus.CREATING,
     claimedResources: {
-      channel: channelArn,
-      stage: stageArn,
-      chatRoom: chatRoomArn,
+      channel: claim.channelArn,
+      stage: claim.stageArn,
+      chatRoom: claim.chatRoomArn!,
     },
-    // Denormalized for GSI-based lookups (avoids full-table scans)
-    channelArn,
-    stageArn,
-    createdAt: new Date().toISOString(),
+    channelArn: claim.channelArn,
+    stageArn: claim.stageArn,
+    createdAt: now,
     version: 1,
-    // Phase 4: pin ruleset at session creation (never read CURRENT at runtime)
     ...(request.moderationEnabled
       ? {
           moderationEnabled: true,

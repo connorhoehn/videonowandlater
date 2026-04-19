@@ -2225,6 +2225,99 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // ============================================================
+    // === Phase 5: Scheduled sessions ===
+    // Wires /sessions/{id}/go-live, /sessions/{id}/rsvp, /sessions/{id}/rsvps,
+    // /sessions/{id}/ics, and /me/rsvps.
+    // Resource paths attach to the existing sessionIdResource / meResource
+    // declared earlier in this file.
+    // ============================================================
+
+    // POST /sessions/{sessionId}/go-live — owner-only, SCHEDULED → CREATING
+    const goLiveResource = sessionIdResource.addResource('go-live');
+    const goLiveFn = new NodejsFunction(this, 'GoLive', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/go-live.ts'),
+      timeout: Duration.seconds(15),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(goLiveFn);
+    goLiveFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    }));
+    goLiveResource.addMethod('POST', new apigateway.LambdaIntegration(goLiveFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST / DELETE /sessions/{sessionId}/rsvp — create / remove RSVP
+    const rsvpResource = sessionIdResource.addResource('rsvp');
+    const rsvpFn = new NodejsFunction(this, 'RsvpSession', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/rsvp-session.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(rsvpFn);
+    rsvpFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    }));
+    rsvpResource.addMethod('POST', new apigateway.LambdaIntegration(rsvpFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    rsvpResource.addMethod('DELETE', new apigateway.LambdaIntegration(rsvpFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/rsvps — list attendees + counts
+    const rsvpsResource = sessionIdResource.addResource('rsvps');
+    const listSessionRsvpsFn = new NodejsFunction(this, 'ListSessionRsvps', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-session-rsvps.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listSessionRsvpsFn);
+    rsvpsResource.addMethod('GET', new apigateway.LambdaIntegration(listSessionRsvpsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/ics — calendar download (public for public sessions)
+    const icsResource = sessionIdResource.addResource('ics');
+    const downloadEventIcsFn = new NodejsFunction(this, 'DownloadEventIcs', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/download-event-ics.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(downloadEventIcsFn);
+    icsResource.addMethod('GET', new apigateway.LambdaIntegration(downloadEventIcsFn));
+
+    // GET /me/rsvps?upcoming=1 — caller's RSVPs joined with session metadata
+    const meRsvpsResource = meResource.addResource('rsvps');
+    const listMyRsvpsFn = new NodejsFunction(this, 'ListMyRsvps', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-rsvps.ts'),
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listMyRsvpsFn);
+    meRsvpsResource.addMethod('GET', new apigateway.LambdaIntegration(listMyRsvpsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

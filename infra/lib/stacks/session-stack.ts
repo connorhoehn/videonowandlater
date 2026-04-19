@@ -1603,5 +1603,37 @@ export class SessionStack extends Stack {
       value: moderationBucket.bucketName,
       description: 'S3 bucket for Phase 4 moderation frames',
     });
+
+    // ============================================================
+    // === Phase 5: Scheduled sessions (Facebook/Meetup events) ===
+    // Every 5 minutes: emit SESSION_READY_TO_START for sessions starting
+    // soon, and auto-cancel SCHEDULED sessions whose hosts never went live
+    // (scheduledFor + 60min < now).
+    // ============================================================
+    const autoStartScheduledSessionFn = new nodejs.NodejsFunction(this, 'AutoStartScheduledSession', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/auto-start-scheduled-session.ts'),
+      timeout: Duration.seconds(60),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'AutoStartScheduledSessionLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+    this.table.grantReadWriteData(autoStartScheduledSessionFn);
+    autoStartScheduledSessionFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    }));
+
+    new events.Rule(this, 'AutoStartScheduledSessionSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(5)),
+      targets: [new targets.LambdaFunction(autoStartScheduledSessionFn)],
+      description: 'Phase 5: nudge/cancel scheduled sessions every 5 minutes',
+    });
   }
 }

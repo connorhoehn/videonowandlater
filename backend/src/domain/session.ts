@@ -20,13 +20,16 @@ export interface Chapter {
 
 /**
  * Session status enum - represents the lifecycle states
- * State machine: creating -> live -> ending -> ended
+ * State machine: scheduled -> creating -> live -> ending -> ended
+ *                                                      -> canceled (scheduled host no-show)
  */
 export enum SessionStatus {
+  SCHEDULED = 'scheduled',
   CREATING = 'creating',
   LIVE = 'live',
   ENDING = 'ending',
   ENDED = 'ended',
+  CANCELED = 'canceled',
 }
 
 /**
@@ -210,6 +213,17 @@ export interface Session {
    * Defaults to 'unlisted' for backward compatibility with pre-Phase-1 sessions.
    */
   visibility?: 'public' | 'unlisted' | 'private';
+  // Phase 5: Scheduled sessions (Facebook/Meetup-style events)
+  /** ISO 8601 timestamp when this scheduled session is planned to go live */
+  scheduledFor?: string;
+  /** Optional explicit end time (defaults to scheduledFor + 1h) */
+  scheduledEndsAt?: string;
+  /** Cover image URL for the event page hero */
+  coverImageUrl?: string;
+  /** Count of RSVPs with status=going (derived — maintained by rsvp handler) */
+  rsvpGoingCount?: number;
+  /** Count of RSVPs with status=interested */
+  rsvpInterestedCount?: number;
 }
 
 /**
@@ -274,10 +288,13 @@ export interface ProcessingEvent {
  */
 export function canTransition(from: SessionStatus, to: SessionStatus): boolean {
   const validTransitions: Record<SessionStatus, SessionStatus[]> = {
+    // SCHEDULED → CREATING on "Go Live"; → CANCELED on host no-show or explicit cancel
+    [SessionStatus.SCHEDULED]: [SessionStatus.CREATING, SessionStatus.CANCELED],
     [SessionStatus.CREATING]: [SessionStatus.LIVE],
     [SessionStatus.LIVE]: [SessionStatus.ENDING],
     [SessionStatus.ENDING]: [SessionStatus.ENDED],
     [SessionStatus.ENDED]: [],
+    [SessionStatus.CANCELED]: [],
   };
 
   return validTransitions[from].includes(to);

@@ -40,13 +40,20 @@ export interface HangoutParticipant {
 export async function createSession(tableName: string, session: Session): Promise<void> {
   const docClient = getDocumentClient();
 
+  // Phase 5: for SCHEDULED sessions, sort key is scheduledFor so "upcoming events"
+  // queries can use GSI1 ordered by start time. All other statuses continue to
+  // sort by createdAt.
+  const gsi1sk = session.status === SessionStatus.SCHEDULED && session.scheduledFor
+    ? session.scheduledFor
+    : session.createdAt;
+
   await docClient.send(new PutCommand({
     TableName: tableName,
     Item: {
       PK: `SESSION#${session.sessionId}`,
       SK: 'METADATA',
       GSI1PK: `STATUS#${session.status.toUpperCase()}`,
-      GSI1SK: session.createdAt,
+      GSI1SK: gsi1sk,
       entityType: 'SESSION',
       ...session,
     },
@@ -110,9 +117,18 @@ export async function updateSessionStatus(
     throw new Error(`Invalid transition from ${session.status} to ${newStatus}`);
   }
 
-  const updateExpression = timestampField
-    ? `SET #status = :newStatus, #timestamp = :now, GSI1PK = :gsi, #version = #version + :inc`
-    : `SET #status = :newStatus, GSI1PK = :gsi, #version = #version + :inc`;
+  // Phase 5: when leaving SCHEDULED, reset GSI1SK to createdAt so post-scheduled
+  // statuses sort naturally (SCHEDULED sort-keys on scheduledFor).
+  const updateGsiSk = session.status === SessionStatus.SCHEDULED && newStatus !== SessionStatus.SCHEDULED;
+
+  const setParts = [
+    '#status = :newStatus',
+    'GSI1PK = :gsi',
+    '#version = #version + :inc',
+  ];
+  if (timestampField) setParts.push('#timestamp = :now');
+  if (updateGsiSk) setParts.push('GSI1SK = :gsiSk');
+  const updateExpression = `SET ${setParts.join(', ')}`;
 
   const expressionAttributeNames: Record<string, string> = {
     '#status': 'status',
@@ -129,6 +145,10 @@ export async function updateSessionStatus(
   if (timestampField) {
     expressionAttributeNames['#timestamp'] = timestampField;
     expressionAttributeValues[':now'] = new Date().toISOString();
+  }
+
+  if (updateGsiSk) {
+    expressionAttributeValues[':gsiSk'] = session.createdAt;
   }
 
   await docClient.send(new UpdateCommand({

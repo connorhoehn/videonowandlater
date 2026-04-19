@@ -14,6 +14,11 @@ import { useStoryViewState } from '../hooks/useStoryViewState';
 import { SessionCardGrid } from '../features/common/SessionCard';
 import { useFeed, type FeedTab } from '../features/common/useDiscovery';
 
+/** Build an ISO string for an input[type=datetime-local] value ('YYYY-MM-DDTHH:MM'). */
+function datetimeLocalToIso(value: string): string {
+  return new Date(value).toISOString();
+}
+
 function formatRelativeTime(isoDate?: string): string {
   if (!isoDate) return '';
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -62,6 +67,14 @@ export function HomePage() {
     if (isAuthenticated) t.push({ id: 'following', label: 'Following' });
     return t;
   }, [isAuthenticated]);
+
+  // Phase 5: Scheduled events (Facebook/Meetup-style)
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleSessionType, setScheduleSessionType] = useState<'BROADCAST' | 'HANGOUT'>('BROADCAST');
+  const [scheduleTitle, setScheduleTitle] = useState('');
+  const [scheduleDescription, setScheduleDescription] = useState('');
+  const [scheduleWhen, setScheduleWhen] = useState('');
+  const [scheduling, setScheduling] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -122,6 +135,44 @@ export function HomePage() {
     setShowHangoutOptions(true);
   };
 
+  const confirmSchedule = async () => {
+    const config = getConfig();
+    if (!config?.apiUrl || !scheduleWhen || !scheduleTitle) return;
+    setScheduling(true);
+    setError('');
+    try {
+      const { token: authToken } = await fetchToken();
+      const scheduledFor = datetimeLocalToIso(scheduleWhen);
+      // Client-side validation: must be >= 15min in the future
+      if (new Date(scheduledFor).getTime() - Date.now() < 15 * 60 * 1000) {
+        setError('Schedule must be at least 15 minutes in the future.');
+        setScheduling(false);
+        return;
+      }
+      const response = await fetch(`${config.apiUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionType: scheduleSessionType,
+          scheduledFor,
+          title: scheduleTitle,
+          description: scheduleDescription,
+        }),
+      });
+      if (!response.ok) throw new Error(`${response.status}`);
+      const sessionData = await response.json();
+      setShowScheduleModal(false);
+      setScheduleTitle('');
+      setScheduleDescription('');
+      setScheduleWhen('');
+      navigate(`/events/${sessionData.sessionId}`);
+    } catch {
+      setError('Failed to schedule event. Try again.');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const confirmCreateHangout = async () => {
     const config = getConfig();
     if (!config?.apiUrl) return;
@@ -169,6 +220,7 @@ export function HomePage() {
           actions={[
             { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast },
             { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleOpenHangout },
+            { label: 'Schedule', icon: <CameraIcon size={16} />, color: 'text-blue-600', onClick: () => setShowScheduleModal(true) },
             { label: 'Story', icon: <PhotoIcon size={16} />, color: 'text-orange-500', onClick: () => setShowStoryCreator(true) },
             { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
           ]}
@@ -384,6 +436,92 @@ export function HomePage() {
               authToken={authToken}
               onClose={() => setShowUploadModal(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Phase 5: Schedule Event Modal */}
+      {showScheduleModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowScheduleModal(false); }}
+        >
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-3">
+            <h2 className="text-lg font-bold">Schedule an event</h2>
+            <p className="text-xs text-gray-500">
+              Create an event people can RSVP to. You can go live when it's time to start.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Event type</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScheduleSessionType('BROADCAST')}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm font-medium ${
+                    scheduleSessionType === 'BROADCAST'
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Broadcast
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleSessionType('HANGOUT')}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm font-medium ${
+                    scheduleSessionType === 'HANGOUT'
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Hangout
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Title</label>
+              <input
+                type="text"
+                value={scheduleTitle}
+                onChange={(e) => setScheduleTitle(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm"
+                placeholder="Weekly Q&A"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Description (optional)</label>
+              <textarea
+                value={scheduleDescription}
+                onChange={(e) => setScheduleDescription(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm"
+                rows={3}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Starts at</label>
+              <input
+                type="datetime-local"
+                value={scheduleWhen}
+                onChange={(e) => setScheduleWhen(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm"
+              />
+              <div className="text-[11px] text-gray-500 mt-1">Must be at least 15 minutes in the future.</div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSchedule}
+                disabled={!scheduleTitle || !scheduleWhen || scheduling}
+                className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
+              >
+                {scheduling ? 'Scheduling...' : 'Schedule Event'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -41,6 +41,10 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     description?: string;
     tags?: string[];
     visibility?: 'public' | 'unlisted' | 'private';
+    // Phase 5: scheduled sessions (Facebook/Meetup events)
+    scheduledFor?: string;
+    scheduledEndsAt?: string;
+    coverImageUrl?: string;
   };
   try {
     body = JSON.parse(event.body || '{}');
@@ -64,6 +68,34 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       },
       body: JSON.stringify({ error: 'sessionType required (BROADCAST, HANGOUT, or STORY)' }),
     };
+  }
+
+  // Phase 5: validate scheduledFor is >= 15 min in the future
+  const MIN_SCHEDULE_LEAD_MS = 15 * 60 * 1000;
+  if (body.scheduledFor) {
+    const scheduledMs = Date.parse(body.scheduledFor);
+    if (Number.isNaN(scheduledMs)) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'scheduledFor must be a valid ISO 8601 timestamp' }),
+      };
+    }
+    if (scheduledMs - Date.now() < MIN_SCHEDULE_LEAD_MS) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'scheduledFor must be at least 15 minutes in the future' }),
+      };
+    }
+    // STORY sessions cannot be scheduled (no IVS path)
+    if (body.sessionType === SessionType.STORY) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'STORY sessions cannot be scheduled' }),
+      };
+    }
   }
 
   // STORY sessions don't need IVS resources — use dedicated story path
@@ -119,6 +151,12 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     rulesetVersion,
     // Live captions flag — only persisted when explicitly true; default is off
     captionsEnabled: body.captionsEnabled === true,
+    // Phase 5: scheduled sessions
+    scheduledFor: body.scheduledFor,
+    scheduledEndsAt: body.scheduledEndsAt,
+    title: body.title,
+    description: body.description,
+    coverImageUrl: body.coverImageUrl,
   });
 
   if (result.error) {
@@ -174,17 +212,33 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     } catch { /* non-blocking */ }
   }
 
+  // Phase 5: scheduled sessions don't claim resources / aren't live — emit
+  // SESSION_SCHEDULED and skip the ads-service live notification.
+  const isScheduled = Boolean(body.scheduledFor);
   try {
     await emitSessionEvent(tableName, {
-      eventId: uuidv4(), sessionId: result.sessionId, eventType: SessionEventType.SESSION_CREATED,
-      timestamp: new Date().toISOString(), actorId: userId,
-      actorType: 'user', details: { sessionType: body.sessionType, requireApproval },
+      eventId: uuidv4(),
+      sessionId: result.sessionId,
+      eventType: isScheduled ? SessionEventType.SESSION_SCHEDULED : SessionEventType.SESSION_CREATED,
+      timestamp: new Date().toISOString(),
+      actorId: userId,
+      actorType: 'user',
+      details: isScheduled
+        ? {
+            sessionType: body.sessionType,
+            scheduledFor: body.scheduledFor,
+            scheduledEndsAt: result.scheduledEndsAt,
+            title: body.title,
+          }
+        : { sessionType: body.sessionType, requireApproval },
     });
   } catch { /* non-blocking */ }
 
-  // Notify vnl-ads that this creator is now LIVE so scheduled campaigns can fire.
-  // Fire-and-forget; feature-flag off / SDK failures are swallowed inside.
-  void startAdsSession(result.sessionId, userId);
+  if (!isScheduled) {
+    // Notify vnl-ads that this creator is now LIVE so scheduled campaigns can fire.
+    // Fire-and-forget; feature-flag off / SDK failures are swallowed inside.
+    void startAdsSession(result.sessionId, userId);
+  }
 
   return {
     statusCode: 201,

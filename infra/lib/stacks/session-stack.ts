@@ -1687,8 +1687,7 @@ export class SessionStack extends Stack {
       timeout: Duration.seconds(30),
       environment: {
         TABLE_NAME: this.table.tableName,
-        NOTIFICATION_EMAIL_ENABLED: 'false', // SES off by default
-        // NOTIFICATION_EMAIL_FROM: set this to flip email on in the future
+        NOTIFICATION_EMAIL_ENABLED: 'false',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
       logGroup: new logs.LogGroup(this, 'OnSessionCreatedLogGroup', {
@@ -1697,11 +1696,8 @@ export class SessionStack extends Stack {
       }),
     });
 
-    // BatchWrite + read followers + read profile → read/write on the sessions table
     this.table.grantReadWriteData(onSessionCreatedFn);
 
-    // Best-effort email (stubbed today — the SDK isn't wired in). Permission
-    // is scoped to SendEmail so the future implementation can drop it in.
     onSessionCreatedFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ses:SendEmail', 'ses:SendRawEmail'],
@@ -1712,7 +1708,6 @@ export class SessionStack extends Stack {
     const goLiveNotificationsRule = new events.Rule(this, 'GoLiveNotificationsRule', {
       eventPattern: {
         source: ['custom.vnl'],
-        // emit-session-event formats DetailType as `session.${eventType}`
         detailType: ['session.SESSION_CREATED', 'session.SESSION_STARTED'],
       },
       description: 'Fan out go-live notifications to followers when a creator starts a session',
@@ -1721,6 +1716,38 @@ export class SessionStack extends Stack {
     onSessionCreatedFn.addPermission('AllowEBGoLiveInvoke', {
       principal: new iam.ServicePrincipal('events.amazonaws.com'),
       sourceArn: goLiveNotificationsRule.ruleArn,
+    });
+
+    // ============================================================
+    // === Phase 5: Scheduled sessions (Facebook/Meetup events) ===
+    // Every 5 minutes: emit SESSION_READY_TO_START for sessions starting
+    // soon, and auto-cancel SCHEDULED sessions whose hosts never went live
+    // (scheduledFor + 60min < now).
+    // ============================================================
+    const autoStartScheduledSessionFn = new nodejs.NodejsFunction(this, 'AutoStartScheduledSession', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/auto-start-scheduled-session.ts'),
+      timeout: Duration.seconds(60),
+      environment: {
+        TABLE_NAME: this.table.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+      logGroup: new logs.LogGroup(this, 'AutoStartScheduledSessionLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    });
+    this.table.grantReadWriteData(autoStartScheduledSessionFn);
+    autoStartScheduledSessionFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/default`],
+    }));
+
+    new events.Rule(this, 'AutoStartScheduledSessionSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(5)),
+      targets: [new targets.LambdaFunction(autoStartScheduledSessionFn)],
+      description: 'Phase 5: nudge/cancel scheduled sessions every 5 minutes',
     });
   }
 }

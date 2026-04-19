@@ -31,6 +31,7 @@ import { ConfirmModal, useToast } from '../../components/social';
 import { Card, Avatar } from '../../components/social';
 import { AdDrawerPanel } from '../ads/AdDrawerPanel';
 import { AdOverlay } from '../ads/AdOverlay';
+import { TrainingOverlay } from '../training/TrainingOverlay';
 import { SurveyModal } from '../survey/SurveyModal';
 
 export function HangoutPage() {
@@ -519,7 +520,10 @@ export function HangoutPage() {
             )}
             {/* Ad overlay — HANGOUT path: subscribes to IVS Chat ad_overlay events */}
             {sessionId && (
-              <AdOverlay sessionId={sessionId} isBroadcast={false} room={room} />
+              <>
+                <AdOverlay sessionId={sessionId} isBroadcast={false} room={room} />
+                <TrainingOverlay sessionId={sessionId} />
+              </>
             )}
             <FloatingReactions
               reactions={floatingReactions}

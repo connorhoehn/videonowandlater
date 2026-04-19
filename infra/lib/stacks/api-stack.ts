@@ -2197,6 +2197,34 @@ export class ApiStack extends Stack {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // GET /me/training-due — unseen training assignments for the caller.
+    const meTrainingDueResource = meResource.addResource('training-due');
+    const getMyTrainingDueFn = new NodejsFunction(this, 'GetMyTrainingDue', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-training-due.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meTrainingDueResource.addMethod('GET', new apigateway.LambdaIntegration(getMyTrainingDueFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /me/training-claim — mark a training module as watched.
+    const meTrainingClaimResource = meResource.addResource('training-claim');
+    const claimMyTrainingFn = new NodejsFunction(this, 'ClaimMyTraining', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/claim-my-training.ts'),
+      timeout: Duration.seconds(10),
+      environment: adsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    meTrainingClaimResource.addMethod('POST', new apigateway.LambdaIntegration(claimMyTrainingFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     new CfnOutput(this, 'ApiUrl', {
       value: api.url,
     });

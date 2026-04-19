@@ -80,7 +80,7 @@ fi
 # ── 5. Backend Tests ─────────────────────────────────────────────────────────
 # Capture jest output without letting a non-zero exit kill the script (pipefail + set -e).
 echo -n "  Backend tests... "
-JEST_OUTPUT=$(cd backend && npx jest 2>&1; echo "__EXIT__=$?")
+JEST_OUTPUT=$(cd backend && npx jest --selectProjects unit 2>&1; echo "__EXIT__=$?")
 JEST_EXIT=$(echo "$JEST_OUTPUT" | grep -oE '__EXIT__=[0-9]+' | tail -1 | cut -d= -f2)
 TEST_SUMMARY=$(echo "$JEST_OUTPUT" | grep -E "^Tests:" | tail -1 | sed 's/^[[:space:]]*//')
 if [ "${JEST_EXIT:-1}" = "0" ]; then

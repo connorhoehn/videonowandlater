@@ -188,6 +188,28 @@ export interface Session {
   rulesetVersion?: number;
   /** Count of high-confidence moderation flags (auto-bounce when >= 3) */
   moderationStrikes?: number;
+  // Live captions (real-time closed-captioning via AWS Transcribe Streaming)
+  /**
+   * When true, the host is streaming audio to Transcribe and broadcasting caption
+   * events to viewers via IVS Chat. Opt-in per-session; defaults to false.
+   * Can be toggled at runtime by the session owner.
+   */
+  captionsEnabled?: boolean;
+  // Phase 1: Session metadata for discovery + search
+  /** Human-readable title (defaults to creator's displayName on create). */
+  title?: string;
+  /** Description, markdown-light. Shown on replay and discovery cards. */
+  description?: string;
+  /** Free-form tags for search + filtering. Lowercased on write. */
+  tags?: string[];
+  /**
+   * Visibility controls who can discover/view the session.
+   *  - 'public': surfaced in discovery feed, anyone can watch
+   *  - 'unlisted': direct link works, not in feed
+   *  - 'private': owner + invited only
+   * Defaults to 'unlisted' for backward compatibility with pre-Phase-1 sessions.
+   */
+  visibility?: 'public' | 'unlisted' | 'private';
 }
 
 /**

@@ -18,6 +18,8 @@ interface CreateSessionRequest {
   moderationEnabled?: boolean;
   rulesetName?: string;
   rulesetVersion?: number;
+  // Live captions — opt-in; defaults to false when omitted
+  captionsEnabled?: boolean;
 }
 
 interface CreateSessionResponse {
@@ -131,6 +133,8 @@ export async function createNewSession(
           moderationStrikes: 0,
         }
       : {}),
+    // Live captions flag — defaults to false when omitted (opt-in only)
+    ...(request.captionsEnabled === true ? { captionsEnabled: true } : {}),
   };
 
   await createSession(tableName, session);

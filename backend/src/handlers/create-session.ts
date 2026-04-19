@@ -35,6 +35,12 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     requireApproval?: boolean;
     moderationEnabled?: boolean;
     rulesetName?: string;
+    captionsEnabled?: boolean;
+    // Phase 1: Session metadata for discovery + search
+    title?: string;
+    description?: string;
+    tags?: string[];
+    visibility?: 'public' | 'unlisted' | 'private';
   };
   try {
     body = JSON.parse(event.body || '{}');
@@ -111,6 +117,8 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     moderationEnabled: Boolean(body.moderationEnabled && rulesetName && rulesetVersion !== undefined),
     rulesetName,
     rulesetVersion,
+    // Live captions flag — only persisted when explicitly true; default is off
+    captionsEnabled: body.captionsEnabled === true,
   });
 
   if (result.error) {
@@ -139,6 +147,33 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
     } catch { /* non-blocking, default is no approval */ }
   }
 
+  // Phase 1: Persist session metadata (title / description / tags / visibility).
+  // Unlisted by default — aligns with pre-Phase-1 sessions that had no metadata.
+  const visibility: 'public' | 'unlisted' | 'private' =
+    body.visibility === 'public' || body.visibility === 'private' ? body.visibility : 'unlisted';
+  const title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : undefined;
+  const description = typeof body.description === 'string' ? body.description.trim().slice(0, 2000) : undefined;
+  const tags = Array.isArray(body.tags)
+    ? body.tags.map((t) => String(t).trim().toLowerCase()).filter((t) => t.length > 0 && t.length <= 40).slice(0, 10)
+    : undefined;
+  if (title || description || tags || visibility !== 'unlisted') {
+    try {
+      const setExprs: string[] = ['#visibility = :visibility'];
+      const names: Record<string, string> = { '#visibility': 'visibility' };
+      const values: Record<string, unknown> = { ':visibility': visibility };
+      if (title) { setExprs.push('#title = :title'); names['#title'] = 'title'; values[':title'] = title; }
+      if (description) { setExprs.push('#description = :description'); names['#description'] = 'description'; values[':description'] = description; }
+      if (tags && tags.length > 0) { setExprs.push('#tags = :tags'); names['#tags'] = 'tags'; values[':tags'] = tags; }
+      await getDocumentClient().send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `SESSION#${result.sessionId}`, SK: 'METADATA' },
+        UpdateExpression: `SET ${setExprs.join(', ')}`,
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+      }));
+    } catch { /* non-blocking */ }
+  }
+
   try {
     await emitSessionEvent(tableName, {
       eventId: uuidv4(), sessionId: result.sessionId, eventType: SessionEventType.SESSION_CREATED,
@@ -157,6 +192,10 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     },
-    body: JSON.stringify({ ...result, requireApproval }),
+    body: JSON.stringify({
+      ...result,
+      requireApproval,
+      captionsEnabled: body.captionsEnabled === true,
+    }),
   };
 };

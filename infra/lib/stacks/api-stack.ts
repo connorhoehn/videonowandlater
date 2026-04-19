@@ -416,6 +416,73 @@ export class ApiStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 
+    // Live Captions endpoints (opt-in per-session; host-toggleable)
+    // /sessions/{sessionId}/captions           POST  — post a caption segment (rebroadcast + persist)
+    // /sessions/{sessionId}/captions/toggle    POST  — toggle captionsEnabled at runtime
+    // /sessions/{sessionId}/captions/credentials GET — mint short-lived Transcribe creds
+    const captionsResource = sessionIdResource.addResource('captions');
+
+    // Environment: IDENTITY_POOL_ID is optional — if unset, the credentials
+    // handler degrades gracefully with a `captions_not_configured` response.
+    const captionsEnv: Record<string, string> = {
+      TABLE_NAME: props.sessionsTable.tableName,
+    };
+    if (process.env.CAPTIONS_IDENTITY_POOL_ID) {
+      captionsEnv.IDENTITY_POOL_ID = process.env.CAPTIONS_IDENTITY_POOL_ID;
+    }
+
+    // POST /sessions/{sessionId}/captions — broadcast + persist caption segment
+    const postCaptionSegmentHandler = new NodejsFunction(this, 'PostCaptionSegmentHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/post-caption-segment.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(postCaptionSegmentHandler);
+    postCaptionSegmentHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    captionsResource.addMethod('POST', new apigateway.LambdaIntegration(postCaptionSegmentHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /sessions/{sessionId}/captions/toggle — enable/disable live captions
+    const captionsToggleResource = captionsResource.addResource('toggle');
+    const toggleCaptionsHandler = new NodejsFunction(this, 'ToggleCaptionsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/toggle-captions.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: { TABLE_NAME: props.sessionsTable.tableName },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(toggleCaptionsHandler);
+    toggleCaptionsHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    }));
+    captionsToggleResource.addMethod('POST', new apigateway.LambdaIntegration(toggleCaptionsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /sessions/{sessionId}/captions/credentials — mint Transcribe STS creds
+    const captionsCredentialsResource = captionsResource.addResource('credentials');
+    const getCaptionCredentialsHandler = new NodejsFunction(this, 'GetCaptionCredentialsHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-caption-credentials.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      environment: captionsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getCaptionCredentialsHandler);
+    captionsCredentialsResource.addMethod('GET', new apigateway.LambdaIntegration(getCaptionCredentialsHandler), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
     // Reaction endpoints
     const sessionReactionsResource = sessionIdResource.addResource('reactions');
 
@@ -2222,6 +2289,105 @@ export class ApiStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
     meTrainingClaimResource.addMethod('POST', new apigateway.LambdaIntegration(claimMyTrainingFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Phase 1: Profiles, Follow, Notifications ===
+    // ============================================================
+    const profileEnv = { TABLE_NAME: props.sessionsTable.tableName };
+
+    // GET /me/profile — returns caller's profile + stats (creates skeleton on first call)
+    const meProfile = meResource.addResource('profile');
+    const getMyProfileFn = new NodejsFunction(this, 'GetMyProfile', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-my-profile.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(getMyProfileFn);
+    meProfile.addMethod('GET', new apigateway.LambdaIntegration(getMyProfileFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // PATCH /me/profile — update profile (handle claim is atomic; 409 if taken)
+    const updateMyProfileFn = new NodejsFunction(this, 'UpdateMyProfile', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/update-my-profile.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(updateMyProfileFn);
+    meProfile.addMethod('PATCH', new apigateway.LambdaIntegration(updateMyProfileFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /creators/{handle} — public profile page (no auth)
+    const creatorsResource = api.root.addResource('creators');
+    const creatorByHandle = creatorsResource.addResource('{handle}');
+    const getPublicProfileFn = new NodejsFunction(this, 'GetPublicProfile', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-public-profile.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getPublicProfileFn);
+    creatorByHandle.addMethod('GET', new apigateway.LambdaIntegration(getPublicProfileFn));
+
+    // POST/DELETE /users/{userId}/follow
+    const usersResource = api.root.addResource('users');
+    const userById = usersResource.addResource('{userId}');
+    const followResource = userById.addResource('follow');
+    const followUserFn = new NodejsFunction(this, 'FollowUser', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/follow-user.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(followUserFn);
+    followResource.addMethod('POST', new apigateway.LambdaIntegration(followUserFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    followResource.addMethod('DELETE', new apigateway.LambdaIntegration(followUserFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // GET /me/notifications — list inbox
+    const meNotifsResource = meResource.addResource('notifications');
+    const listNotificationsFn = new NodejsFunction(this, 'ListNotifications', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-notifications.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(listNotificationsFn);
+    meNotifsResource.addMethod('GET', new apigateway.LambdaIntegration(listNotificationsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // POST /me/notifications/{notificationId}/read
+    const notifById = meNotifsResource.addResource('{notificationId}');
+    const notifReadResource = notifById.addResource('read');
+    const markNotifReadFn = new NodejsFunction(this, 'MarkNotificationRead', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/mark-notification-read.ts'),
+      timeout: Duration.seconds(10),
+      environment: profileEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadWriteData(markNotifReadFn);
+    notifReadResource.addMethod('POST', new apigateway.LambdaIntegration(markNotifReadFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
 

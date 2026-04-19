@@ -14,6 +14,7 @@
   "dependencies": {
     "@vnl/ads-client": "file:../../vnl-ads/client",
     "@aws-lambda-powertools/logger": "^2.31.0",
+    "@aws-lambda-powertools/metrics": "^2.31.0",
     "@aws-lambda-powertools/tracer": "^2.31.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
     "@aws-sdk/client-cloudwatch": "^3.1003.0",

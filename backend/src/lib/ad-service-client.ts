@@ -18,10 +18,19 @@ import {
   type TriggerResponse,
   type ClickRequest,
   type ClickResponse,
+  type CreatorPayouts,
+  type CreatorImpressionSeries,
+  type GetPayoutsOptions,
+  type GetImpressionSeriesOptions,
+  type TrainingDueResponse,
+  type TrainingClaimRequest,
+  type TrainingClaimResponse,
 } from '@vnl/ads-client';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { component: 'ad-service-client' } });
+const metrics = new Metrics({ namespace: 'VNL/Ads', serviceName: 'ad-service-client' });
 
 // ── Re-exported types (kept for handler/test ergonomics) ───────────────────
 
@@ -92,6 +101,26 @@ function getClient(): AdsClient | null {
     serviceSub: 'vnl-api',
     timeoutMs,
     enabled: true,
+    onCall: (ev) => {
+      // Emit one EMF metric line per SDK call for CloudWatch dashboards.
+      // Dimensions kept minimal (path + status bucket) to stay under EMF's
+      // 30-metrics-per-line limit and to keep Metric Explorer cardinality sane.
+      try {
+        metrics.addDimension('path', ev.path);
+        const statusBucket =
+          typeof ev.status === 'number'
+            ? ev.status >= 500 ? '5xx'
+            : ev.status >= 400 ? '4xx'
+            : '2xx'
+            : ev.status;
+        metrics.addDimension('status', String(statusBucket));
+        metrics.addMetric('AdServiceCall', MetricUnit.Count, 1);
+        metrics.addMetric('AdServiceLatencyMs', MetricUnit.Milliseconds, ev.durationMs);
+        metrics.publishStoredMetrics();
+      } catch {
+        /* metrics are best-effort */
+      }
+    },
   });
   return clientInstance;
 }
@@ -182,6 +211,89 @@ export async function endAdsSession(sessionId: string): Promise<void> {
     logFailure('endSession', { sessionId }, err);
   }
 }
+
+// ── v0.3 creator analytics + training passthroughs ─────────────────────────
+
+const EMPTY_PAYOUTS: CreatorPayouts = {
+  creatorId: '',
+  totalCents: 0,
+  items: [],
+};
+
+const EMPTY_IMPRESSION_SERIES: CreatorImpressionSeries = {
+  creatorId: '',
+  from: new Date(0).toISOString(),
+  to: new Date(0).toISOString(),
+  granularity: 'day',
+  points: [],
+};
+
+export async function getPayouts(
+  userId: string,
+  opts?: GetPayoutsOptions,
+): Promise<CreatorPayouts> {
+  const client = getClient();
+  if (!client) return EMPTY_PAYOUTS;
+  try {
+    return await client.getPayouts(userId, opts);
+  } catch (err) {
+    logFailure('getPayouts', { userId }, err);
+    return EMPTY_PAYOUTS;
+  }
+}
+
+export async function getCreatorImpressionSeries(
+  userId: string,
+  opts: GetImpressionSeriesOptions,
+): Promise<CreatorImpressionSeries> {
+  const client = getClient();
+  if (!client) return EMPTY_IMPRESSION_SERIES;
+  try {
+    return await client.getCreatorImpressionSeries(userId, opts);
+  } catch (err) {
+    logFailure('getCreatorImpressionSeries', { userId }, err);
+    return EMPTY_IMPRESSION_SERIES;
+  }
+}
+
+export async function getTrainingDue(
+  userId: string,
+  limit?: number,
+): Promise<TrainingDueResponse> {
+  const client = getClient();
+  if (!client) return { userId, items: [] };
+  try {
+    return await client.getTrainingDue(userId, limit);
+  } catch (err) {
+    logFailure('getTrainingDue', { userId }, err);
+    return { userId, items: [] };
+  }
+}
+
+/**
+ * Claim training — unlike the other passthroughs, we throw back discriminable
+ * errors so the handler can differentiate ads_unavailable (200 with reason)
+ * from ads_http_error (propagate status). Callers get either the success
+ * shape or one of the two error classes.
+ */
+export async function claimTraining(
+  body: TrainingClaimRequest,
+): Promise<TrainingClaimResponse | { overlayPayload: null; reason: 'ads_disabled' | 'ads_unavailable' }> {
+  const client = getClient();
+  if (!client) return { overlayPayload: null, reason: 'ads_disabled' };
+  try {
+    return await client.claimTraining(body);
+  } catch (err) {
+    if (err instanceof AdsUnavailableError) {
+      logFailure('claimTraining', { creativeId: body.creativeId }, err);
+      return { overlayPayload: null, reason: 'ads_unavailable' };
+    }
+    // Rethrow AdsHttpError / unknown — handler surfaces status codes.
+    throw err;
+  }
+}
+
+export { AdsHttpError, AdsUnavailableError };
 
 export async function trackClick(input: TrackClickInput): Promise<{ ctaUrl: string } | null> {
   const client = getClient();

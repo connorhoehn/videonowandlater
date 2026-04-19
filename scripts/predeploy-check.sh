@@ -100,14 +100,7 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# ── 7. CDK Synth ─────────────────────────────────────────────────────────────
-echo -n "  CDK synth... "
-if npx cdk synth > /dev/null 2>&1; then
-  echo -e "${GREEN}OK${RESET}"
-else
-  echo -e "${RED}FAILED${RESET} — run: npx cdk synth"
-  ERRORS=$((ERRORS + 1))
-fi
+# ── 7. CDK Synth — folded into check 8i below (single synth, more info) ────
 
 # ── 8. AWS Environment Checks ────────────────────────────────────────────────
 echo ""

@@ -219,13 +219,18 @@ export class ApiStack extends Stack {
     // No authorizer - public endpoint for viewers
     sessionPlaybackResource.addMethod('GET', new apigateway.LambdaIntegration(getPlaybackHandler));
 
-    // GET /sessions/{sessionId}/live-channel — service-to-service endpoint for
-    // vnl-ads. Resolves a LIVE broadcast to its IVS channelArn + playbackUrl so
-    // MediaTailor can stitch SSAI ads. Authed via reverse-direction HS256 JWT
-    // (iss=vnl-ads, aud=vnl) using the shared SERVICE_JWT_SECRET — not Cognito.
-    // BROADCAST only; HANGOUT returns 404. Provisioned concurrency on the alias
-    // keeps p99 < 50ms for MediaTailor session init.
-    const sessionLiveChannelResource = sessionIdResource.addResource('live-channel');
+    // GET /v1/sessions/{sessionId}/live-channel — service-to-service endpoint
+    // for vnl-ads. Path is under /v1/ to match the integration contract in
+    // their docs/integration.md; the rest of this API is at root for legacy
+    // reasons. Resolves a LIVE broadcast to its IVS channelArn + playbackUrl
+    // so MediaTailor can stitch SSAI ads. Authed via reverse-direction HS256
+    // JWT (iss=vnl-ads, aud=vnl) using the shared SERVICE_JWT_SECRET — not
+    // Cognito. BROADCAST only; HANGOUT returns 404. Provisioned concurrency
+    // on the alias keeps p99 < 50ms for MediaTailor session init.
+    const v1Resource = api.root.addResource('v1');
+    const v1SessionsResource = v1Resource.addResource('sessions');
+    const v1SessionIdResource = v1SessionsResource.addResource('{sessionId}');
+    const sessionLiveChannelResource = v1SessionIdResource.addResource('live-channel');
 
     // Shared HS256 secret for service-to-service JWTs with vnl-ads lives in
     // SSM as a SecureString. CloudFormation can't *create* a SecureString

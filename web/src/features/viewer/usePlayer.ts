@@ -65,6 +65,23 @@ export function usePlayer({ sessionId, apiBaseUrl }: UsePlayerOptions) {
           setIsPlaying(false);
         });
 
+        // When the manifest is parsed, pin to a video rendition. The IVS ABR
+        // can default to the audio-only track (~168 kbps variant in STANDARD
+        // channel manifests) on startup, then reject every subsequent video
+        // segment for "exceeding" that bandwidth — which seek-loops the player
+        // indefinitely. We disable auto-quality mode up front, pick a video
+        // quality on READY, then let ABR adapt from there.
+        ivsPlayer.setAutoQualityMode(false);
+        ivsPlayer.addEventListener(window.IVSPlayer.PlayerState.READY, () => {
+          const qualities = ivsPlayer.getQualities() ?? [];
+          const videoQualities = qualities.filter((q: any) => q.width > 0 && q.height > 0);
+          if (videoQualities.length === 0) return;
+          // Pick the highest video quality — we're on broadband, and pinning
+          // high prevents ABR from dropping back to audio-only mid-stream.
+          const best = videoQualities.reduce((a: any, b: any) => (a.bitrate > b.bitrate ? a : b));
+          ivsPlayer.setQuality(best, true);
+        });
+
         // Load and play — start muted to satisfy autoplay policies, then unmute
         ivsPlayer.setMuted(true);
         ivsPlayer.load(playbackUrl);

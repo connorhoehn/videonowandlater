@@ -215,8 +215,8 @@ export function HomePage() {
           userName={user?.username}
           placeholder="What's on your mind?"
           actions={[
-            { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast },
-            { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleOpenHangout },
+            { label: 'Go Live', icon: <CameraIcon size={16} />, color: 'text-red-500', onClick: handleCreateBroadcast, loading: isCreating, loadingLabel: 'Starting…', disabled: isCreating || isCreatingHangout },
+            { label: 'Hangout', icon: <UsersIcon size={16} />, color: 'text-violet-600', onClick: handleOpenHangout, loading: isCreatingHangout, loadingLabel: 'Starting…', disabled: isCreating || isCreatingHangout },
             { label: 'Schedule', icon: <CameraIcon size={16} />, color: 'text-blue-600', onClick: () => setShowScheduleModal(true) },
             { label: 'Story', icon: <PhotoIcon size={16} />, color: 'text-orange-500', onClick: () => setShowStoryCreator(true) },
             { label: 'Upload', icon: <UploadIcon size={16} />, color: 'text-green-600', onClick: () => setShowUploadModal(true) },
@@ -580,13 +580,23 @@ export function HomePage() {
           className="fixed inset-0 bg-black z-50 flex items-center justify-center"
           onClick={() => setSponsoredOpen(false)}
         >
-          <div className="relative max-w-md w-full h-full sm:h-auto sm:aspect-[9/16] flex items-center justify-center">
+          <div className="relative w-full h-full sm:w-auto sm:h-[90vh] sm:aspect-[9/16] sm:rounded-xl sm:overflow-hidden flex items-center justify-center">
+            {activeAd.thumbnailUrl && (
+              <img
+                src={activeAd.thumbnailUrl}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
             <video
               src={activeAd.mediaUrl}
+              poster={activeAd.thumbnailUrl}
               autoPlay
               playsInline
+              muted
               onEnded={() => setSponsoredOpen(false)}
-              className="w-full h-full object-contain"
+              className="relative w-full h-full object-cover"
             />
             <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
               <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-white/90 text-black rounded">

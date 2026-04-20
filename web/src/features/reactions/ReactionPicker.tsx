@@ -51,9 +51,11 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
         ❤️
       </button>
 
-      {/* Emoji picker menu */}
+      {/* Emoji picker menu — right-anchored so it opens leftward from the
+          button and doesn't clip when the button sits near the right edge
+          of its container. */}
       {isOpen && (
-        <div className="animate-context-menu absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl p-1.5 flex gap-1 border border-gray-200">
+        <div className="animate-context-menu absolute bottom-full mb-2 right-0 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl p-1.5 flex gap-1 border border-gray-200 z-30">
           {Object.entries(EMOJI_MAP).map(([key, emoji]) => (
             <button
               key={key}

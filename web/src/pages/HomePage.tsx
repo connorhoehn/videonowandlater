@@ -37,7 +37,7 @@ export function HomePage() {
   const { storyUsers, reactToStory, replyToStory, refresh: refreshStories } = useStories();
   useStoryViewState();
   const [, setIsCreating] = useState(false);
-  const [, setIsCreatingHangout] = useState(false);
+  const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   // Phase 4: Hangout moderation configuration
   const [showHangoutOptions, setShowHangoutOptions] = useState(false);
@@ -127,12 +127,6 @@ export function HomePage() {
         setAvailableRulesets(data.rulesets);
       }
     } catch { /* non-blocking */ }
-  };
-
-  const handleCreateHangout = async () => {
-    // Phase 2: Show options dialog (requireApproval checkbox) instead of creating directly.
-    setRequireApproval(false);
-    setShowHangoutOptions(true);
   };
 
   const confirmSchedule = async () => {
@@ -226,6 +220,42 @@ export function HomePage() {
           ]}
         />
 
+        {/* Stories + "Add Story" sit above the search area so users can post a story
+            without scrolling past the feed. */}
+        {(() => {
+          const recordings = sessions.filter(
+            (s) => (s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD') &&
+              s.recordingStatus === 'available' && s.recordingHlsUrl
+          );
+          return (
+            <div className="mb-4">
+              <StoriesSlider
+                stories={[
+                  ...storyUsers.map(group => ({
+                    id: group.userId,
+                    name: group.userId,
+                    thumbnail: group.stories[0]?.segments?.[0]?.url || '',
+                  })),
+                  ...recordings.map(session => ({
+                    id: session.sessionId,
+                    name: session.userId,
+                    thumbnail: session.thumbnailUrl || session.posterFrameUrl || '',
+                    onClick: () => navigate(`/replay/${session.sessionId}`),
+                  })),
+                ]}
+                onCreateStory={() => setShowStoryCreator(true)}
+                createLabel="Add Story"
+                onStoryView={(index) => {
+                  if (index < storyUsers.length) {
+                    setStoryViewerStartIndex(index);
+                    setStoryViewerOpen(true);
+                  }
+                }}
+              />
+            </div>
+          );
+        })()}
+
         {/* Phase 2: Discovery — search + tabbed feed */}
         <section className="bg-white dark:bg-gray-800 rounded-xl p-4 space-y-3">
           <SearchInput
@@ -281,48 +311,12 @@ export function HomePage() {
             <ActivityFeed sessions={[]} loading={true} />
           </>
         ) : (
-          <>
-            {/* Combined stories + recordings slider */}
-            {(() => {
-              const recordings = sessions.filter(
-                (s) => (s.sessionType === 'BROADCAST' || s.sessionType === 'UPLOAD') &&
-                  s.recordingStatus === 'available' && s.recordingHlsUrl
-              );
-              return (
-                <div className="mb-4">
-                  <StoriesSlider
-                    stories={[
-                      ...storyUsers.map(group => ({
-                        id: group.userId,
-                        name: group.userId,
-                        thumbnail: group.stories[0]?.segments?.[0]?.url || '',
-                      })),
-                      ...recordings.map(session => ({
-                        id: session.sessionId,
-                        name: session.userId,
-                        thumbnail: session.thumbnailUrl || session.posterFrameUrl || '',
-                        onClick: () => navigate(`/replay/${session.sessionId}`),
-                      })),
-                    ]}
-                    onCreateStory={() => setShowStoryCreator(true)}
-                    createLabel="Add Story"
-                    onStoryView={(index) => {
-                      if (index < storyUsers.length) {
-                        setStoryViewerStartIndex(index);
-                        setStoryViewerOpen(true);
-                      }
-                    }}
-                  />
-                </div>
-              );
-            })()}
-            <ActivityFeed
-              sessions={sessions}
-              onLoadMore={loadMore}
-              hasMore={hasMore}
-              loadingMore={loadingMore}
-            />
-          </>
+          <ActivityFeed
+            sessions={sessions}
+            onLoadMore={loadMore}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+          />
         )}
       </div>
 
@@ -369,61 +363,6 @@ export function HomePage() {
           refreshStories();
         }}
       />
-
-      {/* Phase 2: Hangout options modal */}
-      {showHangoutOptions && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowHangoutOptions(false); }}
-        >
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-lg font-bold mb-2">Start a hangout</h2>
-            <p className="text-sm text-gray-600 mb-4">Choose how people can join your hangout.</p>
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <input
-                type="checkbox"
-                checked={requireApproval}
-                onChange={(e) => setRequireApproval(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-              />
-              <div>
-                <div className="text-sm font-semibold text-gray-900">Require host approval</div>
-                <div className="text-xs text-gray-500">
-                  Non-host participants wait in a lobby until you approve them.
-                </div>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <input
-                type="checkbox"
-                checked={captionsEnabled}
-                onChange={(e) => setCaptionsEnabled(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <div>
-                <div className="text-sm font-semibold text-gray-900">Enable live captions (beta)</div>
-                <div className="text-xs text-gray-500">
-                  Real-time closed captions shown to all participants. Off by default.
-                </div>
-              </div>
-            </label>
-            <div className="flex gap-3 justify-end mt-5">
-              <button
-                onClick={() => setShowHangoutOptions(false)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmCreateHangout}
-                className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 active:bg-violet-700 transition-colors shadow-md shadow-violet-600/25"
-              >
-                Start Hangout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Upload Modal */}
       {showUploadModal && (
@@ -538,6 +477,20 @@ export function HomePage() {
               <input
                 type="checkbox"
                 className="mt-0.5"
+                checked={requireApproval}
+                onChange={(e) => setRequireApproval(e.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-800">Require host approval</span>
+                <span className="block text-xs text-gray-500">
+                  Non-host participants wait in a lobby until you approve them.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
                 checked={modEnabled}
                 onChange={(e) => setModEnabled(e.target.checked)}
               />
@@ -596,10 +549,11 @@ export function HomePage() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-500"
-                onClick={handleCreateHangout}
+                className="px-4 py-2 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
+                onClick={confirmCreateHangout}
+                disabled={isCreatingHangout}
               >
-                Start
+                {isCreatingHangout ? 'Starting…' : 'Start'}
               </button>
             </div>
           </div>

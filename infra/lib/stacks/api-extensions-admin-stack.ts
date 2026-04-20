@@ -578,5 +578,108 @@ export class ApiExtensionsAdminStack extends Stack {
     adminAdsMint.addMethod('POST', new apigateway.LambdaIntegration(adminMintAdsTokenFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+
+    // ============================================================
+    // /admin/ads — story-inline ad creative CRUD
+    //   POST  /admin/ads                → AdminCreateAd (idempotent on contentHash)
+    //   GET   /admin/ads                → AdminListAds
+    //   POST  /admin/ads/synth          → AdminAdsSynth (proxy to vnl-ads)
+    //   GET   /admin/ads/synth/{id}     → AdminAdsSynth (poll upstream)
+    //   DELETE /admin/ads/{id}          → AdminDeleteAd
+    //   POST  /admin/ads/{id}/activate  → AdminActivateAd
+    //   POST  /admin/ads/{id}/deactivate→ AdminActivateAd (dispatched on path)
+    // ============================================================
+
+    const adminCreateAdFn = new NodejsFunction(this, 'AdminCreateAd', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-create-ad.ts'),
+      timeout: Duration.seconds(5),
+      environment: tableEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(adminCreateAdFn);
+    adminAds.addMethod('POST', new apigateway.LambdaIntegration(adminCreateAdFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const adminListAdsFn = new NodejsFunction(this, 'AdminListAds', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-list-ads.ts'),
+      timeout: Duration.seconds(10),
+      environment: tableEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(adminListAdsFn);
+    adminAds.addMethod('GET', new apigateway.LambdaIntegration(adminListAdsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // Synth proxy — mints forward-direction JWT from the SSM shared secret,
+    // forwards to vnl-ads. Handler needs ssm:GetParameter on /vnl/ads-service-jwt.
+    const adsServiceJwtParamName = (this.node.tryGetContext('vnlAdsServiceJwtParamName') as string | undefined) ?? '/vnl/ads-service-jwt';
+    const vnlAdsBaseUrl = (this.node.tryGetContext('vnlAdsBaseUrl') as string | undefined) ?? '';
+
+    const adminAdsSynthFn = new NodejsFunction(this, 'AdminAdsSynth', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-ads-synth.ts'),
+      timeout: Duration.seconds(10),
+      environment: {
+        VNL_ADS_JWT_SECRET_PARAM: adsServiceJwtParamName,
+        VNL_ADS_BASE_URL: vnlAdsBaseUrl,
+        VNL_ADS_JWT_ISSUER: (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl',
+        VNL_ADS_JWT_AUDIENCE: (this.node.tryGetContext('vnlAdsJwtAudience') as string | undefined) ?? 'vnl-ads',
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    adminAdsSynthFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${Stack.of(this).region}:${Stack.of(this).account}:parameter${adsServiceJwtParamName}`],
+    }));
+
+    const adminAdsSynth = adminAds.addResource('synth');
+    adminAdsSynth.addMethod('POST', new apigateway.LambdaIntegration(adminAdsSynthFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    const adminAdsSynthById = adminAdsSynth.addResource('{synthesisId}');
+    adminAdsSynthById.addMethod('GET', new apigateway.LambdaIntegration(adminAdsSynthFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // /admin/ads/{id} — activate / deactivate / delete
+    const adminAdById = adminAds.addResource('{id}');
+
+    const adminDeleteAdFn = new NodejsFunction(this, 'AdminDeleteAd', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-delete-ad.ts'),
+      timeout: Duration.seconds(5),
+      environment: tableEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(adminDeleteAdFn);
+    adminAdById.addMethod('DELETE', new apigateway.LambdaIntegration(adminDeleteAdFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const adminActivateAdFn = new NodejsFunction(this, 'AdminActivateAd', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/admin-activate-ad.ts'),
+      timeout: Duration.seconds(5),
+      environment: tableEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(adminActivateAdFn);
+    const adminAdActivate = adminAdById.addResource('activate');
+    adminAdActivate.addMethod('POST', new apigateway.LambdaIntegration(adminActivateAdFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    const adminAdDeactivate = adminAdById.addResource('deactivate');
+    adminAdDeactivate.addMethod('POST', new apigateway.LambdaIntegration(adminActivateAdFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
   }
 }

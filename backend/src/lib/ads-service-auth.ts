@@ -32,6 +32,17 @@ function getSsmClient(): SSMClient {
   return ssmClient;
 }
 
+/**
+ * Reads the shared HS256 secret used for both directions of vnl ↔ vnl-ads
+ * service JWTs. Cached in module scope so subsequent calls are free.
+ *
+ * Used by the verifier here (incoming vnl-ads → vnl) and by the synth proxy
+ * handlers (outgoing vnl → vnl-ads) that need to mint tokens.
+ */
+export async function resolveSharedSecret(): Promise<string | undefined> {
+  return resolveSecret();
+}
+
 async function resolveSecret(): Promise<string | undefined> {
   if (cachedSecret) return cachedSecret;
 

@@ -9,6 +9,7 @@ import { CreatePostCard } from '../components/social/CreatePostCard';
 import { CameraIcon, UsersIcon, UploadIcon, PhotoIcon } from '../components/social/Icons';
 import { StoriesSlider, StoryViewer, StoryCreator, Skeleton, TabNav, SearchInput, type Tab } from '../components/social';
 import { useActivityData } from '../hooks/useActivityData';
+import { useActiveAd } from '../hooks/useActiveAd';
 import { useStories } from '../hooks/useStories';
 import { useStoryViewState } from '../hooks/useStoryViewState';
 import { SessionCardGrid } from '../features/common/SessionCard';
@@ -35,6 +36,8 @@ export function HomePage() {
   const { user } = useAuth();
   const { sessions, loading: loadingActivity, loadMore, hasMore, loadingMore } = useActivityData();
   const { storyUsers, reactToStory, replyToStory, refresh: refreshStories } = useStories();
+  const { ad: activeAd } = useActiveAd();
+  const [sponsoredOpen, setSponsoredOpen] = useState(false);
   useStoryViewState();
   const [, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
@@ -231,6 +234,12 @@ export function HomePage() {
             <div className="mb-4">
               <StoriesSlider
                 stories={[
+                  ...(activeAd ? [{
+                    id: `ad:${activeAd.id}`,
+                    name: 'Sponsored',
+                    thumbnail: activeAd.thumbnailUrl || activeAd.mediaUrl,
+                    onClick: () => setSponsoredOpen(true),
+                  }] : []),
                   ...storyUsers.map(group => ({
                     id: group.userId,
                     name: group.userId,
@@ -246,8 +255,13 @@ export function HomePage() {
                 onCreateStory={() => setShowStoryCreator(true)}
                 createLabel="Add Story"
                 onStoryView={(index) => {
-                  if (index < storyUsers.length) {
-                    setStoryViewerStartIndex(index);
+                  // The ad (if present) is rendered at index 0 via its own onClick,
+                  // so StoriesSlider's onStoryView is only called for real user stories.
+                  // Account for the ad occupying index 0 by shifting into storyUsers.
+                  const adOffset = activeAd ? 1 : 0;
+                  const storyIndex = index - adOffset;
+                  if (storyIndex >= 0 && storyIndex < storyUsers.length) {
+                    setStoryViewerStartIndex(storyIndex);
                     setStoryViewerOpen(true);
                   }
                 }}
@@ -555,6 +569,40 @@ export function HomePage() {
               >
                 {isCreatingHangout ? 'Starting…' : 'Start'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sponsored story viewer — full-screen playback of the active ad. */}
+      {sponsoredOpen && activeAd && (
+        <div
+          className="fixed inset-0 bg-black z-50 flex items-center justify-center"
+          onClick={() => setSponsoredOpen(false)}
+        >
+          <div className="relative max-w-md w-full h-full sm:h-auto sm:aspect-[9/16] flex items-center justify-center">
+            <video
+              src={activeAd.mediaUrl}
+              autoPlay
+              playsInline
+              onEnded={() => setSponsoredOpen(false)}
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+              <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-white/90 text-black rounded">
+                Sponsored
+              </span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setSponsoredOpen(false); }}
+                className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="absolute bottom-4 left-4 right-4 text-center">
+              <p className="text-sm text-white/90 font-medium">{activeAd.label}</p>
             </div>
           </div>
         </div>

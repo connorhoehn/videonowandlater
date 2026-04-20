@@ -106,6 +106,24 @@ export class ApiStack extends Stack {
       }
     );
 
+    // GET /ads/active — public endpoint for the stories strip to fetch the
+    // current sponsored slot. Cache-Control: public, max-age=30 is set in
+    // the Lambda response so CloudFront absorbs most load.
+    const adsResource = api.root.addResource('ads');
+    const adsActiveResource = adsResource.addResource('active');
+    const getActiveAdHandler = new NodejsFunction(this, 'GetActiveAdHandler', {
+      entry: path.join(__dirname, '../../../backend/src/handlers/get-active-ad.ts'),
+      handler: 'handler',
+      runtime: Runtime.NODEJS_20_X,
+      timeout: Duration.seconds(3),
+      environment: {
+        TABLE_NAME: props.sessionsTable.tableName,
+      },
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    props.sessionsTable.grantReadData(getActiveAdHandler);
+    adsActiveResource.addMethod('GET', new apigateway.LambdaIntegration(getActiveAdHandler));
+
     // Protected /me endpoint with Cognito authorizer
     const me = api.root.addResource('me');
     this.meResourceId = me.resourceId;

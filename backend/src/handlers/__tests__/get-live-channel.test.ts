@@ -7,12 +7,19 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 import jwt from 'jsonwebtoken';
 
 const mockSend = jest.fn();
+const mockSsmSend = jest.fn();
 
 jest.mock('../../lib/dynamodb-client', () => ({
   getDocumentClient: jest.fn(() => ({ send: mockSend })),
 }));
 
+jest.mock('@aws-sdk/client-ssm', () => ({
+  SSMClient: jest.fn().mockImplementation(() => ({ send: mockSsmSend })),
+  GetParameterCommand: jest.fn((input) => ({ input })),
+}));
+
 import { handler } from '../get-live-channel';
+import { __resetAdsAuthCache } from '../../lib/ads-service-auth';
 import { SessionStatus, SessionType } from '../../domain/session';
 
 const SHARED_SECRET = 'test-shared-secret';
@@ -48,6 +55,8 @@ describe('get-live-channel handler', () => {
 
   beforeEach(() => {
     mockSend.mockReset();
+    mockSsmSend.mockReset();
+    __resetAdsAuthCache();
     process.env = {
       ...originalEnv,
       TABLE_NAME: 'test-table',
@@ -72,10 +81,54 @@ describe('get-live-channel handler', () => {
     expect(result && typeof result !== 'string' && result.statusCode).toBe(401);
   });
 
-  it('returns 503 when VNL_ADS_JWT_SECRET is not configured', async () => {
+  it('returns 503 when neither VNL_ADS_JWT_SECRET nor VNL_ADS_JWT_SECRET_PARAM is configured', async () => {
     delete process.env.VNL_ADS_JWT_SECRET;
     const result = await handler(mkEvent('sess-1', mkToken()), ctx, cb);
     expect(result && typeof result !== 'string' && result.statusCode).toBe(503);
+  });
+
+  it('resolves the signing secret from SSM when VNL_ADS_JWT_SECRET_PARAM is set', async () => {
+    delete process.env.VNL_ADS_JWT_SECRET;
+    process.env.VNL_ADS_JWT_SECRET_PARAM = '/vnl/ads-service-jwt';
+    mockSsmSend.mockResolvedValueOnce({ Parameter: { Value: SHARED_SECRET } });
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          sessionId: 'sess-ssm',
+          sessionType: SessionType.BROADCAST,
+          status: SessionStatus.LIVE,
+          claimedResources: { channel: 'arn:aws:ivs:us-east-1:1:channel/ssm' },
+          startedAt: '2026-04-19T14:00:00Z',
+        },
+      })
+      .mockResolvedValueOnce({ Item: { playbackUrl: 'https://p/ssm.m3u8' } });
+
+    const result = await handler(mkEvent('sess-ssm', mkToken()), ctx, cb);
+    expect(result && typeof result !== 'string' && result.statusCode).toBe(200);
+    expect(mockSsmSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches the SSM lookup across requests', async () => {
+    delete process.env.VNL_ADS_JWT_SECRET;
+    process.env.VNL_ADS_JWT_SECRET_PARAM = '/vnl/ads-service-jwt';
+    mockSsmSend.mockResolvedValueOnce({ Parameter: { Value: SHARED_SECRET } });
+    const makeLiveResult = () => ({
+      Item: {
+        sessionId: 'sess-cache',
+        sessionType: SessionType.BROADCAST,
+        status: SessionStatus.LIVE,
+        claimedResources: { channel: 'arn:aws:ivs:us-east-1:1:channel/cache' },
+        startedAt: '2026-04-19T14:00:00Z',
+      },
+    });
+    const makePoolResult = () => ({ Item: { playbackUrl: 'https://p/cache.m3u8' } });
+    mockSend
+      .mockResolvedValueOnce(makeLiveResult()).mockResolvedValueOnce(makePoolResult())
+      .mockResolvedValueOnce(makeLiveResult()).mockResolvedValueOnce(makePoolResult());
+
+    await handler(mkEvent('sess-cache', mkToken()), ctx, cb);
+    await handler(mkEvent('sess-cache', mkToken()), ctx, cb);
+    expect(mockSsmSend).toHaveBeenCalledTimes(1);
   });
 
   it('returns 404 when the session does not exist', async () => {

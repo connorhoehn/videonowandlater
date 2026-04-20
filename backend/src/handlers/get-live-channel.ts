@@ -44,7 +44,7 @@ function deriveExpiresAt(session: { startedAt?: string; scheduledEndsAt?: string
 }
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const auth = verifyAdsServiceToken(event);
+  const auth = await verifyAdsServiceToken(event);
   if (!auth.ok) {
     return resp(auth.status, { error: auth.error });
   }

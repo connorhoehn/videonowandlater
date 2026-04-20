@@ -1,10 +1,15 @@
 /**
  * Verifies reverse-direction service JWTs from vnl-ads to vnl.
  * Expected claims: iss=vnl-ads, aud=vnl, signed HS256 with SERVICE_JWT_SECRET.
+ *
+ * Secret resolution order:
+ *   1. VNL_ADS_JWT_SECRET_PARAM → fetched from SSM SecureString, cached in module scope
+ *   2. VNL_ADS_JWT_SECRET       → raw value (tests + local dev only; never used in prod)
  */
 
 import jwt from 'jsonwebtoken';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
 export interface VerifyResult {
   ok: true;
@@ -17,6 +22,47 @@ export interface VerifyError {
   error: string;
 }
 
+let ssmClient: SSMClient | undefined;
+let cachedSecret: string | undefined;
+
+function getSsmClient(): SSMClient {
+  if (!ssmClient) {
+    ssmClient = new SSMClient({});
+  }
+  return ssmClient;
+}
+
+async function resolveSecret(): Promise<string | undefined> {
+  if (cachedSecret) return cachedSecret;
+
+  const paramName = process.env.VNL_ADS_JWT_SECRET_PARAM;
+  if (paramName) {
+    const res = await getSsmClient().send(
+      new GetParameterCommand({ Name: paramName, WithDecryption: true }),
+    );
+    const value = res.Parameter?.Value;
+    if (value) {
+      cachedSecret = value;
+      return cachedSecret;
+    }
+  }
+
+  // Fallback for tests + local dev. Production always uses the SSM path above.
+  const raw = process.env.VNL_ADS_JWT_SECRET;
+  if (raw) {
+    cachedSecret = raw;
+    return cachedSecret;
+  }
+
+  return undefined;
+}
+
+/** Resets the in-memory secret cache. Test-only. */
+export function __resetAdsAuthCache(): void {
+  cachedSecret = undefined;
+  ssmClient = undefined;
+}
+
 function getBearerToken(event: APIGatewayProxyEvent): string | null {
   const header = event.headers?.Authorization ?? event.headers?.authorization;
   if (!header) return null;
@@ -24,8 +70,13 @@ function getBearerToken(event: APIGatewayProxyEvent): string | null {
   return match ? match[1] : null;
 }
 
-export function verifyAdsServiceToken(event: APIGatewayProxyEvent): VerifyResult | VerifyError {
-  const secret = process.env.VNL_ADS_JWT_SECRET;
+export async function verifyAdsServiceToken(event: APIGatewayProxyEvent): Promise<VerifyResult | VerifyError> {
+  let secret: string | undefined;
+  try {
+    secret = await resolveSecret();
+  } catch {
+    return { ok: false, status: 503, error: 'Ads service not configured' };
+  }
   if (!secret) {
     return { ok: false, status: 503, error: 'Ads service not configured' };
   }

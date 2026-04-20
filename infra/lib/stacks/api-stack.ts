@@ -7,6 +7,7 @@ import { Runtime, Alias } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import { ApiExtensionsStack } from './api-extensions-stack';
@@ -226,7 +227,22 @@ export class ApiStack extends Stack {
     // keeps p99 < 50ms for MediaTailor session init.
     const sessionLiveChannelResource = sessionIdResource.addResource('live-channel');
 
-    const vnlAdsJwtSecret = (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '';
+    // Shared HS256 secret for service-to-service JWTs with vnl-ads lives in
+    // SSM as a SecureString. CloudFormation can't *create* a SecureString
+    // value (only reference one), so the parameter must be put once by hand:
+    //
+    //   aws ssm put-parameter --type SecureString --overwrite \
+    //     --name /vnl/ads-service-jwt --value "$(openssl rand -hex 32)"
+    //
+    // The vnl-ads side reads the same parameter (same account). Rotate by
+    // flipping the value coordinated with vnl-ads; new Lambda containers
+    // pick it up at next cold start.
+    const adsServiceJwtParamName = (this.node.tryGetContext('vnlAdsServiceJwtParamName') as string | undefined)
+      ?? '/vnl/ads-service-jwt';
+    const adsServiceJwtParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'AdsServiceJwtParam', {
+      parameterName: adsServiceJwtParamName,
+    });
+
     const vnlServiceJwtIncomingIssuer = (this.node.tryGetContext('vnlServiceJwtIncomingIssuer') as string | undefined) ?? 'vnl-ads';
     const vnlServiceJwtIncomingAudience = (this.node.tryGetContext('vnlServiceJwtIncomingAudience') as string | undefined) ?? 'vnl';
 
@@ -238,7 +254,7 @@ export class ApiStack extends Stack {
       memorySize: 256,
       environment: {
         TABLE_NAME: props.sessionsTable.tableName,
-        VNL_ADS_JWT_SECRET: vnlAdsJwtSecret,
+        VNL_ADS_JWT_SECRET_PARAM: adsServiceJwtParamName,
         VNL_SERVICE_JWT_INCOMING_ISSUER: vnlServiceJwtIncomingIssuer,
         VNL_SERVICE_JWT_INCOMING_AUDIENCE: vnlServiceJwtIncomingAudience,
       },
@@ -246,6 +262,13 @@ export class ApiStack extends Stack {
     });
 
     props.sessionsTable.grantReadData(getLiveChannelHandler);
+    adsServiceJwtParam.grantRead(getLiveChannelHandler);
+
+    new CfnOutput(this, 'AdsServiceJwtParamName', {
+      value: adsServiceJwtParamName,
+      description: 'SSM parameter name for the shared vnl ↔ vnl-ads HS256 JWT secret — vnl-ads side reads the same name',
+      exportName: 'VNL-AdsServiceJwtParamName',
+    });
 
     // Alias with provisioned concurrency so MediaTailor's first-request cold
     // start doesn't blow the p99 < 50ms SLA negotiated with vnl-ads.

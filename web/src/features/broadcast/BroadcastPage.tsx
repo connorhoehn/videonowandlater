@@ -13,6 +13,12 @@ import { CameraPreview } from './CameraPreview';
 import { ChatPanel } from '../chat/ChatPanel';
 import { useChatRoom } from '../chat/useChatRoom';
 import { ChatRoomProvider } from '../chat/ChatRoomProvider';
+import { useLivePolls } from '../polls/useLivePolls';
+import { PollsPanel } from '../polls/PollsPanel';
+import { QaPanel } from '../qa/QaPanel';
+import { FilterTray } from './filters/FilterTray';
+import { BackgroundTray } from './filters/BackgroundTray';
+import { FaceFilterTray } from './filters/FaceFilterTray';
 import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/ReactionPicker';
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
@@ -164,6 +170,14 @@ function BroadcastContent({
     isCameraOn,
     isScreenSharing,
     error,
+    currentFilter,
+    setFilter,
+    backgroundMode,
+    setBackgroundMode,
+    backgroundImageUrl,
+    setBackgroundImageUrl,
+    faceSpriteId,
+    setFaceSpriteId,
   } = useBroadcast({
     sessionId,
     apiBaseUrl,
@@ -222,6 +236,7 @@ function BroadcastContent({
     refreshLiveSessions,
   } = useSpotlight({ sessionId, authToken, isLive });
   const { room, connectionState: chatConnectionState, error: chatError } = useChatRoom({ sessionId, authToken });
+  const { polls, openPoll } = useLivePolls({ room, sessionId, apiBaseUrl, authToken });
   const { sendReaction, sending } = useReactionSender(sessionId, authToken);
 
   // Detect mobile
@@ -356,6 +371,26 @@ function BroadcastContent({
                 {/* Live captions overlay — shown to host as a preview of what viewers see. */}
                 <CaptionsOverlay room={room} initialEnabled={captionsEnabled} sessionId={sessionId} />
               </div>
+
+              {/* Filter presets + background + face effects — active only while live. */}
+              {isLive && (
+                <div className="space-y-1">
+                  <FilterTray
+                    currentFilterId={currentFilter.id}
+                    onSelect={setFilter}
+                  />
+                  <BackgroundTray
+                    currentMode={backgroundMode}
+                    currentImageUrl={backgroundImageUrl}
+                    onModeChange={setBackgroundMode}
+                    onImageChange={setBackgroundImageUrl}
+                  />
+                  <FaceFilterTray
+                    currentSpriteId={faceSpriteId}
+                    onSelect={setFaceSpriteId}
+                  />
+                </div>
+              )}
 
               {/* Status row */}
               <div className="flex items-center justify-between text-sm">
@@ -501,6 +536,24 @@ function BroadcastContent({
               <div className="p-2">
                 <AdDrawerPanel sessionId={sessionId} />
               </div>
+              {/* Host-only live polls */}
+              <div className="p-2">
+                <PollsPanel
+                  sessionId={sessionId}
+                  apiBaseUrl={apiBaseUrl}
+                  authToken={authToken}
+                  openPoll={openPoll}
+                  recentPolls={polls}
+                />
+              </div>
+              {/* Host-only live Q&A */}
+              <div className="p-2">
+                <QaPanel
+                  sessionId={sessionId}
+                  authToken={authToken}
+                  room={room}
+                />
+              </div>
             </div>
           )}
 
@@ -568,8 +621,8 @@ function BroadcastContent({
             sessionId={sessionId}
             authToken={authToken}
             apiBaseUrl={apiBaseUrl}
-            onSubmitted={() => setShowSurvey(false)}
-            onSkipped={() => setShowSurvey(false)}
+            onSubmitted={() => { setShowSurvey(false); navigate('/'); }}
+            onSkipped={() => { setShowSurvey(false); navigate('/'); }}
           />
         )}
       </div>

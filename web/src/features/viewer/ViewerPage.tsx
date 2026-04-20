@@ -16,6 +16,12 @@ import { ReactionPicker, EMOJI_MAP, type EmojiType } from '../reactions/Reaction
 import { FloatingReactions, type FloatingEmoji } from '../reactions/FloatingReactions';
 import { useReactionSender } from '../reactions/useReactionSender';
 import { useReactionListener } from '../reactions/useReactionListener';
+import { useLivePolls } from '../polls/useLivePolls';
+import { LivePollOverlay } from '../polls/LivePollOverlay';
+import { useLiveQa } from '../qa/useLiveQa';
+import { QaAnsweringOverlay } from '../qa/QaAnsweringOverlay';
+import { QaSubmitBox } from '../qa/QaSubmitBox';
+import { ClipButton } from '../clips/ClipButton';
 import { useSessionKillListener } from '../chat/useSessionKillListener';
 import { useUserKickListener, type UserKickedEvent } from '../chat/useUserKickListener';
 import { SpotlightBadge } from '../spotlight/SpotlightBadge';
@@ -106,12 +112,14 @@ export function ViewerPage() {
 
   const { room, connectionState: chatConnectionState } = useChatRoom({ sessionId: sessionId ?? '', authToken });
 
+  const config = getConfig();
+  const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
+  const { openPoll: livePoll } = useLivePolls({ room, sessionId: sessionId ?? '', apiBaseUrl, authToken });
+  const { activeQuestion } = useLiveQa({ sessionId: sessionId ?? '', authToken, room });
+
   if (!sessionId) {
     return <div className="p-8 text-red-600">Session ID required</div>;
   }
-
-  const config = getConfig();
-  const apiBaseUrl = config?.apiUrl || 'http://localhost:3000/api';
 
   const { videoRef, player, isPlaying, isMuted, toggleMute, sessionStatus, error } = usePlayer({
     sessionId,
@@ -240,9 +248,37 @@ export function ViewerPage() {
                       sessionId={sessionId}
                     />
                   )}
+                  {/* Live poll overlay — visible when the host has an open poll. */}
+                  {livePoll && (
+                    <LivePollOverlay
+                      poll={livePoll}
+                      sessionId={sessionId ?? ''}
+                      apiBaseUrl={apiBaseUrl}
+                      authToken={authToken}
+                    />
+                  )}
+                  {/* Q&A answering overlay — appears when host marks a question "answering now". */}
+                  {activeQuestion && (
+                    <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none flex justify-center">
+                      <QaAnsweringOverlay question={activeQuestion} />
+                    </div>
+                  )}
+                  {/* Clip that moment — records the last 10s of live stream. */}
+                  {sessionId && authToken && session?.status === 'live' && (
+                    <ClipButton
+                      sessionId={sessionId}
+                      authToken={authToken}
+                      className="absolute top-4 right-4 z-20"
+                    />
+                  )}
                 </div>
               </Card.Body>
             </Card>
+
+            {/* Q&A submit box — lets viewers ask the creator questions during a live stream. */}
+            {sessionId && authToken && session?.status === 'live' && (
+              <QaSubmitBox sessionId={sessionId} authToken={authToken} />
+            )}
 
             {/* Broadcaster info card */}
             <Card>

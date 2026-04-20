@@ -921,20 +921,26 @@ export class ApiExtensionsStack extends Stack {
     // /me/[earnings|impression-series|training-due|training-claim]
     // ============================================================
     const vnlAdsBaseUrl = (this.node.tryGetContext('vnlAdsBaseUrl') as string | undefined) ?? '';
-    const vnlAdsJwtSecret = (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '';
     const vnlAdsJwtIssuer = (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl';
     const vnlAdsJwtAudience = (this.node.tryGetContext('vnlAdsJwtAudience') as string | undefined) ?? 'vnl-ads';
     const vnlAdsTimeoutMs = (this.node.tryGetContext('vnlAdsTimeoutMs') as string | undefined) ?? '2000';
     const vnlAdsFeatureEnabled = (this.node.tryGetContext('vnlAdsFeatureEnabled') as string | undefined) ?? 'false';
+    // Shared HS256 secret is sourced from SSM at Lambda cold start via
+    // ad-service-client's resolveSharedSecret — no raw value in CFN templates.
+    const vnlAdsServiceJwtParamName = (this.node.tryGetContext('vnlAdsServiceJwtParamName') as string | undefined) ?? '/vnl/ads-service-jwt';
     const adsEnv: Record<string, string> = {
       TABLE_NAME: sessionsTable.tableName,
       VNL_ADS_BASE_URL: vnlAdsBaseUrl,
-      VNL_ADS_JWT_SECRET: vnlAdsJwtSecret,
+      VNL_ADS_JWT_SECRET_PARAM: vnlAdsServiceJwtParamName,
       VNL_ADS_JWT_ISSUER: vnlAdsJwtIssuer,
       VNL_ADS_JWT_AUDIENCE: vnlAdsJwtAudience,
       VNL_ADS_TIMEOUT_MS: vnlAdsTimeoutMs,
       VNL_ADS_FEATURE_ENABLED: vnlAdsFeatureEnabled,
     };
+    const adsSecretSsmStatement = new iam.PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${Stack.of(this).region}:${Stack.of(this).account}:parameter${vnlAdsServiceJwtParamName}`],
+    });
 
     const promoResource = sessionIdResource.addResource('promo', defaultCors);
     const promoDrawerResource = promoResource.addResource('drawer');
@@ -947,6 +953,7 @@ export class ApiExtensionsStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
     sessionsTable.grantReadData(getPromoDrawerFn);
+    getPromoDrawerFn.addToRolePolicy(adsSecretSsmStatement);
     promoDrawerResource.addMethod('GET', new apigateway.LambdaIntegration(getPromoDrawerFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -973,6 +980,7 @@ export class ApiExtensionsStack extends Stack {
         resources: ['arn:aws:ivschat:*:*:room/*'],
       }),
     );
+    triggerPromoFn.addToRolePolicy(adsSecretSsmStatement);
     promoTriggerResource.addMethod('POST', new apigateway.LambdaIntegration(triggerPromoFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -986,6 +994,7 @@ export class ApiExtensionsStack extends Stack {
       environment: adsEnv,
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    trackAdClickFn.addToRolePolicy(adsSecretSsmStatement);
     promoClickResource.addMethod('POST', new apigateway.LambdaIntegration(trackAdClickFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -999,6 +1008,7 @@ export class ApiExtensionsStack extends Stack {
       environment: adsEnv,
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    getMyEarningsFn.addToRolePolicy(adsSecretSsmStatement);
     meEarningsResource.addMethod('GET', new apigateway.LambdaIntegration(getMyEarningsFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -1012,6 +1022,7 @@ export class ApiExtensionsStack extends Stack {
       environment: adsEnv,
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    getMyImpressionSeriesFn.addToRolePolicy(adsSecretSsmStatement);
     meImpressionSeriesResource.addMethod('GET', new apigateway.LambdaIntegration(getMyImpressionSeriesFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -1025,6 +1036,7 @@ export class ApiExtensionsStack extends Stack {
       environment: adsEnv,
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    getMyTrainingDueFn.addToRolePolicy(adsSecretSsmStatement);
     meTrainingDueResource.addMethod('GET', new apigateway.LambdaIntegration(getMyTrainingDueFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
@@ -1038,7 +1050,171 @@ export class ApiExtensionsStack extends Stack {
       environment: adsEnv,
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    claimMyTrainingFn.addToRolePolicy(adsSecretSsmStatement);
     meTrainingClaimResource.addMethod('POST', new apigateway.LambdaIntegration(claimMyTrainingFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Live Polls ===
+    // Creator creates a poll, viewers vote, counts broadcast via
+    // IVS chat SendEvent for realtime tally. One vote per user per
+    // poll enforced by a per-user vote record (attribute_not_exists).
+    // ============================================================
+    const pollEnv = { TABLE_NAME: sessionsTable.tableName };
+    const ivsChatSendEventStatement = new iam.PolicyStatement({
+      actions: ['ivschat:SendEvent'],
+      resources: ['arn:aws:ivschat:*:*:room/*'],
+    });
+
+    const sessionPollsResource = sessionIdResource.addResource('polls', defaultCors);
+
+    const createPollFn = new NodejsFunction(this, 'CreatePoll', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-poll.ts'),
+      timeout: Duration.seconds(10),
+      environment: pollEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(createPollFn);
+    createPollFn.addToRolePolicy(ivsChatSendEventStatement);
+    sessionPollsResource.addMethod('POST', new apigateway.LambdaIntegration(createPollFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const listPollsFn = new NodejsFunction(this, 'ListPolls', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-polls.ts'),
+      timeout: Duration.seconds(10),
+      environment: pollEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listPollsFn);
+    sessionPollsResource.addMethod('GET', new apigateway.LambdaIntegration(listPollsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const pollByIdResource = sessionPollsResource.addResource('{pollId}');
+    const pollVoteResource = pollByIdResource.addResource('vote');
+    const votePollFn = new NodejsFunction(this, 'VotePoll', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/vote-poll.ts'),
+      timeout: Duration.seconds(10),
+      environment: pollEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(votePollFn);
+    votePollFn.addToRolePolicy(ivsChatSendEventStatement);
+    pollVoteResource.addMethod('POST', new apigateway.LambdaIntegration(votePollFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const pollCloseResource = pollByIdResource.addResource('close');
+    const closePollFn = new NodejsFunction(this, 'ClosePoll', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/close-poll.ts'),
+      timeout: Duration.seconds(10),
+      environment: pollEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(closePollFn);
+    closePollFn.addToRolePolicy(ivsChatSendEventStatement);
+    pollCloseResource.addMethod('POST', new apigateway.LambdaIntegration(closePollFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Live Q&A ===
+    // Viewers submit questions; creator marks them 'answering' /
+    // 'answered'. Events broadcast via IVS chat so all viewers see
+    // the currently-answering highlight in real time.
+    // ============================================================
+    const qaEnv = { TABLE_NAME: sessionsTable.tableName };
+    const sessionQuestionsResource = sessionIdResource.addResource('questions', defaultCors);
+
+    const submitQuestionFn = new NodejsFunction(this, 'SubmitQuestion', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/submit-question.ts'),
+      timeout: Duration.seconds(10),
+      environment: qaEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(submitQuestionFn);
+    submitQuestionFn.addToRolePolicy(ivsChatSendEventStatement);
+    sessionQuestionsResource.addMethod('POST', new apigateway.LambdaIntegration(submitQuestionFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const listQuestionsFn = new NodejsFunction(this, 'ListQuestions', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-questions.ts'),
+      timeout: Duration.seconds(10),
+      environment: qaEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listQuestionsFn);
+    sessionQuestionsResource.addMethod('GET', new apigateway.LambdaIntegration(listQuestionsFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const questionByIdResource = sessionQuestionsResource.addResource('{questionId}');
+    const questionStatusResource = questionByIdResource.addResource('status');
+    const updateQuestionStatusFn = new NodejsFunction(this, 'UpdateQuestionStatus', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/update-question-status.ts'),
+      timeout: Duration.seconds(10),
+      environment: qaEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(updateQuestionStatusFn);
+    updateQuestionStatusFn.addToRolePolicy(ivsChatSendEventStatement);
+    questionStatusResource.addMethod('POST', new apigateway.LambdaIntegration(updateQuestionStatusFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    // ============================================================
+    // === Live Clips (10s viewer clips) ===
+    // Viewers tap "Clip that moment" → pending clip row written →
+    // async processor (finalize-live-clip) flips status to ready.
+    // Actual segment-pull pipeline is TODO; the finalize handler is
+    // a stand-in for end-to-end testability until that lands.
+    // Reuses the existing `sessionClipsResource` (see Phase 4b above)
+    // by attaching a `live` child for the new endpoint.
+    // ============================================================
+    const liveClipsEnv = { TABLE_NAME: sessionsTable.tableName };
+    const sessionClipsLiveResource = sessionClipsResource.addResource('live');
+
+    const createLiveClipFn = new NodejsFunction(this, 'CreateLiveClip', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/create-live-clip.ts'),
+      timeout: Duration.seconds(10),
+      environment: liveClipsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadWriteData(createLiveClipFn);
+    sessionClipsLiveResource.addMethod('POST', new apigateway.LambdaIntegration(createLiveClipFn), {
+      authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+
+    const meClipsResource = meResource.addResource('clips', defaultCors);
+    const listMyClipsFn = new NodejsFunction(this, 'ListMyClips', {
+      runtime: Runtime.NODEJS_20_X,
+      handler: 'handler',
+      entry: path.join(__dirname, '../../../backend/src/handlers/list-my-clips.ts'),
+      timeout: Duration.seconds(10),
+      environment: liveClipsEnv,
+      depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
+    });
+    sessionsTable.grantReadData(listMyClipsFn);
+    meClipsResource.addMethod('GET', new apigateway.LambdaIntegration(listMyClipsFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });
   }

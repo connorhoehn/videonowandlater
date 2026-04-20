@@ -4,7 +4,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import IVSBroadcastClient, { BASIC_FULL_HD_LANDSCAPE } from 'amazon-ivs-web-broadcast';
+import IVSBroadcastClient, { STANDARD_LANDSCAPE } from 'amazon-ivs-web-broadcast';
+import { useFilterPipeline } from './filters/useFilterPipeline';
 
 interface UseBroadcastOptions {
   sessionId: string;
@@ -25,6 +26,7 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const filter = useFilterPipeline();
 
   // Initialize client — guard against empty authToken to prevent double-init flicker
   useEffect(() => {
@@ -49,7 +51,7 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
         if (cancelled) return;
 
         const broadcastClient = IVSBroadcastClient.create({
-          streamConfig: BASIC_FULL_HD_LANDSCAPE,
+          streamConfig: STANDARD_LANDSCAPE,
           ingestEndpoint,
         });
 
@@ -99,7 +101,10 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
       try { client.removeVideoInputDevice('camera1'); } catch {}
       try { client.removeAudioInputDevice('mic1'); } catch {}
 
-      client.addVideoInputDevice(stream, 'camera1', { index: 0 });
+      // Route the camera through the filter pipeline so ctx.filter effects
+      // (B&W, sepia, warm, etc.) are baked into the broadcast + preview.
+      const filteredVideoStream = filter.wrapVideoStream(stream);
+      client.addVideoInputDevice(filteredVideoStream, 'camera1', { index: 0 });
 
       const audioTracks = stream.getAudioTracks();
       console.log('[useBroadcast] audio tracks:', audioTracks.length, audioTracks.map(t => ({ label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
@@ -148,7 +153,8 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
       }
       await client.stopBroadcast();
       console.log('[stopBroadcast] SDK stopBroadcast complete');
-      // Release camera/mic
+      // Release camera/mic + tear down filter pipeline
+      filter.stop();
       localStreamRef.current?.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
       setIsLive(false);
@@ -228,5 +234,14 @@ export function useBroadcast({ sessionId, apiBaseUrl, authToken }: UseBroadcastO
     isCameraOn,
     isScreenSharing,
     error,
+    // Filter controls
+    currentFilter: filter.currentFilter,
+    setFilter: filter.setFilter,
+    backgroundMode: filter.backgroundMode,
+    setBackgroundMode: filter.setBackgroundMode,
+    backgroundImageUrl: filter.backgroundImageUrl,
+    setBackgroundImageUrl: filter.setBackgroundImageUrl,
+    faceSpriteId: filter.faceSpriteId,
+    setFaceSpriteId: filter.setFaceSpriteId,
   };
 }

@@ -9,6 +9,8 @@ import { updateSessionStatus, findSessionByChannelArn } from '../repositories/se
 import { SessionStatus } from '../domain/session';
 import { emitSessionEvent } from '../lib/emit-session-event';
 import { SessionEventType } from '../domain/session-event';
+import { listFollowers } from '../repositories/follow-repository';
+import { fanOutNotification } from '../repositories/notification-repository';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger({
@@ -63,6 +65,29 @@ export const handler = async (
         actorType: 'ivs', details: { channelArn },
       });
     } catch { /* non-blocking */ }
+
+    // Fan out "creator went live" notifications to followers. Best-effort —
+    // if this fails, the stream is already live and we'd rather not rollback
+    // the transition over a notification issue.
+    try {
+      const followers = await listFollowers(tableName, session.userId, 500);
+      if (followers.length > 0) {
+        const written = await fanOutNotification(
+          tableName,
+          followers.map((f) => f.follower),
+          {
+            type: 'creator_live',
+            subject: `${session.userId} is live`,
+            payload: { sessionId, creatorId: session.userId, title: session.title },
+          },
+        );
+        logger.info('Fanned out creator_live notifications', { recipients: written });
+      }
+    } catch (err) {
+      logger.warn('Failed to fan out creator_live notifications', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   } catch (error: any) {
     // Gracefully handle concurrent transitions (e.g., session already LIVE)
     if (error.name === 'ConditionalCheckFailedException' || error.message?.includes('Invalid transition')) {

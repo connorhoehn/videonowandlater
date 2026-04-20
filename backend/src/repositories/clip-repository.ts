@@ -8,13 +8,16 @@
  *    Used for direct /clip/:id lookups without knowing the session.
  *  GSI5PK=CLIP_PUBLIC / GSI5SK=createdAt on row A when the session is public,
  *    to power future discovery feeds.
+ *  GSI6PK=USER_CLIPS#{authorId} / GSI6SK=createdAt on row A — list the
+ *    caller's own clips for the "My Clips" panel (both live + post-session).
  */
 
 import { PutCommand, GetCommand, UpdateCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient } from '../lib/dynamodb-client';
-import type { Clip, ClipStatus } from '../domain/clip';
+import type { Clip, ClipStatus, LiveClipStatus } from '../domain/clip';
 
 const CLIP_PUBLIC_GSI_PK = 'CLIP_PUBLIC';
+const USER_CLIPS_GSI_PK_PREFIX = 'USER_CLIPS#';
 
 function sessionClipKey(sessionId: string, clipId: string) {
   return { PK: `SESSION#${sessionId}`, SK: `CLIP#${clipId}` };
@@ -26,7 +29,7 @@ function clipPointerKey(clipId: string) {
 
 function stripKeys<T extends Record<string, any>>(item: T): any {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { PK, SK, GSI5PK, GSI5SK, entityType, ...rest } = item;
+  const { PK, SK, GSI5PK, GSI5SK, GSI6PK, GSI6SK, entityType, ...rest } = item;
   return rest;
 }
 
@@ -45,6 +48,9 @@ export async function createClip(
     ...sessionClipKey(clip.sessionId, clip.clipId),
     entityType: 'CLIP',
     ...clip,
+    // GSI6: per-user "My Clips" feed.
+    GSI6PK: `${USER_CLIPS_GSI_PK_PREFIX}${clip.authorId}`,
+    GSI6SK: clip.createdAt,
   };
   if (opts.isPublic) {
     sessionRow.GSI5PK = CLIP_PUBLIC_GSI_PK;
@@ -194,4 +200,82 @@ export async function listClipsBySession(
   const clips = (result.Items ?? []).map((item) => stripKeys(item) as Clip);
   clips.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
   return clips;
+}
+
+/**
+ * List non-deleted clips authored by a user (across all sessions), newest first.
+ * Backed by GSI6 (USER_CLIPS#{authorId} / createdAt). Returns clips of both
+ * flavors (live + postSession).
+ */
+export async function listClipsByAuthor(
+  tableName: string,
+  authorId: string,
+  limit: number = 50,
+): Promise<Clip[]> {
+  const docClient = getDocumentClient();
+  const safeLimit = Math.max(1, Math.min(limit, 100));
+
+  const result = await docClient.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: 'GSI6',
+    KeyConditionExpression: 'GSI6PK = :pk',
+    FilterExpression: '#status <> :deleted',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: {
+      ':pk': `${USER_CLIPS_GSI_PK_PREFIX}${authorId}`,
+      ':deleted': 'deleted' satisfies ClipStatus,
+    },
+    ScanIndexForward: false, // newest first (GSI6SK = createdAt)
+    Limit: safeLimit,
+  }));
+
+  return (result.Items ?? []).map((item) => stripKeys(item) as Clip);
+}
+
+/**
+ * Mark a LIVE clip as ready and record its playback URL.
+ * Live clips have a simpler lifecycle than post-session ones — no s3Key
+ * round-trip through MediaConvert, just an mp4Url produced by the
+ * segment-pull Lambda.
+ */
+export async function markLiveClipReady(
+  tableName: string,
+  sessionId: string,
+  clipId: string,
+  mp4Url: string,
+): Promise<void> {
+  const docClient = getDocumentClient();
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: sessionClipKey(sessionId, clipId),
+    UpdateExpression: 'SET #status = :ready, #mp4Url = :mp4Url',
+    ExpressionAttributeNames: {
+      '#status': 'status',
+      '#mp4Url': 'mp4Url',
+    },
+    ExpressionAttributeValues: {
+      ':ready': 'ready' satisfies LiveClipStatus,
+      ':mp4Url': mp4Url,
+    },
+    ConditionExpression: 'attribute_exists(PK)',
+  }));
+}
+
+/**
+ * Mark a LIVE clip as failed (terminal).
+ */
+export async function markLiveClipFailed(
+  tableName: string,
+  sessionId: string,
+  clipId: string,
+): Promise<void> {
+  const docClient = getDocumentClient();
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: sessionClipKey(sessionId, clipId),
+    UpdateExpression: 'SET #status = :failed',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: { ':failed': 'failed' satisfies LiveClipStatus },
+    ConditionExpression: 'attribute_exists(PK)',
+  }));
 }

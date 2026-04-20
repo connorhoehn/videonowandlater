@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { loadConfig } from './config/aws-config';
 import { configureAuth } from './auth/amplify';
 import { AuthProvider } from './auth/AuthContext';
@@ -30,7 +30,13 @@ import { InvitesPanel } from './features/settings/InvitesPanel';
 import { NotificationsPanel } from './features/settings/NotificationsPanel';
 import { EarningsPanel } from './features/settings/EarningsPanel';
 import { AdminSettingsPanel } from './features/settings/AdminSettingsPanel';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { ToastProvider } from './components/social';
+
+function RedirectToCreator() {
+  const { handle } = useParams();
+  return <Navigate to={`/creators/${handle ?? ''}`} replace />;
+}
 
 function BrandedLoader() {
   return (
@@ -93,6 +99,11 @@ function App() {
           <Route path="/signup" element={<SignupPage />} />
           {/* Public clip share page — mounted outside the authenticated shell */}
           <Route path="/clip/:clipId" element={<ClipViewer />} />
+          {/* Redirect natural-guess URLs to their real destinations so mistyped
+              links land somewhere useful instead of a blank page. */}
+          <Route path="/feed" element={<Navigate to="/" replace />} />
+          <Route path="/admin/rulesets" element={<Navigate to="/settings/admin" replace />} />
+          <Route path="/u/:handle" element={<RedirectToCreator />} />
           <Route element={<ProtectedRoute><AuthenticatedShell /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
@@ -116,6 +127,7 @@ function App() {
               <Route path="admin" element={<AdminSettingsPanel />} />
             </Route>
           </Route>
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </ToastProvider>
       </AuthProvider>

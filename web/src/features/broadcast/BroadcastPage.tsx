@@ -201,6 +201,7 @@ function BroadcastContent({
     sessionId,
     apiBaseUrl,
     authToken,
+    userPoolId: config?.userPoolId ?? '',
     isHost: true,
     enabled: captionsEnabled && isLive,
   });

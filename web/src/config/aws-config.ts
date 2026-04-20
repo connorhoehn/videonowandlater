@@ -1,8 +1,10 @@
 export interface AwsConfig {
   userPoolId: string;
   userPoolClientId: string;
+  identityPoolId?: string;
   region: string;
   apiUrl: string;
+  adsBaseUrl?: string;
 }
 
 let config: AwsConfig | null = null;

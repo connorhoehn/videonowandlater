@@ -168,8 +168,9 @@ export function HangoutPage() {
 
   useFrameReporter(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined);
 
-  // Phase 4: image moderation — fetch session metadata to learn whether moderation is enabled.
+  // Phase 4: image moderation — fetch session metadata to learn whether moderation is enabled + tunable frame interval.
   const [moderationEnabled, setModerationEnabled] = useState(false);
+  const [frameIntervalMs, setFrameIntervalMs] = useState<number>(10_000);
   React.useEffect(() => {
     if (!authToken || !sessionId || !apiBaseUrl) return;
     let cancelled = false;
@@ -177,14 +178,18 @@ export function HangoutPage() {
       headers: { Authorization: `Bearer ${authToken}` },
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { moderationEnabled?: boolean } | null) => {
-        if (!cancelled && data?.moderationEnabled) setModerationEnabled(true);
+      .then((data: { moderationEnabled?: boolean; frameIntervalSec?: number } | null) => {
+        if (cancelled || !data) return;
+        if (data.moderationEnabled) setModerationEnabled(true);
+        if (typeof data.frameIntervalSec === 'number' && data.frameIntervalSec > 0) {
+          setFrameIntervalMs(data.frameIntervalSec * 1000);
+        }
       })
       .catch(() => { /* non-blocking */ });
     return () => { cancelled = true; };
   }, [authToken, sessionId, apiBaseUrl]);
 
-  useModerationCapture(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined && moderationEnabled);
+  useModerationCapture(localVideoRef, sessionId || '', apiBaseUrl, authToken, isJoined && moderationEnabled, frameIntervalMs);
 
   // Live captions — fetch initial captionsEnabled from session metadata.
   const [initialCaptionsEnabled, setInitialCaptionsEnabled] = useState<boolean>(false);
@@ -217,6 +222,7 @@ export function HangoutPage() {
     sessionId: sessionId || '',
     apiBaseUrl,
     authToken,
+    userPoolId: config?.userPoolId ?? '',
     isHost: isCaptionsHost,
     enabled: captionsEnabled && isJoined,
   });

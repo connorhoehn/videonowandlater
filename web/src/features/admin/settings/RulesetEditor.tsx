@@ -1,7 +1,7 @@
 /**
  * Phase 4: Admin UI for configuring image-moderation rulesets.
  *
- * Mounted at /admin/rulesets. Lists rulesets (classroom/hangout/broadcast
+ * Mounted inside AdminSettingsPanel at /settings/admin. Lists rulesets (classroom/hangout/broadcast
  * seeded by default), lets admins edit disallowed items + severity + description,
  * saves as a new version, supports rollback, and has a "Test" button that
  * uploads an image and shows the raw Nova Lite classification JSON.
@@ -22,7 +22,14 @@ interface Ruleset {
   createdBy: string;
   createdAt: string;
   active: boolean;
+  frameIntervalSec?: number;
+  autoBounceThreshold?: number;
 }
+
+const FRAME_INTERVAL_MIN = 3;
+const FRAME_INTERVAL_MAX = 60;
+const AUTO_BOUNCE_MIN = 1;
+const AUTO_BOUNCE_MAX = 10;
 
 interface RulesetDetail {
   current: Ruleset | null;
@@ -50,6 +57,8 @@ export function RulesetEditor() {
   const [editItems, setEditItems] = useState<string[]>([]);
   const [newItemDraft, setNewItemDraft] = useState('');
   const [editSeverity, setEditSeverity] = useState<Severity>('high');
+  const [editFrameIntervalSec, setEditFrameIntervalSec] = useState<number>(10);
+  const [editAutoBounceThreshold, setEditAutoBounceThreshold] = useState<number>(3);
   const [saving, setSaving] = useState(false);
 
   // Test
@@ -92,6 +101,8 @@ export function RulesetEditor() {
         setEditDescription(data.current.description);
         setEditItems([...data.current.disallowedItems]);
         setEditSeverity(data.current.severity);
+        setEditFrameIntervalSec(data.current.frameIntervalSec ?? 10);
+        setEditAutoBounceThreshold(data.current.autoBounceThreshold ?? 3);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load detail');
@@ -133,6 +144,8 @@ export function RulesetEditor() {
           description: editDescription,
           disallowedItems: editItems,
           severity: editSeverity,
+          frameIntervalSec: editFrameIntervalSec,
+          autoBounceThreshold: editAutoBounceThreshold,
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -282,6 +295,41 @@ export function RulesetEditor() {
                   <option value="med">med (flag &gt; 0.75)</option>
                   <option value="low">low (flag &gt; 0.9)</option>
                 </select>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Frame interval (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      min={FRAME_INTERVAL_MIN}
+                      max={FRAME_INTERVAL_MAX}
+                      value={editFrameIntervalSec}
+                      onChange={(e) => setEditFrameIntervalSec(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Client samples a frame every {editFrameIntervalSec}s. Lower = more aggressive, higher cost. Range {FRAME_INTERVAL_MIN}–{FRAME_INTERVAL_MAX}.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Auto-bounce threshold (strikes)
+                    </label>
+                    <input
+                      type="number"
+                      min={AUTO_BOUNCE_MIN}
+                      max={AUTO_BOUNCE_MAX}
+                      value={editAutoBounceThreshold}
+                      onChange={(e) => setEditAutoBounceThreshold(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      User is kicked after {editAutoBounceThreshold} flagged frames. Range {AUTO_BOUNCE_MIN}–{AUTO_BOUNCE_MAX}.
+                    </p>
+                  </div>
+                </div>
 
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Disallowed Items

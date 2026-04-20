@@ -89,19 +89,17 @@ export function ContentPicker({ onSelect, maxItems = 10, selectedIds: externalSe
   useEffect(() => { fetchContent(); }, [fetchContent]);
 
   const toggleSelection = useCallback((session: ActivitySession) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(session.sessionId)) {
-        next.delete(session.sessionId);
-      } else {
-        if (next.size >= maxItems) return prev;
-        next.add(session.sessionId);
-      }
-      const selected = sessions.filter(s => next.has(s.sessionId)).map(toSelectedContent);
-      onSelect(selected);
-      return next;
-    });
-  }, [sessions, maxItems, onSelect]);
+    const next = new Set(selectedIds);
+    if (next.has(session.sessionId)) {
+      next.delete(session.sessionId);
+    } else {
+      if (next.size >= maxItems) return;
+      next.add(session.sessionId);
+    }
+    setSelectedIds(next);
+    const selected = sessions.filter(s => next.has(s.sessionId)).map(toSelectedContent);
+    onSelect(selected);
+  }, [selectedIds, sessions, maxItems, onSelect]);
 
   if (loading) {
     return (

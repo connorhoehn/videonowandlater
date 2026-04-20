@@ -65,8 +65,15 @@ export function ActivityFeed({
   hasMore = false,
   loadingMore = false,
 }: ActivityFeedProps) {
+  // Hide failed recordings from the feed — only live sessions with a failed
+  // status stay visible (they're still in-flight). Everything else with
+  // recordingStatus === 'failed' is terminal clutter.
+  const visibleSessions = sessions.filter(
+    (s) => s.status === 'live' || s.recordingStatus !== 'failed',
+  );
+
   // Sort pinned first, then by endedAt DESC (most recent first)
-  const sortedSessions = [...sessions].sort((a, b) => {
+  const sortedSessions = [...visibleSessions].sort((a, b) => {
     // Pinned always first
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;

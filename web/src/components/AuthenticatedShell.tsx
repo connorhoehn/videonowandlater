@@ -110,7 +110,11 @@ export function AuthenticatedShell() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </Link>
-          <NavIconButton icon={<ChatIcon size={18} />} label="Messages" />
+          <NavIconButton
+            icon={<ChatIcon size={18} />}
+            label="Messages"
+            onClick={() => navigate('/settings/notifications')}
+          />
           <button
             type="button"
             aria-label="Invitations"
@@ -214,7 +218,7 @@ export function AuthenticatedShell() {
         </div>
       </OffcanvasSidebar>
 
-      <ChatLauncher />
+      <ChatLauncher onClick={() => navigate('/settings/notifications')} />
     </ActivityProvider>
   );
 }

@@ -3,7 +3,8 @@
  * Displays userId, duration, reaction summary pills, AI summary (2-line truncated), and relative timestamp
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import Hls from 'hls.js';
 import { useNavigate } from 'react-router-dom';
 import { Card, Avatar } from '../../components/social';
 import { ReactionSummaryPills } from './ReactionSummaryPills';
@@ -39,8 +40,13 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
+  // Only hide the thumbnail once the video is actually rendering frames — otherwise
+  // hovering over a card whose HLS source fails (CORS, 403, codec) flashes pure
+  // white because the <video> element has no poster and the thumbnail fades out.
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const timestamp = formatDate(session.endedAt || session.createdAt);
   const duration = session.recordingDuration
@@ -54,21 +60,47 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
   const isLive = session.status === 'live';
   const isReady = isLive || session.recordingStatus === 'available' || !!hlsUrl;
 
+  // Lazy-attach hls.js on first hover. Native <video src={hls}> only works in
+  // Safari — Chrome/Firefox fail silently without hls.js.
+  const attachHls = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !hlsUrl || hlsRef.current) return;
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: false });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hlsRef.current = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl;
+    }
+  }, [hlsUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, []);
+
   const handleMouseEnter = useCallback(() => {
     if (!hlsUrl || !isReady || isLive) return;
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true);
+      attachHls();
       const video = videoRef.current;
       if (video) {
         video.muted = isMuted;
         video.play().catch(() => {});
       }
     }, 400);
-  }, [hlsUrl, isReady, isMuted]);
+  }, [hlsUrl, isReady, isLive, isMuted, attachHls]);
 
   const handleMouseLeave = useCallback(() => {
     clearTimeout(hoverTimeoutRef.current);
     setIsHovering(false);
+    setIsVideoPlaying(false);
     const video = videoRef.current;
     if (video) {
       video.pause();
@@ -104,7 +136,7 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
             alt={`${session.userId} broadcast thumbnail`}
             data-testid="thumbnail"
             onError={() => setImgError(true)}
-            className={`w-full aspect-video object-cover transition-opacity duration-300 ${isHovering ? 'opacity-0' : 'opacity-100'}`}
+            className={`w-full aspect-video object-cover transition-opacity duration-300 ${isHovering && isVideoPlaying ? 'opacity-0' : 'opacity-100'}`}
           />
         ) : (
           <ThumbnailPlaceholder />
@@ -114,12 +146,13 @@ export function BroadcastActivityCard({ session }: BroadcastActivityCardProps) {
         {hlsUrl && isReady && !isLive && (
           <video
             ref={videoRef}
-            src={hlsUrl}
             muted={isMuted}
             playsInline
             loop
             preload="none"
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isHovering ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onPlaying={() => setIsVideoPlaying(true)}
+            onPause={() => setIsVideoPlaying(false)}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isHovering && isVideoPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           />
         )}
 

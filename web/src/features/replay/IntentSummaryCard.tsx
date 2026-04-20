@@ -99,8 +99,9 @@ export function IntentSummaryCard({ sessionId, authToken, apiBaseUrl }: IntentSu
     );
   }
 
-  // Don't render if no flow
-  if (!flow) return null;
+  // Don't render if no flow (or flow with no steps — backend may return
+  // partial shapes for sessions without an agent interaction)
+  if (!flow || !Array.isArray(flow.steps)) return null;
 
   const filledCount = flow.steps.filter((s) => s.filledValue).length;
 

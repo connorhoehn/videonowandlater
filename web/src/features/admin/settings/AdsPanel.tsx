@@ -34,6 +34,13 @@ interface SynthStartResponse {
   expiresAt: string;
 }
 
+/**
+ * vnl-ads is shipping `errorCode` as a stable enum alongside the free-form
+ * `error` string. Treat unknown codes as the generic failure so we remain
+ * forward-compatible if they add codes later.
+ */
+type SynthErrorCode = 'NOT_FOUND' | 'MEDIACONVERT_ERROR' | 'MEDIACONVERT_CANCELED' | 'UNKNOWN' | string;
+
 interface SynthPollResponse {
   state: 'synthesizing' | 'ready' | 'failed';
   mediaUrl?: string;
@@ -41,6 +48,7 @@ interface SynthPollResponse {
   durationSec?: number;
   contentHash?: string;
   error?: string;
+  errorCode?: SynthErrorCode;
   expiresAt: string;
 }
 
@@ -55,6 +63,20 @@ const MAX_TEXT_CHARS = 1000;
 const MAX_LABEL_CHARS = 80;
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 120_000;
+
+function describeSynthFailure(data: SynthPollResponse): string {
+  switch (data.errorCode) {
+    case 'NOT_FOUND':
+      return 'Synthesis expired or not found. Try Preview again.';
+    case 'MEDIACONVERT_ERROR':
+      return 'Media rendering failed on the ads service. Try different text or a different voice.';
+    case 'MEDIACONVERT_CANCELED':
+      return 'Media rendering was canceled. Try again.';
+    case 'UNKNOWN':
+    default:
+      return data.error || 'Synthesis failed — check the ads service.';
+  }
+}
 
 export function AdsPanel() {
   const apiBaseUrl = getConfig()?.apiUrl ?? '';
@@ -131,10 +153,15 @@ export function AdsPanel() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text,
-          voice,
-          engine: 'neural',
-          languageCode: 'en-US',
+          // vnl-ads wraps the synthesis spec under `source: { kind: 'polly' }`
+          // to share the creative schema with uploaded-MP4 creatives.
+          source: {
+            kind: 'polly',
+            text,
+            voice,
+            engine: 'neural',
+            languageCode: 'en-US',
+          },
           backdrop: { kind: 'color', value: backdropColor },
           format: 'story',
         }),
@@ -168,7 +195,7 @@ export function AdsPanel() {
           return;
         }
         if (data.state === 'failed') {
-          setPreviewStatus(data.error || 'synthesis failed');
+          setPreviewStatus(describeSynthFailure(data));
           setPreviewing(false);
           return;
         }

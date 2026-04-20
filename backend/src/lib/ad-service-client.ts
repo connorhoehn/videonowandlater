@@ -28,6 +28,7 @@ import {
 } from '@vnl/ads-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
+import { resolveSharedSecret } from './ads-service-auth';
 
 const logger = new Logger({ serviceName: 'vnl-api', persistentKeys: { component: 'ad-service-client' } });
 const metrics = new Metrics({ namespace: 'VNL/Ads', serviceName: 'ad-service-client' });
@@ -73,20 +74,43 @@ export interface TrackClickInput {
 
 // ── Feature flag ────────────────────────────────────────────────────────────
 
+/**
+ * Sync feature-flag check. Returns true iff the admin has enabled ads AND
+ * supplied a base URL AND some path to a shared secret. The ACTUAL secret
+ * resolution is deferred to cold-start inside getClient() so we don't
+ * synchronously read SSM from every call site.
+ */
 export function adsEnabled(): boolean {
   if (process.env.VNL_ADS_FEATURE_ENABLED !== 'true') return false;
   const url = process.env.VNL_ADS_BASE_URL;
-  const secret = process.env.VNL_ADS_JWT_SECRET;
-  return !!url && !!secret && url.length > 0 && secret.length > 0;
+  if (!url) return false;
+  // Either a direct value (tests + local dev) or a param name pointing at SSM.
+  const hasSecret =
+    !!process.env.VNL_ADS_JWT_SECRET || !!process.env.VNL_ADS_JWT_SECRET_PARAM;
+  return hasSecret;
 }
 
 // ── Singleton AdsClient ─────────────────────────────────────────────────────
 
 let clientInstance: AdsClient | null = null;
 
-function getClient(): AdsClient | null {
+async function getClient(): Promise<AdsClient | null> {
   if (!adsEnabled()) return null;
   if (clientInstance) return clientInstance;
+
+  // Resolve the shared HS256 secret from SSM (or env fallback) at cold start.
+  // Shared with the reverse-direction verifier via ads-service-auth so we only
+  // hit SSM once per Lambda container.
+  let secret: string | undefined;
+  try {
+    secret = await resolveSharedSecret();
+  } catch (err) {
+    logger.warn('failed to resolve ads shared secret', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+  if (!secret) return null;
 
   const timeoutRaw = process.env.VNL_ADS_TIMEOUT_MS;
   const timeoutMs = timeoutRaw && !Number.isNaN(parseInt(timeoutRaw, 10))
@@ -95,7 +119,7 @@ function getClient(): AdsClient | null {
 
   clientInstance = new AdsClient({
     baseUrl: process.env.VNL_ADS_BASE_URL!,
-    jwtSecret: process.env.VNL_ADS_JWT_SECRET!,
+    jwtSecret: secret,
     jwtIssuer: process.env.VNL_ADS_JWT_ISSUER || 'vnl',
     jwtAudience: process.env.VNL_ADS_JWT_AUDIENCE || 'vnl-ads',
     serviceSub: 'vnl-api',
@@ -146,7 +170,7 @@ function logFailure(op: string, ctx: Record<string, unknown>, err: unknown): voi
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export async function getDrawer(userId: string, sessionId: string): Promise<DrawerItem[]> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return [];
 
   try {
@@ -159,7 +183,7 @@ export async function getDrawer(userId: string, sessionId: string): Promise<Draw
 }
 
 export async function triggerAd(input: TriggerAdInput): Promise<TriggerAdOutcome> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return { overlayPayload: null };
 
   try {
@@ -189,7 +213,7 @@ export async function triggerAd(input: TriggerAdInput): Promise<TriggerAdOutcome
  * scheduled campaign triggers. Idempotent on the vnl-ads side.
  */
 export async function startAdsSession(sessionId: string, creatorId: string): Promise<void> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return;
   try {
     await client.startSession(sessionId, { creatorId });
@@ -203,7 +227,7 @@ export async function startAdsSession(sessionId: string, creatorId: string): Pro
  * scheduler stops firing triggers into it. Fire-and-forget; idempotent.
  */
 export async function endAdsSession(sessionId: string): Promise<void> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return;
   try {
     await client.endSession(sessionId);
@@ -232,7 +256,7 @@ export async function getPayouts(
   userId: string,
   opts?: GetPayoutsOptions,
 ): Promise<CreatorPayouts> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return EMPTY_PAYOUTS;
   try {
     return await client.getPayouts(userId, opts);
@@ -246,7 +270,7 @@ export async function getCreatorImpressionSeries(
   userId: string,
   opts: GetImpressionSeriesOptions,
 ): Promise<CreatorImpressionSeries> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return EMPTY_IMPRESSION_SERIES;
   try {
     return await client.getCreatorImpressionSeries(userId, opts);
@@ -260,7 +284,7 @@ export async function getTrainingDue(
   userId: string,
   limit?: number,
 ): Promise<TrainingDueResponse> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return { userId, items: [] };
   try {
     return await client.getTrainingDue(userId, limit);
@@ -279,7 +303,7 @@ export async function getTrainingDue(
 export async function claimTraining(
   body: TrainingClaimRequest,
 ): Promise<TrainingClaimResponse | { overlayPayload: null; reason: 'ads_disabled' | 'ads_unavailable' }> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return { overlayPayload: null, reason: 'ads_disabled' };
   try {
     return await client.claimTraining(body);
@@ -296,7 +320,7 @@ export async function claimTraining(
 export { AdsHttpError, AdsUnavailableError };
 
 export async function trackClick(input: TrackClickInput): Promise<{ ctaUrl: string } | null> {
-  const client = getClient();
+  const client = await getClient();
   if (!client) return null;
 
   try {

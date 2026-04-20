@@ -96,14 +96,19 @@ export function AdsPanel() {
   const [previewHash, setPreviewHash] = useState<string | null>(null);
   const [previewDurationSec, setPreviewDurationSec] = useState<number | null>(null);
   const [previewStatus, setPreviewStatus] = useState<string>('idle');
+  const [synthesisId, setSynthesisId] = useState<string | null>(null);
+  const [synthStartMs, setSynthStartMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
 
   const [publishing, setPublishing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetchToken().then(({ token }) => setAuthToken(token ?? '')).catch(() => setError('Failed to authenticate'));
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
     };
   }, []);
 
@@ -127,12 +132,16 @@ export function AdsPanel() {
 
   const resetPreview = useCallback(() => {
     if (pollRef.current) clearTimeout(pollRef.current);
+    if (tickRef.current) clearInterval(tickRef.current);
     pollRef.current = null;
+    tickRef.current = null;
     setPreviewing(false);
     setPreviewMediaUrl(null);
     setPreviewHash(null);
     setPreviewDurationSec(null);
     setPreviewStatus('idle');
+    setSynthesisId(null);
+    setSynthStartMs(null);
   }, []);
 
   const startPreview = async () => {
@@ -170,6 +179,12 @@ export function AdsPanel() {
       const start = (await startRes.json()) as SynthStartResponse;
 
       const startedAt = Date.now();
+      setSynthesisId(start.synthesisId);
+      setSynthStartMs(startedAt);
+      setPreviewStatus('queued');
+      // 1Hz tick to re-render the elapsed-time counter
+      if (tickRef.current) clearInterval(tickRef.current);
+      tickRef.current = setInterval(() => setNowMs(Date.now()), 1000);
       const poll = async () => {
         if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
           setPreviewStatus('timed out');
@@ -187,6 +202,8 @@ export function AdsPanel() {
         }
         const data = (await pollRes.json()) as SynthPollResponse;
         if (data.state === 'ready' && data.mediaUrl && data.contentHash && data.durationSec) {
+          if (tickRef.current) clearInterval(tickRef.current);
+          tickRef.current = null;
           setPreviewMediaUrl(data.mediaUrl);
           setPreviewHash(data.contentHash);
           setPreviewDurationSec(data.durationSec);
@@ -195,10 +212,13 @@ export function AdsPanel() {
           return;
         }
         if (data.state === 'failed') {
+          if (tickRef.current) clearInterval(tickRef.current);
+          tickRef.current = null;
           setPreviewStatus(describeSynthFailure(data));
           setPreviewing(false);
           return;
         }
+        setPreviewStatus('rendering');
         pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
       };
       pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
@@ -375,12 +395,45 @@ export function AdsPanel() {
               disabled={previewing || publishing}
               className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {previewing ? 'Synthesizing…' : 'Preview'}
+              Preview
             </button>
-            {previewStatus !== 'idle' && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">{previewStatus}</span>
+            <button
+              onClick={resetPreview}
+              disabled={!previewing && !previewMediaUrl}
+              className="px-3 py-2 text-sm font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            {previewStatus === 'idle' || previewing || previewMediaUrl ? null : (
+              <span className="text-xs text-red-600 dark:text-red-400">{previewStatus}</span>
             )}
           </div>
+
+          {/* Progress card — visible while a synth is in flight. Queued shape
+              comes back instantly from POST; rendering state ticks a 1Hz
+              elapsed-time counter so the admin has visible evidence the
+              backend queue is still working. */}
+          {previewing && synthStartMs !== null && (
+            <div className="mt-3 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-3">
+              <svg className="w-5 h-5 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="4" />
+                <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  {previewStatus === 'queued' ? 'Queued' : 'Rendering ad'}
+                  <span className="ml-2 text-xs font-normal text-blue-700/70 dark:text-blue-300/70">
+                    {Math.floor((nowMs - synthStartMs) / 1000)}s / ~45s
+                  </span>
+                </p>
+                {synthesisId && (
+                  <p className="text-[10px] font-mono text-blue-700/70 dark:text-blue-300/70 truncate">
+                    id: {synthesisId}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {previewMediaUrl && (
             <div className="pt-3 border-t border-gray-100 dark:border-gray-700">

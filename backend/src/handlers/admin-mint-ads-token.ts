@@ -12,6 +12,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { mintServiceToken } from '@vnl/ads-client';
 import { isAdmin, getAdminUserId } from '../lib/admin-auth';
+import { resolveSharedSecret } from '../lib/ads-service-auth';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 const logger = new Logger({ serviceName: 'vnl-admin', persistentKeys: { handler: 'admin-mint-ads-token' } });
@@ -29,9 +30,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
-  const secret = process.env.VNL_ADS_JWT_SECRET;
+  let secret: string | undefined;
+  try {
+    secret = await resolveSharedSecret();
+  } catch (err) {
+    logger.error('failed to resolve ads shared secret', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { statusCode: 503, headers: CORS, body: JSON.stringify({ error: 'Ads service not configured' }) };
+  }
   if (!secret) {
-    logger.error('VNL_ADS_JWT_SECRET not configured');
+    logger.error('ads shared secret not configured');
     return { statusCode: 503, headers: CORS, body: JSON.stringify({ error: 'Ads service not configured' }) };
   }
 

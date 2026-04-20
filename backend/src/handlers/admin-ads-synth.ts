@@ -62,11 +62,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const body = event.body ?? '{}';
     try {
       const parsed = JSON.parse(body);
-      // Light client-side validation — server enforces cap of 1000 chars
-      if (typeof parsed?.text !== 'string' || !parsed.text.trim()) {
+      // vnl-ads nests the Polly params under source.*; tolerate either shape
+      // when checking the text length so we surface a nicer 400 here instead
+      // of a schema-validation 400 from upstream.
+      const text: unknown = parsed?.source?.text ?? parsed?.text;
+      if (typeof text !== 'string' || !text.trim()) {
         return resp(400, { error: 'text is required' });
       }
-      if (parsed.text.length > 1000) {
+      if (text.length > 1000) {
         return resp(400, { error: 'text must be ≤ 1000 chars' });
       }
     } catch {

@@ -13,6 +13,11 @@
     ]
   },
   "context": {
-    "@aws-cdk/core:stackRelativeExports": true
+    "@aws-cdk/core:stackRelativeExports": true,
+    "vnlAdsBaseUrl": "https://d3kiwndsm1tca.cloudfront.net",
+    "vnlAdsJwtIssuer": "vnl",
+    "vnlAdsJwtAudience": "vnl-ads",
+    "vnlAdsServiceJwtParamName": "/vnl/ads-service-jwt",
+    "vnlAdsFeatureEnabled": "true"
   }
 }

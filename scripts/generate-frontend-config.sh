@@ -52,7 +52,10 @@ fi
 # Strip trailing slash from API URL so the frontend can concat paths cleanly.
 API_URL="${API_URL%/}"
 
-ADS_BASE_URL="${VNL_ADS_BASE_URL:-}"
+# vnl-ads CloudFront URL — falls back to the known dev distribution so the
+# embedded AdsAdminPanel (CampaignsPanel) renders without a separate env var.
+# Override by exporting VNL_ADS_BASE_URL before running deploy.
+ADS_BASE_URL="${VNL_ADS_BASE_URL:-https://d3kiwndsm1tca.cloudfront.net}"
 
 jq -n \
   --arg userPoolId "$USER_POOL_ID" \

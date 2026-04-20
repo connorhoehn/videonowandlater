@@ -563,18 +563,25 @@ export class ApiExtensionsAdminStack extends Stack {
     // ============================================================
     const adminAds = admin.addResource('ads');
     const adminAdsMint = adminAds.addResource('mint-token');
+    const mintTokenParamName = (this.node.tryGetContext('vnlAdsServiceJwtParamName') as string | undefined) ?? '/vnl/ads-service-jwt';
     const adminMintAdsTokenFn = new NodejsFunction(this, 'AdminMintAdsToken', {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
       entry: path.join(__dirname, '../../../backend/src/handlers/admin-mint-ads-token.ts'),
       timeout: Duration.seconds(5),
       environment: {
-        VNL_ADS_JWT_SECRET: (this.node.tryGetContext('vnlAdsJwtSecret') as string | undefined) ?? '',
+        // Secret sourced from SSM at cold start — handler reads via
+        // resolveSharedSecret. No raw value in the CFN template.
+        VNL_ADS_JWT_SECRET_PARAM: mintTokenParamName,
         VNL_ADS_JWT_ISSUER: (this.node.tryGetContext('vnlAdsJwtIssuer') as string | undefined) ?? 'vnl',
         VNL_ADS_ADMIN_JWT_AUDIENCE: (this.node.tryGetContext('vnlAdsAdminJwtAudience') as string | undefined) ?? 'vnl-ads-admin',
       },
       depsLockFilePath: path.join(__dirname, '../../../package-lock.json'),
     });
+    adminMintAdsTokenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${Stack.of(this).region}:${Stack.of(this).account}:parameter${mintTokenParamName}`],
+    }));
     adminAdsMint.addMethod('POST', new apigateway.LambdaIntegration(adminMintAdsTokenFn), {
       authorizer, authorizationType: apigateway.AuthorizationType.COGNITO,
     });

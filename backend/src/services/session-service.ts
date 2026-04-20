@@ -92,6 +92,7 @@ interface GetSessionResponse {
   moderationEnabled?: boolean;
   rulesetName?: string;
   frameIntervalSec?: number;
+  captionsEnabled?: boolean;
 }
 
 /**
@@ -257,5 +258,6 @@ export async function getSession(tableName: string, sessionId: string): Promise<
     moderationEnabled: session.moderationEnabled,
     rulesetName: session.rulesetName,
     frameIntervalSec: session.frameIntervalSec,
+    captionsEnabled: session.captionsEnabled,
   };
 }

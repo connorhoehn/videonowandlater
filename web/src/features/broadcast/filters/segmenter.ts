@@ -1,13 +1,13 @@
 /**
- * MediaPipe Selfie Segmentation wrapper. Lazy-initialized singleton — the
- * WASM + model download (~2 MB) is deferred until the user actually enables
- * a background effect, so it doesn't impact cold-start for broadcasters who
- * never touch the feature.
+ * MediaPipe Selfie Segmentation wrapper.
  *
- * Returns a canvas whose alpha channel encodes the person mask (opaque on
- * foreground pixels, transparent on background) so it can be used with
- * `globalCompositeOperation = 'destination-in'` to cut a person silhouette
- * out of any source image.
+ * Uses CONFIDENCE mask (Float32Array of per-pixel probabilities 0.0–1.0)
+ * instead of the binary category mask — yields soft edges with no polarity
+ * ambiguity, and the alpha channel can encode probability directly so
+ * composites look natural against any background.
+ *
+ * Output: an HTMLCanvasElement whose alpha channel = segmentation confidence
+ * (255 = definite person, 0 = definite background, smooth gradient at edges).
  */
 
 import { FilesetResolver, ImageSegmenter, type MPMask } from '@mediapipe/tasks-vision';
@@ -28,8 +28,9 @@ async function loadSegmenter(): Promise<ImageSegmenter> {
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
-        outputCategoryMask: true,
-        outputConfidenceMasks: false,
+        // Confidence mask gives soft alpha; category would be binary/blocky.
+        outputCategoryMask: false,
+        outputConfidenceMasks: true,
       });
     })().catch((err) => {
       segmenterPromise = null;
@@ -50,21 +51,17 @@ export class PersonSegmenter {
     this.maskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
   }
 
-  /** Kick off model load without blocking. */
   warmup(): Promise<void> {
     return loadSegmenter().then(() => undefined).catch(() => undefined);
   }
 
   /**
    * Run segmentation on the current video frame. Returns a canvas whose
-   * pixels are opaque white where the person is, transparent elsewhere.
-   * Returns null if the segmenter isn't ready yet (caller should fall back
-   * to drawing the raw frame with no background effect).
+   * alpha encodes per-pixel person probability. Null until model loads.
    */
   segment(video: HTMLVideoElement, timestampMs: number): HTMLCanvasElement | null {
     if (!this.segmenter) {
-      // Kick off load once; subsequent frames will use the cached instance.
-      loadSegmenter().then((s) => { this.segmenter = s; }).catch(() => { /* already logged */ });
+      loadSegmenter().then((s) => { this.segmenter = s; }).catch(() => {});
       return null;
     }
 
@@ -82,22 +79,27 @@ export class PersonSegmenter {
     let mpMask: MPMask | undefined;
     try {
       const result = this.segmenter.segmentForVideo(video, timestampMs);
-      mpMask = result.categoryMask;
+      // Selfie Segmenter returns exactly one confidence mask (index 0 = person)
+      mpMask = result.confidenceMasks?.[0];
       if (!mpMask) return null;
 
-      // MPMask has a .getAsUint8Array() returning category indices (0=bg, 1=person)
-      const categories = mpMask.getAsUint8Array();
+      const probs = mpMask.getAsFloat32Array();
       if (!this.imageData || this.imageData.width !== w || this.imageData.height !== h) {
         this.imageData = this.maskCtx.createImageData(w, h);
       }
       const data = this.imageData.data;
-      // Person pixels → opaque white; background → transparent.
-      for (let i = 0, j = 0; i < categories.length; i++, j += 4) {
-        const isPerson = categories[i] > 0;
+
+      // Alpha = confidence * 255. Apply a small threshold curve to sharpen
+      // the edge around 0.5 so low-confidence spray doesn't leak through,
+      // but keep feathering for a natural silhouette.
+      //   curve(p) = clamp(1.8 * p - 0.4, 0, 1)  → 0 below 0.22, 1 above 0.78
+      for (let i = 0, j = 0; i < probs.length; i++, j += 4) {
+        const p = probs[i];
+        const shaped = Math.max(0, Math.min(1, 1.8 * p - 0.4));
         data[j] = 255;
         data[j + 1] = 255;
         data[j + 2] = 255;
-        data[j + 3] = isPerson ? 255 : 0;
+        data[j + 3] = (shaped * 255) | 0;
       }
       this.maskCtx.putImageData(this.imageData, 0, 0);
       return this.maskCanvas;

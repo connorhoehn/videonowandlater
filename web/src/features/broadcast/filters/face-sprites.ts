@@ -1,9 +1,11 @@
 /**
- * Face sprite renderers — canvas-primitive drawings that position themselves
- * using normalized face landmarks. We draw with native 2D primitives (paths
- * + fills) rather than loading PNG assets so the feature works offline with
- * zero asset pipeline. Swap each renderer's body for `ctx.drawImage(png)` to
- * upgrade to richer art later.
+ * Face sprite renderers. Use system emoji glyphs rendered large at
+ * landmark-anchored positions — gives you actual Apple/Google emoji art
+ * instead of hand-drawn primitives, with zero asset pipeline.
+ *
+ * Anchoring uses MediaPipe Face Landmarker's 468-point mesh. Each sprite
+ * computes its position, scale, and rotation from the relevant landmarks
+ * so it tracks head movement.
  */
 
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
@@ -19,18 +21,27 @@ function px(l: NormalizedLandmark, w: number, h: number) {
   return { x: l.x * w, y: l.y * h };
 }
 
-/** Estimate face "size" as distance between cheeks — used to scale sprites. */
 function faceWidth(landmarks: NormalizedLandmark[], w: number, h: number) {
   const l = px(landmarks[LANDMARK.LEFT_CHEEK], w, h);
   const r = px(landmarks[LANDMARK.RIGHT_CHEEK], w, h);
   return Math.hypot(r.x - l.x, r.y - l.y);
 }
 
-/** Rotation in radians of the face (from cheek line). */
 function faceRotation(landmarks: NormalizedLandmark[], w: number, h: number) {
   const l = px(landmarks[LANDMARK.LEFT_CHEEK], w, h);
   const r = px(landmarks[LANDMARK.RIGHT_CHEEK], w, h);
   return Math.atan2(r.y - l.y, r.x - l.x);
+}
+
+/**
+ * Draw an emoji glyph centered at (0,0) in the current transform.
+ * Uses Apple Color Emoji / system emoji fonts for native-quality rendering.
+ */
+function drawEmoji(ctx: CanvasRenderingContext2D, emoji: string, fontSize: number) {
+  ctx.font = `${fontSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, 0, 0);
 }
 
 const dogEars: FaceSprite = {
@@ -38,48 +49,15 @@ const dogEars: FaceSprite = {
   label: '🐶 Dog Ears',
   render: (ctx, lms, w, h) => {
     const top = px(lms[LANDMARK.FOREHEAD_TOP], w, h);
-    const width = faceWidth(lms, w, h);
+    const fw = faceWidth(lms, w, h);
     const rot = faceRotation(lms, w, h);
-    const earSize = width * 0.35;
-
+    const size = fw * 1.6;
+    // Position the emoji row so its center sits a bit above the forehead
+    const liftY = fw * 0.7;
     ctx.save();
-    ctx.translate(top.x, top.y);
+    ctx.translate(top.x, top.y - liftY);
     ctx.rotate(rot);
-
-    // Left ear (drooping triangle with inner pink)
-    ctx.fillStyle = '#8B4513';
-    ctx.beginPath();
-    ctx.moveTo(-width * 0.55, -earSize * 0.2);
-    ctx.lineTo(-width * 0.35, -earSize * 1.2);
-    ctx.lineTo(-width * 0.15, -earSize * 0.3);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#F8B0C0';
-    ctx.beginPath();
-    ctx.moveTo(-width * 0.42, -earSize * 0.35);
-    ctx.lineTo(-width * 0.32, -earSize * 0.95);
-    ctx.lineTo(-width * 0.22, -earSize * 0.4);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right ear
-    ctx.fillStyle = '#8B4513';
-    ctx.beginPath();
-    ctx.moveTo(width * 0.15, -earSize * 0.3);
-    ctx.lineTo(width * 0.35, -earSize * 1.2);
-    ctx.lineTo(width * 0.55, -earSize * 0.2);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#F8B0C0';
-    ctx.beginPath();
-    ctx.moveTo(width * 0.22, -earSize * 0.4);
-    ctx.lineTo(width * 0.32, -earSize * 0.95);
-    ctx.lineTo(width * 0.42, -earSize * 0.35);
-    ctx.closePath();
-    ctx.fill();
-
+    drawEmoji(ctx, '🐶', size);
     ctx.restore();
   },
 };
@@ -91,67 +69,68 @@ const sunglasses: FaceSprite = {
     const leftOuter = px(lms[LANDMARK.LEFT_EYE_OUTER], w, h);
     const rightOuter = px(lms[LANDMARK.RIGHT_EYE_OUTER], w, h);
     const mid = { x: (leftOuter.x + rightOuter.x) / 2, y: (leftOuter.y + rightOuter.y) / 2 };
-    const width = Math.hypot(rightOuter.x - leftOuter.x, rightOuter.y - leftOuter.y);
+    const eyeSpan = Math.hypot(rightOuter.x - leftOuter.x, rightOuter.y - leftOuter.y);
     const rot = Math.atan2(rightOuter.y - leftOuter.y, rightOuter.x - leftOuter.x);
-    const lensR = width * 0.25;
-    const lensSep = width * 0.55;
-
+    const size = eyeSpan * 1.7;
     ctx.save();
     ctx.translate(mid.x, mid.y);
     ctx.rotate(rot);
-    ctx.fillStyle = 'rgba(10,10,10,0.92)';
-    // Left lens
-    ctx.beginPath();
-    ctx.ellipse(-lensSep / 2, 0, lensR, lensR * 0.75, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Right lens
-    ctx.beginPath();
-    ctx.ellipse(lensSep / 2, 0, lensR, lensR * 0.75, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Bridge
-    ctx.fillRect(-lensSep / 2 + lensR * 0.6, -lensR * 0.08, lensSep - lensR * 1.2, lensR * 0.16);
-    // Highlight glint
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(-lensSep / 2 - lensR * 0.35, -lensR * 0.35, lensR * 0.25, lensR * 0.15, 0, 0, Math.PI * 2);
-    ctx.ellipse(lensSep / 2 - lensR * 0.35, -lensR * 0.35, lensR * 0.25, lensR * 0.15, 0, 0, Math.PI * 2);
-    ctx.fill();
+    drawEmoji(ctx, '🕶️', size);
     ctx.restore();
   },
 };
 
 const mustache: FaceSprite = {
   id: 'mustache',
-  label: '🥸 Mustache',
+  label: '🥸 Disguise',
   render: (ctx, lms, w, h) => {
     const nose = px(lms[LANDMARK.NOSE_TIP], w, h);
-    const upper = px(lms[LANDMARK.UPPER_LIP_TOP], w, h);
-    const width = faceWidth(lms, w, h);
+    const fw = faceWidth(lms, w, h);
     const rot = faceRotation(lms, w, h);
-    const cx = (nose.x + upper.x) / 2;
-    const cy = (nose.y + upper.y * 2) / 3;
-
+    // 🥸 already includes glasses + nose + mustache + eyebrows, so anchor
+    // on the nose tip — the glyph covers the whole upper face naturally.
+    const size = fw * 1.6;
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(nose.x, nose.y);
     ctx.rotate(rot);
-    ctx.fillStyle = '#2a1a0a';
-    ctx.beginPath();
-    // Classic handlebar-ish curve
-    const ww = width * 0.45;
-    const hh = width * 0.08;
-    ctx.moveTo(-ww, 0);
-    ctx.quadraticCurveTo(-ww * 0.8, -hh * 2, -ww * 0.3, -hh * 0.6);
-    ctx.quadraticCurveTo(0, hh * 0.2, ww * 0.3, -hh * 0.6);
-    ctx.quadraticCurveTo(ww * 0.8, -hh * 2, ww, 0);
-    ctx.quadraticCurveTo(ww * 0.6, hh * 1.5, 0, hh * 1.4);
-    ctx.quadraticCurveTo(-ww * 0.6, hh * 1.5, -ww, 0);
-    ctx.closePath();
-    ctx.fill();
+    drawEmoji(ctx, '🥸', size);
     ctx.restore();
   },
 };
 
-export const FACE_SPRITES: FaceSprite[] = [dogEars, sunglasses, mustache];
+const partyHat: FaceSprite = {
+  id: 'party-hat',
+  label: '🎉 Party',
+  render: (ctx, lms, w, h) => {
+    const top = px(lms[LANDMARK.FOREHEAD_TOP], w, h);
+    const fw = faceWidth(lms, w, h);
+    const rot = faceRotation(lms, w, h);
+    const size = fw * 1.2;
+    ctx.save();
+    ctx.translate(top.x, top.y - fw * 0.55);
+    ctx.rotate(rot);
+    drawEmoji(ctx, '🎉', size);
+    ctx.restore();
+  },
+};
+
+const crown: FaceSprite = {
+  id: 'crown',
+  label: '👑 Crown',
+  render: (ctx, lms, w, h) => {
+    const top = px(lms[LANDMARK.FOREHEAD_TOP], w, h);
+    const fw = faceWidth(lms, w, h);
+    const rot = faceRotation(lms, w, h);
+    const size = fw * 1.3;
+    ctx.save();
+    ctx.translate(top.x, top.y - fw * 0.45);
+    ctx.rotate(rot);
+    drawEmoji(ctx, '👑', size);
+    ctx.restore();
+  },
+};
+
+export const FACE_SPRITES: FaceSprite[] = [dogEars, sunglasses, mustache, partyHat, crown];
 
 export function getSpriteById(id: string | null | undefined): FaceSprite | null {
   if (!id) return null;

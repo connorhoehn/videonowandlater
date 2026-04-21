@@ -38,20 +38,24 @@ test('landing → demo page renders', async ({ page }) => {
 });
 
 test('home page renders discovery feed scaffolding', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
   await enterDemoMode(page);
-  // Demo mode should land us on / with the authenticated shell
   await page.goto('/');
 
-  // Page should render without crashing
   await expect(page.locator('body')).toBeVisible();
 
-  // Discovery tabs or CreatePostCard should be visible in demo mode
   const hasDiscovery =
     (await page.getByRole('tab', { name: /live/i }).count().catch(() => 0)) > 0;
   const hasCreatePost =
     (await page.getByText(/go live|hangout|story|upload/i).first().isVisible().catch(() => false));
 
   expect(hasDiscovery || hasCreatePost).toBeTruthy();
+
+  // No uncaught runtime errors on the home page. Would have caught the
+  // `isCreating is not defined` ReferenceError from the Go Live wiring.
+  expect(pageErrors.join('\n'), `page errors:\n${pageErrors.join('\n')}`).not.toMatch(/TypeError|ReferenceError/);
 });
 
 test('search route accepts query + renders', async ({ page }) => {

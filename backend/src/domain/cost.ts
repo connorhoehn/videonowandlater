@@ -48,23 +48,47 @@ export interface CostSummary {
 }
 
 /**
- * Current AWS pricing rates used for cost calculations
+ * Current AWS pricing rates used for cost calculations (US East 1, 2026).
+ *
+ * Sources: https://aws.amazon.com/ivs/pricing/, /transcribe/pricing/,
+ * /polly/pricing/, /bedrock/pricing/, /mediaconvert/pricing/. Update when
+ * AWS moves prices — historic cost records pin `rateApplied` so old rows
+ * stay accurate even after this table changes.
+ *
+ * NOTE: for a single BROADCAST stream, true cost is roughly
+ *   IVS_LOW_LATENCY_INPUT * hours + IVS_LOW_LATENCY_PLAYBACK * viewer-hours.
+ * Playback (per viewer-hour) dominates once you scale past a handful of
+ * viewers. The current recording-ended pipeline only attributes INPUT cost
+ * per session — playback is a TODO (see calculateIvsLowLatencyPlaybackCost).
  */
 export const PRICING_RATES = {
-  IVS_REALTIME: 0.01,             // per participant-minute
-  IVS_LOW_LATENCY: 0.005,         // per hour
-  MEDIACONVERT: 0.012,            // per minute output
-  TRANSCRIBE: 0.0001,             // per second
-  BEDROCK_SONNET_INPUT: 3.0,      // per million tokens
-  BEDROCK_SONNET_OUTPUT: 15.0,    // per million tokens
-  BEDROCK_NOVA_INPUT: 0.075,      // per million tokens
-  BEDROCK_NOVA_OUTPUT: 0.30,      // per million tokens
-  S3_STORAGE: 0.023,              // per GB/month
-  CLOUDFRONT_TRANSFER: 0.085,     // per GB
-  POLLY_TTS_NEURAL: 4.0,              // per 1M characters
-  ECS_FARGATE_VCPU_HOUR: 0.04048,     // per vCPU-hour
-  ECS_FARGATE_MEMORY_GB_HOUR: 0.004445, // per GB-hour
-  TRANSCRIBE_STREAMING: 0.0125,         // per minute
+  // IVS Real-Time (Stages) — HD @ $0.40/hour/participant ≈ $0.00667/participant-minute
+  IVS_REALTIME: 0.00667,
+  // IVS Low-Latency — HD 720p input @ $1.00/hour (was priced as placeholder)
+  IVS_LOW_LATENCY: 1.00,
+  // IVS Low-Latency playback — HD @ $0.075/hour per concurrent viewer
+  IVS_LOW_LATENCY_PLAYBACK: 0.075,
+  // MediaConvert Basic tier HD (our 720p recording outputs) — $0.015/min output
+  MEDIACONVERT: 0.015,
+  // Transcribe batch tier 1 — $0.024/min = $0.0004/sec
+  TRANSCRIBE: 0.0004,
+  // Claude 3.5 Sonnet — $3 / $15 per million tokens
+  BEDROCK_SONNET_INPUT: 3.0,
+  BEDROCK_SONNET_OUTPUT: 15.0,
+  // Nova Lite — $0.06 input / $0.24 output per million tokens
+  BEDROCK_NOVA_INPUT: 0.06,
+  BEDROCK_NOVA_OUTPUT: 0.24,
+  // S3 Standard — $0.023 per GB-month
+  S3_STORAGE: 0.023,
+  // CloudFront — $0.085 per GB (Americas, first 10 TB)
+  CLOUDFRONT_TRANSFER: 0.085,
+  // Polly Neural — $16 per 1M characters (Standard tier would be $4)
+  POLLY_TTS_NEURAL: 16.0,
+  // ECS Fargate (Linux/x86) — $0.04048 per vCPU-hour, $0.004445 per GB-hour
+  ECS_FARGATE_VCPU_HOUR: 0.04048,
+  ECS_FARGATE_MEMORY_GB_HOUR: 0.004445,
+  // Transcribe Streaming — $0.024 per minute
+  TRANSCRIBE_STREAMING: 0.024,
 } as const;
 
 /**
@@ -76,11 +100,23 @@ export function calculateIvsRealtimeCost(participantMinutes: number): number {
 }
 
 /**
- * Calculate IVS Low-Latency channel cost
+ * Calculate IVS Low-Latency channel ingest cost (broadcaster side).
+ * Does NOT include per-viewer playback — see
+ * {@link calculateIvsLowLatencyPlaybackCost}.
  * @param hoursInput Total hours of input streaming
  */
 export function calculateIvsLowLatencyCost(hoursInput: number): number {
   return Math.max(0, hoursInput) * PRICING_RATES.IVS_LOW_LATENCY;
+}
+
+/**
+ * Calculate IVS Low-Latency playback cost (viewer side).
+ * Bills per concurrent viewer × hour. For a 1h stream with 20 viewers
+ * who each watched the full hour, pass 20.
+ * @param viewerHours Sum of concurrent-viewer-hours
+ */
+export function calculateIvsLowLatencyPlaybackCost(viewerHours: number): number {
+  return Math.max(0, viewerHours) * PRICING_RATES.IVS_LOW_LATENCY_PLAYBACK;
 }
 
 /**

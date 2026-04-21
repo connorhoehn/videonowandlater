@@ -39,7 +39,7 @@ export function HomePage() {
   const { ad: activeAd } = useActiveAd();
   const [sponsoredOpen, setSponsoredOpen] = useState(false);
   useStoryViewState();
-  const [, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [isCreatingHangout, setIsCreatingHangout] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   // Phase 4: Hangout moderation configuration

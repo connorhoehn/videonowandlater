@@ -22,9 +22,13 @@ export interface CreateLiveClipResponse {
 }
 
 export class LiveClipApiError extends Error {
-  constructor(public status: number, public body: unknown, message?: string) {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown, message?: string) {
     super(message ?? `LiveClipApi request failed: ${status}`);
     this.name = 'LiveClipApiError';
+    this.status = status;
+    this.body = body;
   }
 }
 
